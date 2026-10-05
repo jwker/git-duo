@@ -111,6 +111,22 @@ gitduo://oauth/callback
 > ⚠️ **回调 URL 是对外契约**（TECH_SPEC §3.9）：这一栏改动必须**同时**改 `AppConfig.swift`、`project.yml`、PRD/TECH_SPEC。
 > （§16 里还留着一个未采纳的收敛方案：改成反域名 `io.github.<你>.gitduo://oauth/callback`，安全性不提升、只是规范性更好，**本次不做**。）
 
+#### 2.4.1 三个 URL 别混：各自带什么参数
+
+整套流程里出现三个不同的 URL，**注册的这一栏恰恰是最"素"的那个**：
+
+| # | URL | 出现在哪 | 参数 |
+|---|---|---|---|
+| 1 | `gitduo://oauth/callback` | **注册表单**（§2.4）· `AppConfig.callbackURL` | **一个都没有**。`oauth/callback` 是 **path**，不是参数。注册值**不得带 `?` 及其后任何东西**，否则请求里的 `redirect_uri` 永远对不上（§7 第 1 行） |
+| 2 | `https://github.com/login/oauth/authorize?...` | **App 代码**（`TECH_SPEC` §3.1 步骤 3） | `client_id`（**必需**）· `redirect_uri`（**必须与注册值逐字符相同**）· `state`（一次性随机串，防 CSRF）· `code_challenge`（verifier 的 SHA-256，43 字符 base64url）· `code_challenge_method=**S256**`。可选：`login`（指定账号）、`allow_signup`、`prompt=select_account` |
+| 3 | `gitduo://oauth/callback?code=...&state=...` | **回调时**由 GitHub 拼出来 | `code`（一次性，10 分钟过期）· `state`（原样回传，**必须与步骤 2 发出的比对**）。App 要解析这两个，但**注册值和请求参数里都不写它们** |
+
+> 关键区分：**#1 是"门牌号"，#2 是"敲门时说的话"，#3 是"门里递出来的东西"。**
+> 只有 #2 需要写参数，而 #2 的 `redirect_uri` 必须等于 #1。
+>
+> 另：我们的回调是**非 HTTP 重定向 URI**，官方说明此时 GitHub 会**自动弹出账号选择器**（即使用户只登录了一个账号），
+> 因此**不需要**手动传 `prompt=select_account`。
+
 ### 2.5 ☑ Expire user authorization tokens —— **保持勾选**（默认就是勾的）
 
 - 官方："GitHub recommends that you opt in to this feature for improved security."
@@ -191,6 +207,32 @@ App 设置页（`https://github.com/settings/apps/<slug>`）上：
 
 ## 4. 安装 App —— 决定"能看见哪些仓库"的一步
 
+### 4.1 "安装"到底是什么意思
+
+GitHub App 有**三件互相独立的事**，OAuth App 只有其中两件：
+
+| # | 动作 | 在哪做 | 产出 | 谁做 |
+|---|---|---|---|---|
+| ① | **创建 App** | github.com/settings/apps/new | 一个 App 身份：`Client ID` + 声明的权限 + 注册的回调 URL | 你（App 所有者）**已做** |
+| ② | **安装 App**（installation） | `github.com/apps/<slug>/installations/new` | 把 App **挂到某个账号 / 组织上**，并**选定它能访问哪些仓库** | 你（作为安装者）**待做** |
+| ③ | **授权 App**（authorization） | App 内的登录页发起 | 一张 **`ghu_` 用户令牌**（代表"你"） | 你（作为用户）**待做** |
+
+**为什么 ② 不能省**——官方《迁移指南》原文：
+
+> If you want your GitHub App to make API requests on behalf of itself **or access organization or repository resources, the user must install your GitHub App.** When a user installs a GitHub App on their account or organization, **they choose which repositories the app can access**, and they grant the app the organization and repository permissions that it requested.
+
+也就是说：**App 访问仓库的能力是以"installation"为单位授予的**。
+只创建不安装 ⇒ App 在 GitHub 眼里"没有挂到任何地方" ⇒ 令牌照样能拿到，
+但请求仓库接口时**列表里什么都没有**（不是 403，是压根不出现）。
+
+这正是 GitHub App 区别于 OAuth App 的地方：OAuth App 一授权就拿到"你能访问的全部"，
+GitHub App 多一道**安装时选仓库**的闸门——**多一步操作，换来的是更小的暴露面**。
+
+> ⚠️ 组织账号安装时，**组织内的每个成员还要各自授权**（官方原文：*each user within that organization must authorize the app in order for the app to act on their behalf*）。
+> 本期只有你一个账号、且 App 挂在个人账号下，所以是"装一次 + 授权一次"。
+
+### 4.2 操作步骤
+
 打开安装页：
 
 ```
@@ -202,14 +244,26 @@ https://github.com/apps/<slug>/installations/new
    —— 原型登录页那行加粗提示就是这个意思。
 3. 点 Install 完成。
 
-**为什么必须这一步**（`TECH_SPEC` §3.5.4）：
+**令牌可见范围公式**（`TECH_SPEC` §3.5.4）：
 
 > **令牌可见范围 = 用户权限 ∩ App 权限 ∩ 安装时勾选的仓库**
 
-只勾了部分仓库 ⇒ GitDuo 里**永远看不到**其余仓库（不是 403，是列表里压根没有）。
+只勾了部分仓库 ⇒ GitDuo 里**永远看不到**其余仓库。
 用户若选了 `Only select repositories`，必须在设置页把新仓库补进安装范围。
 
 > 之后改安装范围：`https://github.com/settings/installations` → 找到 GitDuo → Configure。
+
+### 4.3 安装 URL 能带哪些参数（**本项目全都不用**）
+
+官方支持两种带参形式，但**都不适用于本项目**，列出来是为了让你日后看到别人的文档时不困惑：
+
+| 形式 | 参数 | 用途 | 本项目为何不用 |
+|---|---|---|---|
+| `/installations/new?state=<串>` | `state` | 把状态**原样带回**，用于在安装完成后把用户送回 App 的某个页面（官方："以保留应用页面的状态"） | 回传依赖 **Setup URL**，而我们的 Setup URL 留空（无网页端，§2.8）⇒ **没有接收点**，传了也没人看 |
+| `/installations/new/permissions?suggested_target_id=<ID>&repository_ids[]=<ID>` | `suggested_target_id`（该形式下**必需**）· `repository_ids[]`（最多 100 个，省略=全选） | **OAuth App → GitHub App 迁移专用**：预选旧 OAuth App 已能访问的仓库 | 我们没有旧 OAuth App 要迁移 |
+
+> 🔑 **`state` 只在授权流程里承担安全职责**（§6 第 1 项那个 `.../authorize?state=...`），
+> 安装流程里的 `state` 纯属"页面状态保持"，**与防 CSRF 无关**。两者别混。
 
 ---
 
