@@ -74,7 +74,7 @@ GitHub 给 native app 的官方建议是**把 secret 打进包里 + 用 PKCE**�
 |---|---|
 | GitHub 账号 | 用来**创建并拥有**这个 App（应用归属可以是个人账号，也可以是组织） |
 | 归属选择 | 本期建议挂**个人账号**，最省事；将来要团队共管再迁组织 |
-| 决定 App 名 | 名字会转成小写 + 连字符作为 **slug**，安装链接就是 `https://github.com/apps/<slug>/installations/new`，**必须唯一** |
+| 决定 App 名 | 小写化、空格转 `-`、特殊字符替换后得到 **slug**（`GitDuo` → `gitduo`），安装链接即 `https://github.com/apps/<slug>/installations/new`；名字**全局唯一**且 ≤34 字符（规则与出处见 §2.1） |
 | 决定安装范围 | `Only on this account`（只有你能装）还是 `Any account`（任何人可装，公开发布的前提） |
 
 ---
@@ -85,8 +85,18 @@ GitHub 给 native app 的官方建议是**把 secret 打进包里 + 用 PKCE**�
 （或：头像 → Settings → Developer settings → GitHub Apps → New GitHub App）
 
 ### 2.1 GitHub App name
-- 填 **`GitDuo`**；若被占用，用 `GitDuo-<你的用户名>`（≤34 字符，全局唯一）。
-- ⚠️ 名字决定 slug（`GitDuo` → `gitduo`）⇒ 决定安装链接。**改名会改 slug**，已分享的安装链接即失效。
+
+- 填 **`GitDuo`**；若被占用，用 `GitDuo-<你的用户名>`。
+- **长度**：≤ **34** 字符；**必须全局唯一**。官方原文：
+  > The name cannot be longer than 34 characters. ... **The name must be unique across GitHub.** You cannot use the same name as an existing GitHub account, unless it is your own user or organization name.
+- **slug 从哪来**（官方原文，同一段）：
+  > Your app's name (**converted to lowercase, with spaces replaced by `-`, and with special characters replaced**) will be shown in the user interface when your app takes an action. For example, `My APp Näme` would display as `my-app-name`.
+
+  ⇒ 上面那个"转换后的小写串"就是 **slug**（`GitDuo` → `gitduo`），它决定了
+  `https://github.com/apps/<slug>` 这个**安装链接**（§4.2）。
+- ⚠️ **把 slug 当"一次性定死"的东西**：官方《修改 App 注册》只写了「可以更改 name / description / homepage」，
+  **没有说明 slug 会不会跟着变**（第三方说法不一，不足为据）。
+  ⇒ 结论：**别依赖改名后 URL 是否不变**；要改名就改完**回设置页核对 Public link**，再决定旧链接是否还有效。
 
 ### 2.2 Description（可选）
 - 建议：`GitDuo —— 用 SwiftUI 写的第三方 GitHub 客户端`。用户安装时会看到。
@@ -197,11 +207,26 @@ App 设置页（`https://github.com/settings/apps/<slug>`）上：
 | **App ID** | 页面中部 | JWT / 安装令牌（本项目**不用**这些流程） | ❌ 不用 |
 | **Client ID** | 页面中部 | 授权请求的 `client_id`（**注意：不是 App ID**） | ✅ **要** |
 | **Client secret** | 「Generate a new client secret」按钮 | 换令牌 / 刷令牌（**方案 A 才需要**） | 方案 A ✅ / 方案 B ❌ |
-| **slug** | 页面 URL 里 `/apps/<slug>` | 拼安装链接（§4） | ✅ 要 |
+| **slug** | 设置页 URL 里 `/apps/<slug>`（即「**Public link**」字段） | 拼安装链接（§4.2） | ✅ 要（但**不进代码**，见 §3.1） |
 
 > 🔑 **Client secret 只在生成的瞬间显示一次**（关掉页面就再也看不到，只能重新生成）。
 > ⚠️ 它是**"软机密"**：方案 A 下它会被打进 `.ipa`，**必须能被反编译取出**——所以它保护的是"顺手薅"而不是"有备而来"。
 > **它不是本仓库的机密**，但**仍然禁止入库**（`.gitignore` 已挡 `Secrets.xcconfig`）。
+
+### 3.1 四个标识别混，且只有一个进代码
+
+App 设置页上并排出现四样东西，**名字听起来都像"身份"，但用途完全不同**：
+
+| 标识 | 长什么样 | 用在哪 | 进本项目代码吗 |
+|---|---|---|---|
+| **App name** | 人类可读（`GitDuo`），也是 `/apps/<slug>` 的来源 | 只用于展示 | ❌ |
+| **slug** | 小写串（`gitduo`），即 URL 里的名字 | **拼安装链接**（§4.2）；API 的 `/app` 响应里也有 `slug` 字段 | ❌ **不进** |
+| **App ID** | 纯数字（如 `123456`） | 私钥签发 JWT、安装令牌流程 | ❌ 本项目不用这些流程 |
+| **Client ID** | `Iv1.` 之类的字符串 | **授权请求的 `client_id`**、换令牌 | ✅ **唯一要写进 `Secrets.xcconfig` 的** |
+
+> **slug 只在你手工拼安装链接时用一次，从头到尾不出现在 GitDuo 的代码里**
+> （`AppConfig.swift` 只有 `clientID` 与 `callbackURL`）。
+> ⇒ 它写错不会导致登录失败，**只会导致安装链接打不开**——两者的报错完全不同，别混着查。
 
 ---
 
@@ -328,7 +353,7 @@ make gen && make build
 |---|---|
 | 改 **Callback URL** | 对外契约变更 ⇒ 同时改 `AppConfig.swift` / `project.yml` / PRD / TECH_SPEC；已登录用户需重新走授权 |
 | 增删 **Permissions** | 已安装用户**必须重新批准**；且要同步改 PRD §6.1、原型 `AUTH_PERMS`（harness 有"登录页预告 ≡ 授权页清单"的逐条一致断言，改一边就会红） |
-| 改 **App name** | slug 跟着变 ⇒ 安装链接失效 |
+| 改 **App name** | 官方**未说明 slug 是否联动** ⇒ 改完回设置页核对 **Public link**；若 slug 变了，已分享的安装链接失效。**代码不受影响**（slug 不进代码，见 §3.1） |
 | 切 **Only on this account ↔ Any account** | 零成本，随时可切 |
 
 ---
