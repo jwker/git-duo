@@ -1,0 +1,23 @@
+# ── 凭据：绝不入库（TECH_SPEC §3.7 / §3.3）────────────────────────
+Secrets.xcconfig
+
+# ── 生成物：xcodegen 产物由 project.yml 生成，不入库 ──────────────
+GitDuo.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserdatad/
+
+# ── 构建产物 ────────────────────────────────────────────────────
+.build/
+.swiftpm/
+build/
+DerivedData/
+*.ipa
+*.dSYM
+*.xcresult
+
+# ── macOS ───────────────────────────────────────────────────────
+.DS_Store
+
+# ── 工具/会话本地状态（如需归档项目记忆，删掉这一行即可）─────────
+.workbuddy/

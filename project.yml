@@ -1,0 +1,89 @@
+name: GitDuo
+
+options:
+  bundleIdPrefix: com.gitduo
+  deploymentTarget:
+    iOS: "26.0"          # ⚠️ 待拍板（见 REVIEW-CHECKLIST.md 决策缺口 D1）；决策 #2 只写了「目标平台 iOS 27」
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: false
+
+packages:
+  GitHubAPI:
+    path: Packages/GitHubAPI
+  GitDuoCore:
+    path: Packages/GitDuoCore
+  GitDuoDesign:
+    path: Packages/GitDuoDesign
+
+configFiles:
+  Debug: Secrets.xcconfig
+  Release: Secrets.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"                     # 决策 #9：Swift 6 严格并发
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+
+targets:
+  GitDuo:
+    type: application
+    platform: iOS
+    sources:
+      - path: GitDuo
+    dependencies:
+      - package: GitHubAPI
+        product: GitHubAPI
+      - package: GitDuoCore
+        product: GitDuoCore
+      - package: GitDuoDesign
+        product: GitDuoDesign
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gitduo.app   # ⚠️ 占位（Bundle ID 属「发布准备」待补项）
+        PRODUCT_NAME: GitDuo
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: "2.0"
+        GENERATE_INFOPLIST_FILE: NO
+        # Swift 6.2 起：App target 默认主 actor，并行显式 opt-in（TECH_SPEC §10.6 / §12.1）
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        # Liquid Glass 是 iOS 27 的默认基线，非可选效果（决策 #3 / §10.1）
+        TARGETED_DEVICE_FAMILY: "1"       # 纯 iPhone（决策 #2）
+        # App 图标与品牌视觉属「发布准备」待补项（用户明确暂不补）→ 显式置空，
+        # 否则 asset catalog 会因找不到 AppIcon 而构建失败。
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE: NO
+    info:
+      path: GitDuo/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: GitDuo
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # client_id 由 Secrets.xcconfig（git-ignored）注入；读取点只有 AppConfig（§3.7）
+        GitDuoClientID: $(GITDUO_CLIENT_ID)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # 决策 #15 / §3.7：回调 URL scheme —— 注册后即对外契约，改动需回 GitHub 重配
+        # ⚠️ 裸名 scheme 不符合 RFC 8252 §7.1（§3.9 / §16 未来工作）
+        CFBundleURLTypes:
+          - CFBundleURLName: com.gitduo.oauth
+            CFBundleURLSchemes:
+              - gitduo
+        ITSAppUsesNonExemptEncryption: false
+
+schemes:
+  GitDuo:
+    build:
+      targets:
+        GitDuo: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
