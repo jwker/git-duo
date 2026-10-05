@@ -58,12 +58,13 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 |---|---|---|---|---|
 | **P1** | 🔒 **GitHub App 已创建**（Settings → Developer settings → GitHub Apps） | 你 | 切片 1 全部 | ⬜ 未知 |
 | **P2** | 🔒 **App 权限勾选 6 项**：`Contents(RW)` · `Issues(RW)` · `Pull requests(RW)` · `Metadata(R)` · `Starring(RW)` · `Followers(RW)` | 你 | 缺 Starring/Followers 会让 Star / 关注 **直接 403** | ⬜ 未知 |
-| **P3** | 🔒 **回调 URL 已配置** `gitduo://oauth/callback`（并勾选 "Request user authorization during installation"） | 你 | 切片 1 回调收不到 | ⬜ 未知 |
+| **P3** | 🔒 **回调 URL 已配置** `gitduo://oauth/callback`（**不要**勾 "Request user authorization during installation"——勾了会绕过 `state` + PKCE） | 你 | 切片 1 回调收不到 | ⬜ 未知 |
 | **P4** | `InMemoryTokenStore` → **Keychain 实现** | 我（切片 1 内） | 骨架期为跑通 UI 用内存实现，**必须在切片 1 替换** | 📌 已登记 |
 | **P5** | 🔒 **`Secrets.xcconfig` 填真实 `client_id`** | 你 | 授权页打不开（当前是 `REPLACE_ME` 占位） | ⬜ 待填 |
 | **P6** | 🔒 三处留白（界面语言 / App 图标 / 发布准备） | 你 | 不影响功能，仅影响"能否提审" | 📌 已确认暂不补 |
 
 **P1–P3 + P5 是真正的卡点**：代码层面无解，只有你能在 GitHub 侧配置。
+👉 **逐栏怎么填、勾什么不勾什么、填完怎么自检，见 `GITHUB-APP-SETUP.md`**（2026-10-05 按官方文档核对）。
 **建议**：评审通过后**当天就去建 App**（10 分钟），这样切片 1 一写完就能真跑。
 
 > ⏳ 待你确认：P1–P3 / P5 由你提供；P4 / P6 按现状。
@@ -93,7 +94,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 ---
 
-## 5. 决策记录（**2026-10-05 已全部拍板**）
+## 5. 决策记录（D1–D3 **2026-10-05 已拍板**；D4 待拍板）
 
 > 三个待定点原以注释形式散落在 `project.yml:6` / `Route.swift:5,14` / `ThemeTests.swift:40`，
 > 而它们引用的本文件当时并不存在（悬空引用）——已于 2026-10-05 补齐并当轮拍板。
@@ -144,11 +145,28 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 ---
 
+### D4 · `client_secret` 怎么处理 ⏳ **待拍板**（2026-10-05 新增）
+
+**发现**：GitHub 官方文档（2026-10-05 核对）明确要求 **GitHub App 换令牌必须携带 `client_secret`**——
+「GitHub does not distinguish between public and confidential clients」，PKCE 也不能免除它。
+而本项目现有 8 处文字以「**客户端不持 client_secret**」为前提（清单见 `GITHUB-APP-SETUP.md` §0.1）。
+
+| 方案 | 做法 | 代价 | 原型/文档改动量 |
+|---|---|---|---|
+| **A（推荐）** | 内嵌 `client_secret` + PKCE（GitHub 官方对 public client 的建议） | secret 可被反编译取出（"软机密"） | **最小**：只改 8 处措辞 + `Secrets.xcconfig` 多一行 |
+| B | 启用 Device Flow（零 secret，刷新也不需 secret） | UX 退化；**官方明确反对** | 最大：§3.1 重写 + 原型登录页重做 + harness 登录段断言重写 |
+| C | 极薄中继（如 Cloudflare Worker）换令牌 | 违背决策 #5「无后端」 | 决策表要改 |
+
+> ☐ 选 A（推荐） ☐ 选 B ☐ 选 C
+
+---
+
 ## 6. 下一步
 
-1. ✅ **D1 / D2 / D3 已全部拍板并落地**（见上）。
-2. ⏳ **你去建 GitHub App**（P1–P3 + P5，约 10 分钟）——这是唯一还挡在切片 1 前面的东西。
-3. ▶ 我开**切片 1（Auth）**：PKCE → 回调 → 换令牌 → Keychain（替换 P4 占位）→ 刷新 single-flight → 门禁，
+1. ✅ **D1 / D2 / D3 已拍板并落地**（见上）。
+2. ⏳ **你去建 GitHub App**（P1–P3 + P5，约 10 分钟）——**照 `GITHUB-APP-SETUP.md` 走**；这是唯一还挡在切片 1 前面的东西。
+3. ⏳ **拍板 D4**（`client_secret` 方案）——拍完我一次性收口 TECH_SPEC / PRD / 原型 / 代码里的 8 处措辞。
+4. ▶ 我开**切片 1（Auth）**：PKCE → 回调 → 换令牌 → Keychain（替换 P4 占位）→ 刷新 single-flight → 门禁，
    同步把 harness 的登录段断言转成 Swift 测试。
 
 **验证闭环已经就绪**：`make verify` = 三包单测（当前 15 项全过）+ 模拟器构建，一条命令。
