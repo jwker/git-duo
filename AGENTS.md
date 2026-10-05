@@ -41,6 +41,10 @@ make verify   # 以上全跑 —— 提交前必跑
 
 **没有可执行的验证命令的改动，等于没做。** 改完必须给出 `make verify` 的结果。
 
+> ⚠️ **`make build` / `make verify` 必须脱离沙箱运行**：`xcodebuild` 解析 SwiftPM 依赖时会内部调用
+> `sandbox-exec`，在沙箱里会报 `sandbox-exec: sandbox_apply: Operation not permitted`（看起来像工程坏了，
+> 其实是权限）。`swift test` 会写 `~/.cache`，同理。报这个错时**不要改代码**，换非沙箱方式重跑。
+
 ---
 
 ## 3. 架构铁律（违反即返工）
