@@ -3,7 +3,7 @@ name: GitDuo
 options:
   bundleIdPrefix: com.gitduo
   deploymentTarget:
-    iOS: "26.0"          # ⚠️ 待拍板（见 REVIEW-CHECKLIST.md 决策缺口 D1）；决策 #2 只写了「目标平台 iOS 27」
+    iOS: "27.0"          # 决策 #2「目标平台 iOS 27 · 纯 iPhone」—— 用户 2026-10-05 拍板（有 iOS 27 设备可实测）
   createIntermediateGroups: true
   groupSortPosition: top
   generateEmptyDirectories: false

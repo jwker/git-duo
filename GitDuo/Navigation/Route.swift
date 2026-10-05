@@ -2,7 +2,7 @@ import Foundation
 
 /// 仓库详情的四个分区。
 /// 依据：PRD §4.16（代码 / Issues / Pull Requests / Commits）。
-/// ⚠️ 本枚举名字在 TECH_SPEC §8.2 的 `Route` 里被引用，但**未在该文档中定义取值** —— 见 REVIEW-CHECKLIST「决策缺口 D2」。
+/// 依据：TECH_SPEC §8.2（2026-10-05 已补入文档，与 `Route` 同节定义）。
 enum RepoSection: String, Hashable, Sendable, CaseIterable {
     case code
     case issues
@@ -11,7 +11,7 @@ enum RepoSection: String, Hashable, Sendable, CaseIterable {
 }
 
 /// 编辑器打开模式（新建 / 编辑既有文件）。
-/// ⚠️ 同 D2：TECH_SPEC §8.2 引用而未定义取值。
+/// 依据：TECH_SPEC §8.2（2026-10-05 已补入文档）。
 enum EditorMode: Hashable, Sendable {
     /// 新建文件（需输入路径）
     case create

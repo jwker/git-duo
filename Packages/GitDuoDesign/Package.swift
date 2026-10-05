@@ -9,7 +9,7 @@ import PackageDescription
 // 不代表产品支持 macOS —— 产品形态是纯 iPhone（决策 #2）。
 let package = Package(
     name: "GitDuoDesign",
-    platforms: [.iOS("26.0"), .macOS("15.0")],
+    platforms: [.iOS("27.0"), .macOS("15.0")],
     products: [
         .library(name: "GitDuoDesign", targets: ["GitDuoDesign"])
     ],

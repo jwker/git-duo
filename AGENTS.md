@@ -75,7 +75,7 @@ make verify   # 以上全跑 —— 提交前必跑
 | 3 | 颜色/字号/间距/圆角**一律引用 `Theme` 令牌**，禁写魔法值 | §10.7（为补深色预留，写死色值会导致全量返工） |
 | 4 | `.glassEffect` **只允许出现在 `GitDuoDesign` 的组件封装内** | §10.2（玻璃只属导航层；业务代码直接调用必失控） |
 | 5 | 玻璃**绝不用在内容层**（列表行、卡片、正文、图片） | §10.2 |
-| 6 | 不用 `UIScreen.main`；布局看 size class 与容器尺寸 | 纯 iPhone + 未来可变形态 |
+| 6 | 不用 `UIScreen.main`；布局看 size class 与容器尺寸 | PRD §1：**纯 iPhone，本期不做折叠屏 / iPad** |
 | 7 | **只读态显式传参**（`readOnly:`），不让下层页自行推断仓库归属 | §8.2（可写性判定唯一来源 = `Repository.permissions.push`） |
 | 8 | 凭据只进 Keychain；**绝不写入**日志 / 崩溃上报 / 剪贴板 / UserDefaults 明文 | §3.3 |
 | 9 | `client_secret` **永不进入客户端**（无后端 + PKCE 的前提） | §3.1 / §3.7 |

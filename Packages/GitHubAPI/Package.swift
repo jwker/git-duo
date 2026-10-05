@@ -5,7 +5,7 @@ import PackageDescription
 // 依据：TECH_SPEC §2.2。硬约束：只依赖 Foundation / CryptoKit，**零第三方依赖**（决策 #12）。
 let package = Package(
     name: "GitHubAPI",
-    platforms: [.iOS("26.0"), .macOS("15.0")],
+    platforms: [.iOS("27.0"), .macOS("15.0")],
     products: [
         .library(name: "GitHubAPI", targets: ["GitHubAPI"])
     ],

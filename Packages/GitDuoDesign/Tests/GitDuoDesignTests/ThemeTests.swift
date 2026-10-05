@@ -37,13 +37,14 @@ struct ThemeTests {
         }
     }
 
-    @Test("三级文字：卡片面达标；灰色页面底为已知偏差（待拍板 D3）")
+    @Test("三级文字：卡片面达标；灰色页面底为**已接受的已知偏差**（TECH_SPEC §10.7）")
     func tertiaryTextContrast() {
         #expect(contrastRatio(Theme.Palette.textTertiary, Theme.Palette.surface) >= 3.0)
 
-        // ⚠️ 已知偏差：原型的三级灰 #8B949E 在页面底 #F6F8FA 上只有 2.89:1，低于大字号 3:1 门槛。
-        // 修 token 会改动产品视觉（原型是唯一可点验收依据），因此**先登记不擅改** —— 见 REVIEW-CHECKLIST D3。
-        // 这条断言只守住"不得更差"：将来换 token 若低于此值，必须连同 D3 一起处理。
+        // 已知偏差【已定 2026-10-05】：原型的三级灰 #8B949E 在页面底 #F6F8FA 上只有 2.89:1，
+        // 低于大字号 3:1 门槛。决策为**保留现值**——该 token 只用于时间戳等极弱信息；
+        // 调色等于改产品视觉，而原型是唯一可点验收依据。详见 TECH_SPEC §10.7「已知偏差」。
+        // 本断言是**下界护栏**：将来调色若低于 2.85，必须连同该偏差一起重新评估。
         #expect(contrastRatio(Theme.Palette.textTertiary, Theme.Palette.background) >= 2.85)
     }
 
