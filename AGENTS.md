@@ -19,7 +19,7 @@
 | `redesign/prototype.html` | **唯一可点验收依据** | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
 | `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**29 项全部【已定】**） |
-| `REVIEW-CHECKLIST.md` | 评审 | 范围冻结、前置条件、决策缺口（未拍板项都在这里） |
+| `REVIEW-CHECKLIST.md` | 评审 | 范围冻结、前置条件、**决策记录 D1–D4（已全部拍板）** |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 
 **冲突裁决顺序：原型 > TECH_SPEC > PRD > 任何推测。**
