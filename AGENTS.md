@@ -42,9 +42,15 @@ make verify   # 以上全跑 —— 提交前必跑
 
 **没有可执行的验证命令的改动，等于没做。** 改完必须给出 `make verify` 的结果。
 
-> ⚠️ **`make build` / `make verify` 必须脱离沙箱运行**：`xcodebuild` 解析 SwiftPM 依赖时会内部调用
+> ⚠️ **`make build` / `make verify` 必须脱离沙箱且「前台」运行**：`xcodebuild` 解析 SwiftPM 依赖时会内部调用
 > `sandbox-exec`，在沙箱里会报 `sandbox-exec: sandbox_apply: Operation not permitted`（看起来像工程坏了，
 > 其实是权限）。`swift test` 会写 `~/.cache`，同理。报这个错时**不要改代码**，换非沙箱方式重跑。
+>
+> 🕳️ **两个更隐蔽的次生坑（2026-10-05 实测踩到）**：
+> 1. **放后台执行时沙箱豁免不生效** —— 同样报 `sandbox_apply`，且错误里全是 `swiftc` 的 manifest 编译参数，
+>    极易误判成"Swift 包坏了"。**口诀：只要出现 `sandbox_apply: Operation not permitted`，一律是运行环境问题。**
+> 2. **`rm -rf <大目录>` 会被安全机制拦截** —— 拦截后 `&&` 短路、**后续命令压根没执行**，
+>    而日志文件里还留着上一次的内容 ⇒ 看起来"跑了但没通过"。**别用 `rm -rf` 做 clean**，直接让 xcodebuild 增量构建。
 
 ---
 
@@ -79,7 +85,7 @@ make verify   # 以上全跑 —— 提交前必跑
 | 6 | 不用 `UIScreen.main`；布局看 size class 与容器尺寸 | PRD §1：**纯 iPhone，本期不做折叠屏 / iPad** |
 | 7 | **只读态显式传参**（`readOnly:`），不让下层页自行推断仓库归属 | §8.2（可写性判定唯一来源 = `Repository.permissions.push`） |
 | 8 | 凭据只进 Keychain；**绝不写入**日志 / 崩溃上报 / 剪贴板 / UserDefaults 明文 | §3.3 |
-| 9 | ⚠️ **待拍板（D4）**：GitHub 官方要求换令牌必须带 `client_secret`，故本条**不再表述为"永不进入客户端"**——方案待定，见 `GITHUB-APP-SETUP.md` §9 | §3.1 / §3.7 + 官方文档 |
+| 9 | `client_secret` **内嵌进 App**（构建期由 `Secrets.xcconfig` 注入，**不入库**）——官方 Required 且无法规避；它是**软机密**，只许出现在「换令牌 / 刷新 / 撤销」三条请求里，**不进日志、不进缓存、不进任何上报** | §3.1 / §3.7（决策 #30） |
 | 10 | `code_verifier` 只存内存、**绝不随回调传输**；`state` 一次性 | §3.9（scheme 被抢注时唯一的防线） |
 | 11 | "这个能力能不能做"**先查文档结论**（§3.9 / §16 已关闭项），不要凭直觉承诺 | 已核实：置顶无写 API、Revert 无端点、最近访问无 API、通知 API 不支持 App 令牌 |
 | 12 | 加任何网络调用前，先看 §13.2 配额预算；GraphQL 单查询 ≤5 点 | 深层嵌套可一次烧掉 100 点 |

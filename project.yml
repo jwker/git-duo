@@ -64,8 +64,10 @@ targets:
         CFBundleDisplayName: GitDuo
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        # client_id 由 Secrets.xcconfig（git-ignored）注入；读取点只有 AppConfig（§3.7）
+        # client_id / client_secret 由 Secrets.xcconfig（git-ignored）注入；读取点只有 AppConfig（§3.7）
+        # ⚠️ secret 是平台强制的"软机密"（决策 #30）：挡随手薅、不挡反编译，只用于换令牌/刷新/撤销
         GitDuoClientID: $(GITDUO_CLIENT_ID)
+        GitDuoClientSecret: $(GITDUO_CLIENT_SECRET)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

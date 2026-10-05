@@ -33,6 +33,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>GitDuoClientID</key>
 	<string>$(GITDUO_CLIENT_ID)</string>
+	<key>GitDuoClientSecret</key>
+	<string>$(GITDUO_CLIENT_SECRET)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UILaunchScreen</key>

@@ -60,7 +60,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 | **P2** | 🔒 **App 权限勾选 6 项**：`Contents(RW)` · `Issues(RW)` · `Pull requests(RW)` · `Metadata(R)` · `Starring(RW)` · `Followers(RW)` | 你 | 缺 Starring/Followers 会让 Star / 关注 **直接 403** | ⬜ 未知 |
 | **P3** | 🔒 **回调 URL 已配置** `gitduo://oauth/callback`（**不要**勾 "Request user authorization during installation"——勾了会绕过 `state` + PKCE） | 你 | 切片 1 回调收不到 | ⬜ 未知 |
 | **P4** | `InMemoryTokenStore` → **Keychain 实现** | 我（切片 1 内） | 骨架期为跑通 UI 用内存实现，**必须在切片 1 替换** | 📌 已登记 |
-| **P5** | 🔒 **`Secrets.xcconfig` 填真实 `client_id`** | 你 | 授权页打不开（当前是 `REPLACE_ME` 占位） | ⬜ 待填 |
+| **P5** | 🔒 **`Secrets.xcconfig` 填真实 `client_id` + `client_secret`** | 你 | 授权页打不开 / 换令牌失败（当前两项均为 `REPLACE_ME` 占位） | ⬜ 待填 |
 | **P6** | 🔒 三处留白（界面语言 / App 图标 / 发布准备） | 你 | 不影响功能，仅影响"能否提审" | 📌 已确认暂不补 |
 
 **P1–P3 + P5 是真正的卡点**：代码层面无解，只有你能在 GitHub 侧配置。
@@ -145,28 +145,44 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 ---
 
-### D4 · `client_secret` 怎么处理 ⏳ **待拍板**（2026-10-05 新增）
+### D4 · `client_secret` 怎么处理 ✅ **已拍板：方案 A（内嵌 + PKCE）**（2026-10-05）
 
 **发现**：GitHub 官方文档（2026-10-05 核对）明确要求 **GitHub App 换令牌必须携带 `client_secret`**——
 「GitHub does not distinguish between public and confidential clients」，PKCE 也不能免除它。
-而本项目现有 8 处文字以「**客户端不持 client_secret**」为前提（清单见 `GITHUB-APP-SETUP.md` §0.1）。
+本项目原有 **8 处**文字以「客户端不持 `client_secret`」为前提（清单见 `GITHUB-APP-SETUP.md` §0.1）。
 
-| 方案 | 做法 | 代价 | 原型/文档改动量 |
-|---|---|---|---|
-| **A（推荐）** | 内嵌 `client_secret` + PKCE（GitHub 官方对 public client 的建议） | secret 可被反编译取出（"软机密"） | **最小**：只改 8 处措辞 + `Secrets.xcconfig` 多一行 |
-| B | 启用 Device Flow（零 secret，刷新也不需 secret） | UX 退化；**官方明确反对** | 最大：§3.1 重写 + 原型登录页重做 + harness 登录段断言重写 |
-| C | 极薄中继（如 Cloudflare Worker）换令牌 | 违背决策 #5「无后端」 | 决策表要改 |
+**结论（用户拍板）**：**A —— 内嵌 `client_secret` + PKCE**，即 GitHub 对 public client 的官方建议。
+理由：GitHub 不区分客户端类型 ⇒「客户端不持 secret」在该平台上**从来无法成立**；
+而 B 要作废原型整屏（登录页 / 授权页重做 + harness 登录段重写），C 要推翻决策 #5「无后端」。
 
-> ☐ 选 A（推荐） ☐ 选 B ☐ 选 C
+**落地清单**（已全部完成）：
+
+| # | 位置 | 处置 |
+|---|---|---|
+| 1 | `TECH_SPEC` §0.2 决策表 | **新增 #30**（现 **30/30 全【已定】**，无【拟定】无【待定】） |
+| 2 | `TECH_SPEC` §1.2 / §1.3 | 第 1 条约束改写（PKCE 与 secret 是**叠加**、不是二选一）；GitHub App「撤销」行补程序化撤销 |
+| 3 | `TECH_SPEC` §3.1 / §3.2 | 步骤 6 与刷新请求均补 `client_secret`；要点新增决策 #30 条 |
+| 4 | `TECH_SPEC` §3.6 | **登出改为可程序化撤销**（`DELETE /applications/{client_id}/grant`，对 `ghu_` 适用）+ 失败降级 |
+| 5 | `TECH_SPEC` §3.7 | `client_secret` 行改为"内嵌（软机密）"；**顺带修掉残留的「安装时请求授权 = 开启」**（应为不勾） |
+| 6 | `TECH_SPEC` §3.8 / §9.15 / §14 / §15 / §16 | 登出文案、设置页、安全表新增 secret 行、风险 #11 关闭 + **新增 #17（软机密）** |
+| 7 | `AGENTS.md` 铁律 9 | 由"永不进入客户端"改为"内嵌（软机密）+ 只许出现在 3 条请求里、不进日志" |
+| 8 | `PRD` §4.0.1 / §5.11 / §8 | 安全说明改为"退出登录即同时撤销 GitHub 侧授权"；补撤销失败降级文案 |
+| 9 | `redesign/prototype.html` | 登录页 fnote / 安全说明 / 退出登录弹层与 toast 全部同步；harness 新增 3 条断言 |
+| 10 | 工程 | `AppConfig` 新增 `gitHubClientSecret` + `revokeGrantURL`；`project.yml` 注入 `GitDuoClientSecret`；`Secrets.xcconfig(.example)` 加第二项 |
+
+**附带解锁的能力**：登出时**可真正撤销 GitHub 侧授权**——这消解了一处既有矛盾：
+原型 / PRD 早就写着"GitHub 侧的授权记录会一并撤销"，而旧技术结论是"做不到"（只能引导用户去网页手动撤销）。
 
 ---
 
 ## 6. 下一步
 
-1. ✅ **D1 / D2 / D3 已拍板并落地**（见上）。
-2. ⏳ **你去建 GitHub App**（P1–P3 + P5，约 10 分钟）——**照 `GITHUB-APP-SETUP.md` 走**；这是唯一还挡在切片 1 前面的东西。
-3. ⏳ **拍板 D4**（`client_secret` 方案）——拍完我一次性收口 TECH_SPEC / PRD / 原型 / 代码里的 8 处措辞。
-4. ▶ 我开**切片 1（Auth）**：PKCE → 回调 → 换令牌 → Keychain（替换 P4 占位）→ 刷新 single-flight → 门禁，
+1. ✅ **D1 / D2 / D3 / D4 已全部拍板并落地**（见上；决策表现为 **30/30 全【已定】**）。
+2. ⏳ **你去建 GitHub App**（P1–P3 + P5，约 10 分钟）——**照 `GITHUB-APP-SETUP.md` 走**，两个注意点：
+   ① **不要勾**"Request user authorization during installation"（会绕过 `state` 与 PKCE）；
+   ② **Client ID 与 Client secret 都要抄**（方案 A 需两者齐全，只填一个会在换令牌那步失败）。
+   这是唯一还挡在切片 1 前面的东西。
+3. ▶ 我开**切片 1（Auth）**：PKCE → 回调 → 换令牌（带 secret）→ Keychain（替换 P4 占位）→ 刷新 single-flight → **登出撤销** → 门禁，
    同步把 harness 的登录段断言转成 Swift 测试。
 
 **验证闭环已经就绪**：`make verify` = 三包单测（当前 15 项全过）+ 模拟器构建，一条命令。

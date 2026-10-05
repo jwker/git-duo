@@ -9,7 +9,7 @@
 
 ## 0. ⚠️ 动手前必读：三条官方事实，与现有文档冲突
 
-### 0.1 🔴 换令牌**强制要求 `client_secret`**（与本项目"客户端不持 secret"的前提冲突）
+### 0.1 ⚠️ 换令牌**强制要求 `client_secret`**（已拍板：**内嵌持有**，§9 方案 A）
 
 官方《为 GitHub 应用生成用户访问令牌》参数表里，**`client_secret` 标为 Required**（必需），
 即使携带了 PKCE 的 `code_verifier` 也没有例外：
@@ -25,7 +25,7 @@ GitHub 给 native app 的官方建议是**把 secret 打进包里 + 用 PKCE**�
 
 > If your app is a public client (a native app that runs on the user's device, CLI utility, or single-page web application), **you cannot secure your client secret. You will have to ship the client secret in the application's code, and you should use PKCE** to better secure the authentication flow.
 
-**影响面**（共 8 处现有文字与此前提绑定，均需在拍板后改）：
+**影响面**（共 8 处现有文字曾以此为前提，**已全部改毕**，清单见 §9）：
 
 | 位置 | 现有文字 |
 |---|---|
@@ -38,10 +38,9 @@ GitHub 给 native app 的官方建议是**把 secret 打进包里 + 用 PKCE**�
 | `redesign/prototype.html:1816` | 登录页 fnote「客户端不持有 client secret」 |
 | `GitDuo/App/AppConfig.swift:7,31` | 注释同上 |
 
-**三个可选方案（**需你拍板，见 §9**）**：
-**A（推荐）** 内嵌 secret + PKCE —— 即 GitHub 官方建议，改动最小，与原型的授权码流程一致；
-**B** 改用 device flow —— 真·零 secret（刷新也不需 secret），但 UX 变差且**官方明确反对**（无需回调 URI ⇒ 易被钓鱼冒充）；
-**C** 薄中继（Cloudflare Worker 之类）—— secret 不出服务器，但**违背"零后端"目标**。
+**结论（2026-10-05 用户拍板）**：**采用方案 A —— 内嵌 `client_secret` + PKCE**，即 GitHub 官方建议。
+定位为**软机密**：挡得住随手薅、**挡不住反编译**；**PKCE + 一次性 `state` 仍是主防线**，不因有 secret 而放松。
+附带解锁**登出可程序化撤销授权**（§9.1）。三个方案的取舍见 §9。
 
 ### 0.2 🔴 **不要勾** "Request user authorization (OAuth) during installation"
 
@@ -206,7 +205,7 @@ App 设置页（`https://github.com/settings/apps/<slug>`）上：
 |---|---|---|---|
 | **App ID** | 页面中部 | JWT / 安装令牌（本项目**不用**这些流程） | ❌ 不用 |
 | **Client ID** | 页面中部 | 授权请求的 `client_id`（**注意：不是 App ID**） | ✅ **要** |
-| **Client secret** | 「Generate a new client secret」按钮 | 换令牌 / 刷令牌（**方案 A 才需要**） | 方案 A ✅ / 方案 B ❌ |
+| **Client secret** | 「Generate a new client secret」按钮 | 换令牌 / 刷新令牌 / **登出撤销授权**（§9.1） | ✅ **要**（方案 A 已采纳） |
 | **slug** | 设置页 URL 里 `/apps/<slug>`（即「**Public link**」字段） | 拼安装链接（§4.2） | ✅ 要（但**不进代码**，见 §3.1） |
 
 > 🔑 **Client secret 只在生成的瞬间显示一次**（关掉页面就再也看不到，只能重新生成）。
@@ -294,23 +293,22 @@ https://github.com/apps/<slug>/installations/new
 
 ## 5. 填进本地工程
 
-编辑仓库根目录下的 **`Secrets.xcconfig`**（git-ignored；模板见 `Secrets.xcconfig.example`）：
+编辑仓库根目录下的 **`Secrets.xcconfig`**（git-ignored；模板见 `Secrets.xcconfig.example`），**两项都要填**：
 
 ```
 GITDUO_CLIENT_ID = <粘贴 Client ID>
-```
-
-方案 A 还要加一行（并同步改 `project.yml` 注入 `Info.plist`，这步我来做）：
-
-```
 GITDUO_CLIENT_SECRET = <粘贴 Client secret>
 ```
+
+> ⚠️ 只填 `client_id` 会在**换令牌**那一步失败（§0.1）；两项都由 `project.yml` 注入 `Info.plist`，工程侧无需再改。
 
 然后重新生成工程并验证注入是否生效：
 
 ```bash
 make gen && make build
 /usr/libexec/PlistBuddy -c "Print :GitDuoClientID" \
+  build/DerivedData/Build/Products/Debug-iphonesimulator/GitDuo.app/Info.plist
+/usr/libexec/PlistBuddy -c "Print :GitDuoClientSecret" \
   build/DerivedData/Build/Products/Debug-iphonesimulator/GitDuo.app/Info.plist
 ```
 
@@ -358,21 +356,33 @@ make gen && make build
 
 ---
 
-## 9. 待你拍板：D4 —— secret 怎么处理（方案 A / B / C）
+## 9. D4 决策记录：`client_secret` —— ✅ **已拍板：方案 A（内嵌 + PKCE）**（2026-10-05）
 
 | 方案 | 做法 | 代价 | 与现有资产的关系 |
 |---|---|---|---|
-| **A**（推荐） | 内嵌 `client_secret` + PKCE | secret 可被反编译取出；GitHub 官方明确认可这是 public client 的做法 | **原型/文档的授权码流程完全不用改**，只改 8 处措辞（§0.1 表）+ `Secrets.xcconfig` 多一行 |
-| **B** | 启用 Device Flow，不生成 secret | UX 退化（8 位 user_code + 手动输入）；**官方反对**；**原型登录页/授权页那一屏要重做** | 改动最大：§3.1 流程重写 + 原型重做 + harness 登录段断言重写 |
-| **C** | 加一个极薄中继（如 Cloudflare Worker，免费）换令牌 | 违背 `TECH_SPEC` 决策「**无后端**」（决策 #5），需要维护一个域名与服务 | 文档决策表要改；工程侧反而更简单 |
+| **A ✅ 已采纳** | 内嵌 `client_secret` + PKCE | secret 可被反编译取出（"软机密"）；GitHub 官方明确认可这是 public client 的做法 | **原型/文档的授权码流程完全不用改**，只改 8 处措辞（§0.1 表）+ `Secrets.xcconfig` 多一行 |
+| B | 启用 Device Flow，不生成 secret | UX 退化（8 位 user_code + 手动输入）；**官方反对**；**原型登录页/授权页那一屏要重做** | 改动最大：§3.1 流程重写 + 原型重做 + harness 登录段断言重写 |
+| C | 加一个极薄中继（如 Cloudflare Worker，免费）换令牌 | 违背 `TECH_SPEC` 决策「**无后端**」（决策 #5），需要维护一个域名与服务 | 文档决策表要改；工程侧反而更简单 |
 
-**我的建议：A。** 理由：GitHub 自己的文档就是这么建议 public client 的；
-本项目的"客户端不持 secret"前提**在 GitHub 上从来无法成立**（GitHub 不区分客户端类型）；
+**拍板理由**：GitHub 自己的文档就是这么建议 public client 的；
+「客户端不持 secret」这一前提**在 GitHub 上从来无法成立**（不区分客户端类型）；
 而 B 会让 §3.9 那套 `state` + PKCE 防护与原型整屏作废，C 则要推翻"零后端"这条已定决策。
 
-> 拍板后我会一次性收口：改 `TECH_SPEC` §3.1 / §3.5 / §3.7 / §3.9 相关行 + `AGENTS.md` 铁律 9 +
-> `PRD.md` §4.0.1 安全行 + 原型登录页 fnote + `AppConfig.swift` 注释 + `Secrets.xcconfig.example`，
-> 并跑完整回归（原型 260 项断言）与 `make verify`。
+**已落地**（完整清单见 `REVIEW-CHECKLIST.md` §5 D4）：`TECH_SPEC` 决策表 **#30** + §1.2 / §1.3 / §3.1 / §3.2 / §3.6 / §3.7 / §3.8 / §9.15 / §14 / §15 / §16；
+`AGENTS.md` 铁律 9；`PRD` §4.0.1 / §5.11 / §8；原型登录页与退出登录弹层；`AppConfig` + `project.yml` + `Secrets.xcconfig(.example)`。
+
+### 9.1 方案 A 附带解锁：登出可**程序化撤销**授权
+
+因为客户端现在持有 `client_secret`，`DELETE /applications/{client_id}/grant`
+（Basic Auth = `client_id` : `client_secret`）变得可用，且官方明确该组端点**对 `ghu_` 令牌同样适用**：
+
+> Tokens for OAuth apps have the prefix `gho_`, while OAuth tokens for GitHub Apps… have the prefix `ghu_`. **You can use the following endpoints for both types of OAuth tokens.**
+
+⇒ 「退出登录」从**"只清本地 + 引导用户去网页手动撤销"**升级为**"先撤销 GitHub 侧授权，再清本地"**。
+撤销失败（离线 / 422）**不阻塞登出**，仅提示降级。细节见 `TECH_SPEC` §3.6。
+
+> ⚠️ 注意区分：**撤销授权（authorization）≠ 卸载 App（installation）**。撤销后 installation 仍在，
+> 重新登录只走授权流程、**不需要重新安装**。
 
 ---
 

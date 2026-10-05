@@ -1808,14 +1808,14 @@ function authLoginHTML(){
     </div>
     <div class="auth-foot">
       <button class="btn github" onclick="toAuthPage()">${GH_MARK}<span>使用 GitHub 登录</span></button>
-      <div class="auth-note">授权在系统浏览器中完成 · 密码不经过 GitDuo<br>令牌存于本机 Keychain，可随时在 GitHub 撤销<br><b>安装页请选「All repositories（全部仓库）」</b>，否则 GitDuo 只能看到被勾选的那部分仓库</div>
+      <div class="auth-note">授权在系统浏览器中完成 · 密码不经过 GitDuo<br>令牌存于本机 Keychain，退出登录即同时撤销 GitHub 侧授权<br><b>安装页请选「All repositories（全部仓库）」</b>，否则 GitDuo 只能看到被勾选的那部分仓库</div>
       ${fnote('登录页', [
         '<b>未登录首屏</b>：启动时若 Keychain 无有效令牌，进入本页；底部 4 Tab 此时不可用',
         '<b>权限预告</b>：列出的 6 项即 GitHub App 安装时勾选的范围，与授权页清单一致',
         '<b>登录方式</b>：仅 GitHub 一种，不做账号密码、不做第三方登录',
-        '<b>安全</b>：走 GitHub App + PKCE，客户端不持有 client secret；令牌只写 Keychain',
+        '<b>安全</b>：GitHub App + PKCE + 一次性 state 校验；令牌只写 Keychain。客户端内嵌的 secret 属"软机密"（官方要求且不区分客户端类型），**不是防线**',
         '<b>安装范围</b>：GitHub App 令牌可见范围 = 用户权限 ∩ App 权限 ∩ 安装时勾选的仓库；必须引导选 All repositories',
-        '<b>退出后</b>：「我的 → 设置 → 退出登录」清空本机令牌并回到本页',
+        '<b>退出后</b>：「我的 → 设置 → 退出登录」先撤销 GitHub 侧授权、再清空本机令牌并回到本页（撤销失败仍会登出，仅提示降级）',
       ])}
     </div>
   </div>`;
@@ -1864,10 +1864,14 @@ function approveAuth(){
 function openSignOutSheet(){
   openSheet(`
     <div class="sheet-title">退出登录？</div>
-    <div class="sheet-hint" style="padding:2px 8px 12px">将清除本机 Keychain 中的访问令牌与缓存，需要重新授权才能继续使用。GitHub 侧的授权记录会一并撤销。</div>
+    <div class="sheet-hint" style="padding:2px 8px 12px">将清除本机 Keychain 中的访问令牌与缓存，并撤销 GitHub 侧的授权（授权记录不再出现在 GitHub 设置里）。下次使用需要重新授权，但无需重新安装 App。</div>
     <button class="btn primary" style="width:100%;padding:12px;background:var(--closed-p)" onclick="signOut()">退出登录</button>
     <button class="btn ghost" style="width:100%;padding:12px;margin-top:8px" onclick="closeSheet()">取消</button>`);
 }
+/* 登出 = ① 撤销 GitHub 侧授权（DELETE /applications/{client_id}/grant，TECH_SPEC §3.6）
+   → ② 清本地凭据 → ③ 清账号绑定数据 → ④ 重置导航栈。
+   撤销失败（离线 / 422 / 网络错误）**不阻塞登出**：仍清空本地，仅把提示降级为
+   「已退出登录 · 本机令牌已清除（未能撤销 GitHub 侧授权）」——原型演示成功路径。 */
 function signOut(){
   closeSheet();
   authStep='login'; authHTML();
@@ -1879,7 +1883,7 @@ function signOut(){
   Object.keys(branchByRepo).forEach(k=>delete branchByRepo[k]);   // 分支记忆属账号绑定数据
   activeRepo = null;
   paintTabbar(); paintTab();
-  toast('已退出登录 · 本机令牌已清除');
+  toast('已退出登录 · 已同时撤销 GitHub 侧授权');
 }
 
 /* ============================================================ painting */

@@ -25,7 +25,7 @@
 | 【已定】 | 已经拍板的技术决策，后续不再反复 |
 | 【待定】 | 受外部平台约束或尚未决策，需要确认后才能开工的项 |
 
-> 本版 **29 项决策全部为【已定】**，无【待定】项。
+> 本版 **30 项决策全部为【已定】**，无【待定】项。
 
 ### 0.3 术语
 
@@ -78,14 +78,15 @@
 | 27 | 授权回调 / URL scheme 安全 | **自定义 scheme 不视为安全边界**：PKCE + 一次性 `state` + 回调只带 `code`/`state`（**绝不带令牌**）+ 拒绝静默授权 + scheme 不承载深链；抢注 / 劫持的四类场景与残余风险已登记，收敛方向为 claimed HTTPS（Universal Link）（见 §3.9） | 【已定】 |
 | 28 | 当前分支的作用域 | **按仓库分别记忆的会话状态**（`RepositoryScope.branch(for:)`），不是全局唯一值；进入仓库时记忆失效则**回落 `defaultBranch`**（见 §9.4.1） | 【已定】 |
 | 29 | 收藏夹项目数 | **由归属映射推导**，不做独立计数器；换列表 = 源夹 −1 且目标夹 +1，删除夹时其中的项回落默认夹（见 §9.12） | 【已定】 |
+| 30 | 客户端是否持有 `client_secret` | **内嵌持有**（用户 2026-10-05 拍板）：GitHub 换令牌**强制要求** `client_secret`（官方参数表 Required），且官方明确「**does not distinguish between public and confidential clients**」⇒ 不存在"用 PKCE 换掉 secret"这条路；官方对 native app 的建议正是「**打进包里 + 用 PKCE**」。定位为**软机密**（挡随手薅、不挡反编译），**PKCE + 一次性 `state` 仍是主防线**，不因持有 secret 而放松。附带解锁"退出登录可程序化撤销授权"（见 §3.1 / §3.6 / §3.7） | 【已定】 |
 
-> **状态汇总**：29 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+> **状态汇总**：30 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
 
 ### 1.2 三条"不可动摇"的约束
 
 这三条由外部平台决定，不是设计偏好，全篇方案都建立在它们之上：
 
-1. **无后端 ⇒ 必须 PKCE，令牌只能留在设备。** 官方明文：公共客户端无法保护 client_secret，应使用 PKCE(S256)。同时意味着**绝不能**把 GitHub 令牌递给任何自有服务换凭证（本产品无自有服务，此风险天然不存在）。
+1. **无后端 ⇒ 必须 PKCE，且 `client_secret` 只能内嵌（无法保密）。** 官方明文：公共客户端**无法保护** `client_secret`，应使用 PKCE(S256)；但 GitHub **不区分 public / confidential 客户端**，换令牌时 `client_secret` 标为 **Required** ⇒ **PKCE 不能替代 secret，secret 也无法保密**，二者是叠加而非二选一（决策 #30，见 §3.7）。同时意味着**绝不能**把 GitHub 令牌递给任何自有服务换凭证（本产品无自有服务，此风险天然不存在）。
 2. **通知 API 只认 classic PAT。** `GET /notifications` 全系列官方写明 `only support authentication using a personal access token (classic)`，且明确不适用于 GitHub App 用户令牌、安装令牌、细粒度 PAT。这与决策 5 直接冲突，是本项目唯一的"平台级矛盾"。**本项目已据此决策：通知能力本期整体不做**（见 §3.5.3），矛盾随之规避。
 3. **配额是两个独立桶，且条件请求免费。** REST 5000 请求/小时、GraphQL 5000 点/小时互不消耗；REST 的 ETag 命中 304 不计限额。这决定了下文缓存策略不是"优化"，而是预算的一部分。
 
@@ -96,7 +97,7 @@
 | 官方定位 | classic / legacy，**无弃用时间表** | **官方明确推荐并推动迁移的方向** |
 | 权限粒度 | 账号级 + 资源包级（`repo` 一包全含），无法限定仓库 | 仓库级可选 + 每类资源独立开关 |
 | 令牌形态 | 长效 | 1 小时（安装令牌）/ 8 小时（用户令牌）+ 6 个月刷新 |
-| 撤销 | 用户在设置页手动撤销 | 卸载即全局失效 |
+| 撤销 | 用户在设置页手动撤销 | **App 可程序化撤销**（`DELETE /applications/{client_id}/grant`，Basic Auth 用 client_id + secret，对 `ghu_` 令牌同样适用）；卸载即全局失效 |
 | 安装体验 | 一步授权 | 需安装；⚠️ GitHub 提供的 "Request user authorization during installation" 虽可合并两步，**但会绕过 `state` 与 PKCE 并锁定第一个回调 URL**（§3.9 的防护依赖二者）⇒ **本项目不勾**，安装与授权分两步（见 `GITHUB-APP-SETUP.md` §0.2） |
 | 迁移成本 | 未来需再迁一次 | 无 |
 
@@ -198,12 +199,13 @@ my-git/
 | 3 | 用 `ASWebAuthenticationSession` 打开 `https://github.com/login/oauth/authorize?client_id=…&redirect_uri=gitduo://oauth/callback&state=…&code_challenge=…&code_challenge_method=S256` |
 | 4 | 用户在系统浏览器视图内完成授权（**不用 WKWebView**，防钓鱼且可复用已有登录态） |
 | 5 | 回调带回 `code` 与 `state`；App **校验 state 一致**后继续 |
-| 6 | `POST https://github.com/login/oauth/access_token`，携带 `client_id`、`code`、`redirect_uri`、`code_verifier`（**不带 client_secret**） |
+| 6 | `POST https://github.com/login/oauth/access_token`，携带 `client_id`、**`client_secret`**、`code`、`redirect_uri`、`code_verifier`（secret 为官方 **Required**，无法省略——见 §3.7 / 决策 #30） |
 | 7 | 得到 `access_token`(`ghu_`)、`refresh_token`(`ghr_`)、`expires_in`(28800)、`refresh_token_expires_in`(15897600) |
 | 8 | 立即校验令牌有效性（`GET /user`），成功后写入 Keychain，进入主界面 |
 
 **要点**
 - 【已定】走 PKCE 授权码流程，**不启用 device flow**（官方明确反对：设备码不需 redirect URI，易被钓鱼冒充 App）。
+- 【已定 · 决策 #30】**`client_secret` 内嵌进 App**：GitHub 换令牌**强制要求**它，且官方不区分 public / confidential 客户端（**不存在"用 PKCE 换掉 secret"这条路**），官方对 native app 的建议正是"打进包里 + 用 PKCE"。因此本项目的定位是：**secret 属"软机密"**（挡得住随手 curl 调接口，**挡不住反编译**），**PKCE + 一次性 `state` 才是真正的防线**，不因持有 secret 而放松（§3.9）。它只出现在「换令牌 / 刷新 / 撤销」三条请求里，不进日志与崩溃上报（§14）。
 - 【已定】首次兑换令牌时可携带 `repository_id` 参数，把该令牌的可访问范围**进一步收窄到单个仓库**（GitHub App 独有能力，OAuth App 做不到）——预留给未来的"单仓库工作模式"。
 - 【已定】走用户授权路线**不需要 App 私钥**（私钥仅用于"以 App 自身身份"签发安装令牌，本项目用不到）。
 - 【已定】**URL scheme 不是安全边界**：自定义 scheme 可能被其他 App 抢注、回调可能被劫持。防御依赖 **PKCE + 一次性 `state`**，而非"只有本 App 能收到回调"这一假设；四类风险场景、已采纳缓解与残余风险见 §3.9。
@@ -216,7 +218,7 @@ my-git/
 | `refresh_token` (`ghr_`) | **6 个月** | 仅存 Keychain，绝不进内存之外的日志/崩溃上报 |
 
 刷新策略【已定】：
-1. 记录 `accessTokenExpiry`；**过期前 5 分钟**触发后台预刷新（`grant_type=refresh_token`）。
+1. 记录 `accessTokenExpiry`；**过期前 5 分钟**触发后台预刷新（`grant_type=refresh_token`）。⚠️ 刷新请求**同样必须携带 `client_secret`**——官方参数表写明 "Required **unless** the user access token was generated using the device flow"，本项目不走 device flow（决策 #30）。
 2. 任一请求收到 **401** ⇒ 立即尝试刷新一次 ⇒ 成功则**重放原请求**（仅重放一次，防死循环）。
 3. 刷新失败（refresh token 失效/被撤销）⇒ 清除凭据、置为未认证、跳转授权页，并提示"登录已过期，请重新授权"。
 4. 刷新请求本身要做 **single-flight**（actor 内串行 + 结果共享），避免并发 401 触发多次刷新导致 refresh token 轮换竞争。
@@ -301,8 +303,14 @@ GitHub App 的用户访问令牌（`ghu_`）的可见范围是**三重交集**�
 ### 3.6 登出与授权撤销
 
 【已定】
-- **登出** = 清除本地全部凭据（Keychain）+ 清空与该账号绑定的本地数据（最近访问、收藏夹与归属映射、搜索历史、**按仓库的分支记忆**）+ 重置导航栈。
-- ⚠️ GitHub 的**程序化撤销**端点需要 `client_id` + `client_secret` 做 Basic Auth；本项目无后端、不持 secret，**无法程序化撤销**。因此：登出后引导用户在 `github.com/settings/apps/authorizations` 手动撤销授权（提供跳转入口与说明文案）。
+- **登出 = 四步**：① **撤销 GitHub 侧授权** → ② 清除本地全部凭据（Keychain）→ ③ 清空与该账号绑定的本地数据（最近访问、收藏夹与归属映射、搜索历史、**按仓库的分支记忆**、接口与图片缓存）→ ④ 重置全部 `NavigationStack` 与 Tab 选中项。
+- **撤销端点**（决策 #30 解锁的能力）：`DELETE /applications/{client_id}/grant`
+  —— **Basic Auth 用 `client_id` : `client_secret`**，body 传 `access_token`，成功返回 **204**。官方明确该组端点**同时适用于 OAuth App（`gho_`）与 GitHub App 用户令牌（`ghu_`）**：
+  > Tokens for OAuth apps have the prefix `gho_`, while OAuth tokens for GitHub Apps… have the prefix `ghu_`. **You can use the following endpoints for both types of OAuth tokens.**
+  - 选 `grant` 而非 `token`：登出语义是"不再授权"，撤销 grant 会**连同该用户在该 App 下的全部令牌一并清掉**，不留悬空刷新令牌。
+  - 🔧 **本条修正了一个旧结论**：此前因"客户端不持 secret"判定**无法程序化撤销**、只能引导用户去网页手动撤销；决策 #30 后该限制**消失**。这也让原型 / PRD 早已写下的"GitHub 侧的授权记录会一并撤销"从**"文案承诺、实现做不到"**变成**真的能兑现**（该矛盾随之消解）。
+- **失败不阻塞登出**【已定】：离线 / 422 / 网络错误时**仍然清空本地凭据**，仅把提示降级为 `已退出登录 · 本机令牌已清除（未能撤销 GitHub 侧授权）`，并在设置页保留手动撤销跳转（`github.com/settings/apps/authorizations`）。
+- ⚠️ **撤销授权 ≠ 卸载 App**：installation 仍然存在，重新登录只走授权流程、**不需要重新安装**（`GITHUB-APP-SETUP.md` §4.1）。
 - **退出登录需二次确认**【已定】：确认弹层 + 影响说明（将清除本机凭据与缓存）。
 
 ### 3.7 App 标识与配置【已定】
@@ -312,11 +320,11 @@ GitHub App 的用户访问令牌（`ghu_`）的可见范围是**三重交集**�
 | App 名 | `GitDuo` | GitHub App 注册名 |
 | 回调 URL scheme | **`gitduo://oauth/callback`** | 自定义 scheme，**注册后即对外契约**，改动需回 GitHub 重配；须在 target 的 URL Types 中登记。⚠️ 裸名 scheme **不符合 RFC 8252 §7.1 的反域名要求**，且自定义 scheme 不是安全边界——残余风险与收敛方向见 §3.9 |
 | `client_id` | 注册时生成 | 写入 `Secrets.xcconfig`（**git-ignored**），不进仓库 |
-| `client_secret` | **不存入客户端** | 公共客户端（PKCE）不持 secret；如生成过仅留作备用，绝不分发 |
+| `client_secret` | **内嵌进 App**（构建期由 `Secrets.xcconfig` 注入，仍 **git-ignored**） | 官方 **Required** 且无法规避（GitHub 不区分客户端类型，§3.1）；定位为**软机密**——挡得住随手薅、**挡不住反编译** ⇒ **不入库、不进日志**；**PKCE + `state` 仍是主防线**。另用于登出时撤销授权（§3.6） |
 | 权限清单 | Contents(RW) · Issues(RW) · Pull Requests(RW) · Metadata(R) · Starring(RW) · Followers(RW) | 见 §3.4；Contents 必须 RW，否则无法提交文件；后两项为账号级权限（Star 与关注），缺失会 403 |
 | 安装仓库范围 | **引导用户选「All repositories」** | 见 §3.5.4；选部分仓库会让仓库列表 / 搜索 / Starred 一起缺数据 |
 | 令牌过期 | 开启 | user token 8 小时 + refresh token 6 个月（§3.2） |
-| 安装时请求授权 | 开启 | 安装与授权合并为一次跳转（§3.1） |
+| 安装时请求授权 | **关闭（不勾）** | ⚠️ 勾选后 GitHub 会走它自己发起的跳转（**无 `state`、无 `code_challenge`**）并锁定第一个回调 URL ⇒ PKCE 与 CSRF 防护双双失效；本项目**安装与授权分两步**（§1.3 / `GITHUB-APP-SETUP.md` §0.2） |
 
 ### 3.8 登录与授权页 UI【已定】
 
@@ -370,7 +378,7 @@ RootView
 
 - 二次确认 → 清 Keychain 凭据 → 清账号绑定本地数据（最近访问 / 收藏夹与归属映射 / 搜索历史 / 按仓库的分支记忆 / 接口与图片缓存）→ 重置全部 `NavigationStack` 路径与 Tab 选中项 → `authState = .unauthenticated`。
 - ⚠️ **不删除与账号无关的 UI 偏好**。
-- 无后端 ⇒ **无法程序化撤销 GitHub 侧授权**，弹层文案须如实说明（§3.6）。
+- 登出会**程序化撤销 GitHub 侧授权**（§3.6），弹层文案如实说明；**撤销失败时降级文案不得谎称已撤销**。
 
 ### 3.9 授权回调与 URL scheme 安全【已定】
 
@@ -1090,7 +1098,7 @@ enum Route: Hashable {
 | 项 | 方案 |
 |---|---|
 | 主题 | 本期仅 **浅色**，**不提供切换器**；颜色走语义 token（§10.7），补深色时只需补一列映射，不改 View |
-| GitHub App · 账号 / 已授权 | 显示登录名 + 授权状态；提供"撤销授权"跳转说明（§3.6） |
+| GitHub App · 账号 / 已授权 | 显示登录名 + 授权状态；**「退出登录」即程序化撤销 GitHub 侧授权**（§3.6）；保留"前往 GitHub 手动撤销"的网页跳转，作为撤销失败时的兜底入口 |
 | 退出登录 | 二次确认弹层 → 清 Keychain 凭据 + 清账号绑定本地数据 + 重置导航栈 → 回登录页（详见 §3.8） |
 | 清除缓存 | 统计 L2+L3 占用，一键清空并 Toast 反馈；⚠️ **保留 Keychain 凭据**，登录状态不变 |
 | 版本 | 读 `CFBundleShortVersionString` + `CFBundleVersion` |
@@ -1367,6 +1375,7 @@ GlassEffectContainer(spacing: 12) {
 |---|---|
 | 凭据存储 | 仅 Keychain；`AfterFirstUnlockThisDeviceOnly` |
 | 凭据传输 | 仅发往 `api.github.com` / `github.com`；**绝不**发往第三方或自有服务 |
+| `client_secret` | **内嵌进 App 是平台强制**（官方 Required，且不区分 public / confidential 客户端，§3.1）；定位为**软机密**：挡得住随手薅、**挡不住反编译**。只允许出现在「换令牌 / 刷新 / 撤销」三条请求里，**不进日志、不进崩溃上报、不进任何缓存**；文件本体 git-ignored。⇒ **用户数据安全不依赖它**：取出 secret 仍需过 PKCE + 用户本人在系统浏览器内授权，**拿不到任何已有用户的令牌**（§3.7 / §15 #17） |
 | 授权界面 | 用 `ASWebAuthenticationSession`（系统浏览器），不用内嵌 `WKWebView` |
 | 授权回调 | 回调**只承载 `code` 与 `state`，绝不承载令牌**；`state` 一次性校验；兑换令牌的 `code_verifier` 仅存内存（PKCE）——使被动劫持者即使拿到 `code` 也无法兑换（§3.9） |
 | 授权交互 | **拒绝静默授权**（不用 `prompt=none` / 已授权自动跳过），用户必然在系统浏览器中看到 GitHub 授权页并明确同意 |
@@ -1392,12 +1401,13 @@ GlassEffectContainer(spacing: 12) {
 | 8 | `.clipped()` 静默杀死玻璃 | 效果莫名失效且无警告 | 中 | 代码审查清单 + 快照验证（§10.4 #1） |
 | 9 | GraphQL 错误在 200 响应体 | 静默失败 | 中 | 强制解析 `body.errors`，纳入网络层测试 |
 | 10 | Issues 端点混入 PR | 列表数据错误 | 低 | 一律按 `pull_request` 字段过滤 |
-| 11 | 无后端 ⇒ 无法程序化撤销授权 | 用户需手动去网页撤销 | 低 | UI 提供跳转与说明（§3.6） |
+| 11 | ~~无后端 ⇒ 无法程序化撤销授权~~ | — | **已关闭** | **决策 #30（内嵌 secret）后已可程序化撤销**：`DELETE /applications/{client_id}/grant` 对 `ghu_` 令牌同样适用，且失败不阻塞登出（§3.6） |
 | 12 | 404 与"无权限"混同 | 错误文案误导 | 低 | 统一文案"不存在或无权访问"（§4.3） |
 | 13 | ~~权限清单缺 `Starring` / `Followers`~~ | — | **已关闭** | **补齐 2 项账号级权限**（决策 #25）：Star / 取消 Star、Starred 分段、关注 / 取关不再 403（§3.4） |
 | 14 | ~~安装页漏选「全部仓库」~~ | — | **已关闭** | **登录页固定引导选 All repositories**（决策 #26），并在 403 / 404 文案指向授权范围（§3.5.4） |
 | 15 | **自定义 URL scheme 被抢注 / 回调被劫持** | 授权码外泄；极端场景（攻击者自建授权会话）可被兑换 | 中 | PKCE + 一次性 `state` 挡住被动劫持与伪造回调；**拒绝静默授权、scheme 不承载深链**；根治需 Universal Link，本期登记为残余风险（§3.9 / §16 未来工作） |
 | 16 | **探索页吃满 Search 桶** | 切榜 / 切筛选每次都发 `search/repositories`，会把**与搜索页共用的 30/min** 挤掉，表现为"搜索突然 403" | 低 | 缓存键含全部筛选维度 + 切榜防抖 300ms + 取消在途请求；已单独预算（§13.2），命中缓存 / 304 不耗配额 |
+| 17 | **`client_secret` 内嵌进包的"软机密"** | 反编译可取出，可被用来冒充本 App 发起授权 / 撤销请求 | 中 | **平台无解**（官方强制 secret，且不区分 public / confidential 客户端，§3.1）；缓解：只用于「换令牌 / 刷新 / 撤销」三条请求 + 不进日志与崩溃上报 + 文件 git-ignored + **用户数据安全不依赖它**（取出 secret 仍拿不到任何已有用户的令牌，还需过 PKCE 与用户本人在系统浏览器内的授权）。**登记为已接受的残余风险**（§3.7 / §14） |
 | 17 | **分支记忆跨仓库串用** | 从 A 仓库切到 `feature/x` 后进 B 仓库，B 若没有该分支则行为未定义（列表空、请求 404） | 低 | 分支按仓库分别记忆 + 进入时校验存在性，失效回落 `defaultBranch`（决策 #28，§9.4.1）；`Repository.defaultBranch` 必须有值 |
 
 ---
@@ -1416,6 +1426,7 @@ GlassEffectContainer(spacing: 12) {
 | 令牌可见范围（安装范围） | **安装页须引导选「全部仓库」**：GitHub App 令牌 = 用户权限 ∩ App 权限 ∩ 安装仓库范围 | §3.5.4 |
 | 通知处置路线 | **本期整体不做** | §3.5.3 |
 | Watch 订阅是否可用 | 本期**仅展示计数**，不调用订阅端点 | §3.5.2 |
+| `client_secret` 怎么处理（原 D4） | **内嵌持有**（**决策 #30**）：官方 Required 且不区分 public / confidential 客户端，官方对 native app 的建议即"打进包里 + 用 PKCE"；附带解锁"登出可程序化撤销授权"（§3.6） | §3.1 / §3.6 / §3.7 |
 | 探索趋势取数策略 | **新星榜 + 活跃榜双榜** | §9.10.1 |
 | 「交流语言」筛选 | **不实现**（公开 API 无此维度） | §9.10.4 |
 | Revert 实现路径 | **不在客户端实现**，入口跳网页端 | §9.7.3 |
