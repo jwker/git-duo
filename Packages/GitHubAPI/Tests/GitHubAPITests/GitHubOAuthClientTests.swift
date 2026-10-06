@@ -250,6 +250,35 @@ struct GitHubOAuthClientTests {
         }
     }
 
+    // MARK: - 缓存（令牌响应不得落盘，§3.1 / §3.7）
+
+    @Test("默认会话**不挂 URLCache** —— 令牌响应无从落盘")
+    func defaultSessionHasNoCache() {
+        let client = GitHubOAuthClient(credentials: credentials)
+
+        #expect(
+            client.session.configuration.urlCache == nil,
+            "带磁盘缓存的会话会把换令牌响应写进 Library/Caches/<bundle>/Cache.db"
+        )
+        #expect(client.session.configuration.requestCachePolicy == .reloadIgnoringLocalAndRemoteCacheData)
+    }
+
+    @Test("三条令牌请求都显式声明非缓存策略（防会话被换回 .shared）")
+    func tokenRequestsAreNonCaching() throws {
+        let client = makeClient()
+
+        let exchange = try client.makeExchangeRequest(code: "c-1", codeVerifier: "v-1")
+        let refresh = try client.makeRefreshRequest(refreshToken: "ghr_xyz")
+        let revoke = try client.makeRevokeRequest(accessToken: "ghu_abc")
+
+        for (name, request) in [("换令牌", exchange), ("刷新", refresh), ("撤销", revoke)] {
+            #expect(
+                request.cachePolicy == GitHubOAuthClient.nonCachingPolicy,
+                "\(name)请求落到了缓存策略上：令牌请求命中缓存 = 把令牌交给缓存"
+            )
+        }
+    }
+
     // MARK: - 未配置
 
     @Test("凭据未配置时拒绝构造请求 —— 不发出注定失败的调用")

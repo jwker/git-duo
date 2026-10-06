@@ -234,6 +234,8 @@ my-git/
 - 【已定】`access_token` / `refresh_token` 存 **Keychain**，`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`（不进 iCloud 备份、不跨设备迁移）。
 - App 元数据（过期时间、账号登录名、App 安装标识）存 Keychain 附属条目或 UserDefaults（非敏感）。
 - ⚠️ 凭据**绝不写入**：日志、崩溃上报、剪贴板、UserDefaults 明文、任何磁盘缓存目录。
+- ⚠️ **令牌请求必须走「不挂 `URLCache` 的会话」**（2026-10-06 真机实测补齐）：`URLSession.shared` 默认带磁盘缓存，会把**换令牌响应**（含 `access_token` / `refresh_token`）写进 `Library/Caches/<bundle-id>/Cache.db` —— 与上一条直接冲突（真机上取回该文件已确认）。
+  实现落点：`GitHubOAuthClient` 自持一个 `URLSessionConfiguration.ephemeral` + `urlCache = nil` 的会话（`makeTokenSession`），**并**给三条令牌请求显式设 `cachePolicy = .reloadIgnoringLocalAndRemoteCacheData`。两道缺一不可：只设 `cachePolicy` 挡不住"存"，只换会话也挡不住将来有人把会话换回 `.shared`。由 `GitHubOAuthClientTests` 两条断言守住。
 
 ### 3.4 权限清单
 

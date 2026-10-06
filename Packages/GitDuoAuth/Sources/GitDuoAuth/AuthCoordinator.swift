@@ -79,15 +79,22 @@ public actor AuthCoordinator {
     }
 
     /// 便利构造：凭据 + 存储即可，网络会话由本方法转交两处。
+    ///
+    /// ⚠️ `session` 默认为 `nil`，且**原样**转给 `GitHubOAuthClient` —— 后者借此选一个
+    ///    不挂 `URLCache` 的专用会话（令牌响应不得落盘，§3.1 / §3.7）。
+    ///    只有 `GitHubUserEndpoint`（`GET /user`，不含机密）走 `URLSession.shared`。
     public init(
         credentials: GitHubAppCredentials,
         tokenStore: any TokenStore,
-        session: URLSession = .shared,
+        session: URLSession? = nil,
         clock: @escaping Clock = { Date() }
     ) {
         self.init(
             oauthClient: GitHubOAuthClient(credentials: credentials, session: session),
-            userEndpoint: GitHubUserEndpoint(credentials: credentials, session: session),
+            userEndpoint: GitHubUserEndpoint(
+                credentials: credentials,
+                session: session ?? .shared
+            ),
             tokenStore: tokenStore,
             clock: clock
         )

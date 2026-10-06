@@ -80,8 +80,12 @@ xcrun devicectl list devices       # 取 UDID
 | 3 | 看授权页的权限清单 | **6 条**，与登录页预告**一字不差** | P2 自查 · 权限数据单一来源（1.6） |
 | 4 | 点 **Authorize** | **自动**跳回 GitDuo 并进入主界面（不需手动切回） | 回调 `gitduo://oauth/callback` · P3 自查 |
 | 5 | 上滑**杀掉 App** → 重开 | **仍在主界面**，不要求重新登录 | 令牌落 Keychain（1.1）+ restore（1.4） |
-| 6 | 我的 → 退出登录 | 回登录页 | 登出四步（1.5） |
+| 6 | 我的 → **退出登录** | 回登录页，且提示「已退出登录 · 已同时撤销 GitHub 侧授权」 | 登出四步（1.5） |
 | 7 | 打开 `github.com/settings/apps/authorizations` | **该 App 的授权已消失** | §3.6 的承诺**真的兑现了** |
+
+> ⚠️ **第 6 步的入口位置（切片 1 期的临时约定）**：原型里登出走的是「我的 → 设置 → 退出登录」，
+> 而**设置页属切片 9**。为让本切片验收能走完，暂时把「退出登录」直接放在**「我的」Tab 根页**；
+> 切片 9 迁入设置页时**补齐二次确认弹层**（TECH_SPEC §3.6 要求，暂缺）。
 | 8 | 开**飞行模式** → 冷启动 | 已登录状态**不应**被踢回登录页 | §3.2 第 3 条（断网 ≠ 登出） |
 | 9 | 删 App → 重装 → 启动 | 观察：iOS **删除 App 不清 Keychain**，可能仍是登录态；若令牌已失效应自动清理 | §3.2 令牌有效性校验 |
 
@@ -119,8 +123,9 @@ xcrun devicectl list devices       # 取 UDID
 > **实测记录（2026-10-06，iPhone 17 Pro）**：自动签名产出的 entitlements **只有三项** ——
 > `application-identifier` · `com.apple.developer.team-identifier` · `get-task-allow`，
 > **不含 `keychain-access-groups`**。按 iOS 规则，缺该 entitlement 时 Keychain 的默认 access group
-> 回落到 `application-identifier`（`TEAMID.com.gitduo.app`）⇒ **预期可用**，已列为 1.8 的实测项。
-> 若登录时 Keychain 写入失败并报 `errSecMissingEntitlement (-34018)`，再显式补该 entitlement。
+> 回落到 `application-identifier`（`TEAMID.com.gitduo.app`）⇒ **实测可用**：
+> 真实授权成功、令牌落 Keychain、**杀进程重启仍登录，日志中无 `errSecMissingEntitlement (-34018)`**。
+> 故**不补**该 entitlement；若将来真出现 `-34018`，再显式加上。
 >
 > ```bash
 > codesign -d --entitlements :- build/DerivedData-dev/Build/Products/Debug-iphoneos/GitDuo.app

@@ -10,15 +10,33 @@ import Foundation
 /// - 本类型**不读全局配置**，凭据一律由构造时注入（见 `GitHubAppCredentials`）。
 ///
 /// ⚠️ `client_secret` 只出现在本文件的三条请求里（换令牌 / 刷新 / 撤销）。
-///    它**不得**进入日志、崩溃上报或任何缓存。
+///    它**不得**进入日志、崩溃上报或任何缓存 —— 后一条由「本类型自带不挂 `URLCache` 的会话」
+///    结构性保证（见 `makeTokenSession`），而不是靠请求头。
 public struct GitHubOAuthClient: Sendable {
 
     public let credentials: GitHubAppCredentials
-    private let session: URLSession
 
-    public init(credentials: GitHubAppCredentials, session: URLSession = .shared) {
+    /// internal（而非 private）：供测试断言"默认会话**没有**缓存"。
+    let session: URLSession
+
+    /// - Parameter session: 仅测试需要注入桩件（`StubURLProtocol`）。
+    ///   **默认不是 `URLSession.shared`**：共享会话带磁盘缓存，会把令牌响应写到
+    ///   `Library/Caches/<bundle-id>/Cache.db`（真机实测，2026-10-06）。
+    public init(credentials: GitHubAppCredentials, session: URLSession? = nil) {
         self.credentials = credentials
-        self.session = session
+        self.session = session ?? Self.makeTokenSession()
+    }
+
+    /// 令牌专用会话：**`urlCache = nil`** ⇒ 任何响应都无从落盘（`ephemeral` 同时不落盘 cookies）。
+    ///
+    /// 依据：TECH_SPEC §3.1 / §3.7 —— `client_secret` 与令牌响应不得进入任何缓存。
+    /// ⚠️ 光设 `URLRequest.cachePolicy` **不够**：默认策略下 `URLCache` 仍会把响应存下来，
+    ///    所以"不挂缓存"必须落在会话上；`cachePolicy` 只是第二道（见 `makeFormRequest`）。
+    private static func makeTokenSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return URLSession(configuration: configuration)
     }
 
     // MARK: - 步骤 3：授权页 URL
@@ -122,6 +140,7 @@ public struct GitHubOAuthClient: Sendable {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
+        request.cachePolicy = Self.nonCachingPolicy
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(credentials.apiVersion, forHTTPHeaderField: "X-GitHub-Api-Version")
@@ -132,10 +151,17 @@ public struct GitHubOAuthClient: Sendable {
 
     // MARK: - Private
 
+    /// 三条令牌请求共用的缓存策略：**不使用、也不更新任何中间层缓存**。
+    ///
+    /// 会话层已无 `URLCache`（`makeTokenSession`），这一道是为了防"会话被换回 `.shared`"
+    /// 或上游代理缓存 —— 令牌请求永远不该命中缓存，命中即等于把令牌交给缓存。
+    static let nonCachingPolicy: URLRequest.CachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
     private func makeFormRequest(to url: URL, fields: [String: String]) throws -> URLRequest {
         guard credentials.isConfigured else { throw OAuthError.notConfigured }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.cachePolicy = Self.nonCachingPolicy
         // Accept: application/json 让端点返回 JSON 而不是 form-urlencoded（§3.1 步骤 7）
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
