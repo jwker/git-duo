@@ -312,6 +312,10 @@ GitHub App 的用户访问令牌（`ghu_`）的可见范围是**三重交集**�
 
 【已定】
 - **登出 = 四步**：① **撤销 GitHub 侧授权** → ② 清除本地全部凭据（Keychain）→ ③ 清空与该账号绑定的本地数据（最近访问、收藏夹与归属映射、搜索历史、**按仓库的分支记忆**、接口与图片缓存）→ ④ 重置全部 `NavigationStack` 与 Tab 选中项。
+- ⚠️ **③ 的落点分两处**（决策 #31 之后追认）：**"接口缓存"由认证编排层收口** —— `AuthCoordinator.signOut()` → `HTTPCachePurging`（`GitDuoCore`）。
+  理由：它不属于任何 Feature，却是**唯一可能把凭据留在磁盘上的东西**。真机实测（2026-10-06）：换令牌响应一度被写进
+  `Library/Caches/<bundle-id>/Cache.db`；而**改掉写入路径只能阻止将来再写，已落盘的副本只有显式清理才会消失**。
+  其余各项（最近访问 / 收藏夹 / 搜索历史 / 分支记忆）仍按原计划随各 Feature 落地时接入 App 层的 ③。
 - **撤销端点**（决策 #30 解锁的能力）：`DELETE /applications/{client_id}/grant`
   —— **Basic Auth 用 `client_id` : `client_secret`**，body 传 `access_token`，成功返回 **204**。官方明确该组端点**同时适用于 OAuth App（`gho_`）与 GitHub App 用户令牌（`ghu_`）**：
   > Tokens for OAuth apps have the prefix `gho_`, while OAuth tokens for GitHub Apps… have the prefix `ghu_`. **You can use the following endpoints for both types of OAuth tokens.**

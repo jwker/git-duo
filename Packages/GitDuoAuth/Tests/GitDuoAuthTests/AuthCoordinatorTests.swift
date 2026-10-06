@@ -39,11 +39,15 @@ struct AuthCoordinatorTests {
 
     private let store = InMemoryTokenStore()
 
+    /// 接口缓存清理器的替身 —— 登出必须调用它（见 `signOutPurgesHTTPCache`）。
+    private let purger = SpyCachePurger()
+
     private func makeCoordinator() -> AuthCoordinator {
         AuthCoordinator(
             credentials: Self.credentials,
             tokenStore: store,
             session: StubURLProtocol.makeSession(),
+            cachePurger: purger,
             clock: { Self.fixedNow }
         )
     }
@@ -570,6 +574,49 @@ struct AuthCoordinatorTests {
 
         #expect(outcome == .revoked)
         #expect(StubURLProtocol.requests.isEmpty)
+    }
+
+    // MARK: - 登出 · 接口缓存
+
+    @Test("登出必须清掉接口缓存 —— 改写入路径清不掉**已经落盘**的副本")
+    func signOutPurgesHTTPCache() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([
+            .response("DELETE", Self.revokePath, status: 204)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        _ = await makeCoordinator().signOut()
+
+        #expect(
+            purger.purgeCount == 1,
+            "磁盘上的令牌响应副本不受 Keychain 保护，只有这一步会清掉它"
+        )
+    }
+
+    @Test("撤销失败（降级登出）也必须清缓存 —— 本地清干净才算登出")
+    func signOutPurgesHTTPCacheEvenWhenRevokeFails() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([])   // 离线 ⇒ 撤销必然失败
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await makeCoordinator().signOut()
+
+        #expect(outcome == .revokedLocallyOnly)
+        #expect(purger.purgeCount == 1, "撤销失败只降级提示文案，本地必须清干净（§3.6）")
+    }
+
+    @Test("无凭据时登出：不发请求，但缓存照清")
+    func signOutWithoutCredentialsStillPurges() async throws {
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        _ = await makeCoordinator().signOut()
+
+        #expect(
+            purger.purgeCount == 1,
+            "没有凭据也可能有上一轮遗留的缓存，登出就该清"
+        )
     }
 
     // MARK: - 文案红线

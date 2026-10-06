@@ -14,17 +14,17 @@
 | 1.2 | `GitHubOAuthClient` / `GitHubAppCredentials`（GitHubAPI）—— 换令牌 / 刷新 / 撤销 | ✅ |
 | 1.3 | `OAuthCallback`（GitHubAPI）—— 形状校验 + 一次性 `state` | ✅ |
 | 1.4 | `AuthCoordinator`（**GitDuoAuth**，决策 #31）—— 授权编排 + **single-flight** 刷新 | ✅ |
-| 1.5 | 登出四步：撤销 → 清 Keychain → 清账号数据 → 重置导航栈 | ✅ ①②④ 落地；③ 待各 Feature 存储就位后接入 |
+| 1.5 | 登出四步：撤销 → 清 Keychain → 清账号数据 → 重置导航栈 | ✅ ①②④ 落地 + ③ 中**接口缓存**已收口（`AuthCoordinator.signOut` → `HTTPCachePurging`）；③ 其余项待各 Feature 存储就位后接入 |
 | 1.6 | 登录段原型断言转 Swift 测试（权限 6 项 + 三项产品承诺） | ✅ |
 | 1.7 | 门禁接线：`RootView` 二分 + `LoginFlowView` + `WebAuthenticationSession` | ✅ |
 
-**四包单测 98 项全过**（GitHubAPI 43 · GitDuoAuth 36 · GitDuoCore 12 · GitDuoDesign 7）。
+**四包单测 105 项全过**（GitHubAPI 45 · GitDuoAuth 39 · GitDuoCore 14 · GitDuoDesign 7）。
 
-⚠️ **仍未做（1.8）**：真机手测 —— 真授权 → 令牌落 Keychain → **杀进程重启仍登录**。
+▶ **1.8 真机验收进行中**（iPhone 17 Pro，自动签名已打通）。已通过：真授权 → 令牌落 Keychain →
+**杀进程重启仍登录**（Keychain 跨重装持久，实测无 `-34018`）→ 登出回登录页 → **GitHub 侧那条授权记录真的消失了**。
 **逐步流程、验收清单、错误对照见 `DEVICE-TESTING.md`**（`make device` 一键：构建 → 安装 → 启动）。
-当前卡点：**Xcode 里没有登录 Apple ID**（钥匙串有证书、但账号列表为空）⇒ 自动签名报 `No Accounts`。
-这一步代码层面无解，需手动做一次（`DEVICE-TESTING.md` §0 第 1 步）。
-在那之前，切片 1 只能说"本地全绿"，不能说"已验收"。
+⚠️ **真机上的一条硬经验**：改掉写入路径**不会**清除已经落盘的副本 —— 发现磁盘上有敏感残留时，
+除了修写入路径，还要问"**谁负责清它**"（本项目补在 `AuthCoordinator.signOut`）。
 
 未落地的界面一律用 `SkeletonScreen` 占位，**没有假数据冒充成品**（登记见 `AppEnvironment.swift`）。
 
@@ -36,7 +36,7 @@
 |---|---|---|
 | `redesign/prototype/` | **唯一可点验收依据**（入口 `index.html`；`scripts/` 16 个 JS · `styles/` 5 个 CSS） | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
-| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**30 项全部【已定】**） |
+| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**31 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 | `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |

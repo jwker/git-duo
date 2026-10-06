@@ -55,6 +55,11 @@ public actor AuthCoordinator {
     private let oauthClient: GitHubOAuthClient
     private let userEndpoint: GitHubUserEndpoint
     private let store: any TokenStore
+
+    /// 接口缓存清理器（§3.6 ③ 的"接口与图片缓存"）。
+    /// 注入而非直接调 `URLCache.shared`：登出必须清缓存这条行为要能被断言守住。
+    private let cachePurger: any HTTPCachePurging
+
     private let clock: Clock
 
     private var pending: PendingAuthorization?
@@ -70,11 +75,13 @@ public actor AuthCoordinator {
         oauthClient: GitHubOAuthClient,
         userEndpoint: GitHubUserEndpoint,
         tokenStore: any TokenStore,
+        cachePurger: any HTTPCachePurging,
         clock: @escaping Clock = { Date() }
     ) {
         self.oauthClient = oauthClient
         self.userEndpoint = userEndpoint
         self.store = tokenStore
+        self.cachePurger = cachePurger
         self.clock = clock
     }
 
@@ -87,6 +94,7 @@ public actor AuthCoordinator {
         credentials: GitHubAppCredentials,
         tokenStore: any TokenStore,
         session: URLSession? = nil,
+        cachePurger: any HTTPCachePurging = SystemHTTPCachePurger(),
         clock: @escaping Clock = { Date() }
     ) {
         self.init(
@@ -96,6 +104,7 @@ public actor AuthCoordinator {
                 session: session ?? .shared
             ),
             tokenStore: tokenStore,
+            cachePurger: cachePurger,
             clock: clock
         )
     }
@@ -261,11 +270,12 @@ public actor AuthCoordinator {
 
     // MARK: - 登出
 
-    /// §3.6 的第 ①② 步：撤销 GitHub 侧授权 → 清空本地凭据。
+    /// §3.6 的登出：撤销 GitHub 侧授权 → 清空本地凭据 → 清空接口缓存。
     ///
-    /// ⚠️ 第 ③④ 步（清账号绑定的本地数据、重置导航栈）**不在这里**：
+    /// ⚠️ 第 ③④ 步的**大部分**（各 Feature 绑定的本地数据、重置导航栈）**不在这里**：
     ///    那两件事分别属于各 Feature 的存储与导航层，本包不认识它们。
-    ///    调用方拿到结局后继续做 ③④ 即可。
+    ///    **唯一的例外是"接口缓存"** —— 它不属于任何 Feature，却是唯一可能把凭据
+    ///    留在磁盘上的东西（见 `HTTPCachePurging` 的说明），所以由本层一并收口。
     ///
     /// ⚠️ **撤销失败不阻塞登出**：本地凭据照清（§3.6）。这不是"尽力而为"的敷衍——
     ///    用户按下"退出登录"的意思就是"这台机器上别再能用了"，撤销只是顺手把
@@ -288,6 +298,13 @@ public actor AuthCoordinator {
         }
 
         discardCredentials()
+
+        // §3.6 ③ 的"接口缓存"。**无条件执行** —— 撤销成败改变的是 GitHub 侧那条记录，
+        // 不改变"这台机器上不该再留该账号的痕迹"这个结论。
+        // ⚠️ 这一步省不得：改掉令牌的写入路径（`GitHubOAuthClient`）只能阻止**将来**再写，
+        //    磁盘上**已经存在**的那份副本只有这里才会清掉。
+        cachePurger.purge()
+
         return outcome
     }
 

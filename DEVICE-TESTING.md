@@ -82,15 +82,35 @@ xcrun devicectl list devices       # 取 UDID
 | 5 | 上滑**杀掉 App** → 重开 | **仍在主界面**，不要求重新登录 | 令牌落 Keychain（1.1）+ restore（1.4） |
 | 6 | 我的 → **退出登录** | 回登录页，且提示「已退出登录 · 已同时撤销 GitHub 侧授权」 | 登出四步（1.5） |
 | 7 | 打开 `github.com/settings/apps/authorizations` | **该 App 的授权已消失** | §3.6 的承诺**真的兑现了** |
+| 8 | 开**飞行模式** → 冷启动 | 已登录状态**不应**被踢回登录页 | §3.2 第 3 条（断网 ≠ 登出） |
+| 9 | 删 App → 重装 → 启动 | 观察：iOS **删除 App 不清 Keychain**，可能仍是登录态；若令牌已失效应自动清理 | §3.2 令牌有效性校验 |
+| 10 | 登出后从 Mac 拉设备上的 `Cache.db` 查（见下） | **一条请求记录都不剩** | 登出清接口缓存（§3.6 ③） |
+
+**第 5 步和第 7 步是本切片的核心价值** —— 前者验"持久化是真的"，后者验"那句承诺不是谎话"
+（项目有过先例：文案承诺撤销授权、实现却做不到）。
 
 > ⚠️ **第 6 步的入口位置（切片 1 期的临时约定）**：原型里登出走的是「我的 → 设置 → 退出登录」，
 > 而**设置页属切片 9**。为让本切片验收能走完，暂时把「退出登录」直接放在**「我的」Tab 根页**；
 > 切片 9 迁入设置页时**补齐二次确认弹层**（TECH_SPEC §3.6 要求，暂缺）。
-| 8 | 开**飞行模式** → 冷启动 | 已登录状态**不应**被踢回登录页 | §3.2 第 3 条（断网 ≠ 登出） |
-| 9 | 删 App → 重装 → 启动 | 观察：iOS **删除 App 不清 Keychain**，可能仍是登录态；若令牌已失效应自动清理 | §3.2 令牌有效性校验 |
 
-**第 5 步和第 7 步是本切片的核心价值** —— 前者验"持久化是真的"，后者验"那句承诺不是谎话"
-（项目有过先例：文案承诺撤销授权、实现却做不到）。
+### 第 10 步怎么做（登出后缓存必须为空）
+
+```bash
+DEV=00008150-001044A00EFB801C; BID=com.gitduo.app
+xcrun devicectl device copy from --device $DEV --domain-type appDataContainer \
+  --domain-identifier $BID --source Library/Caches/$BID/Cache.db --destination /tmp/Cache.db
+# ⚠️ 若库是 WAL 模式，把 -wal / -shm 一并取回，否则读到的是旧视图
+sqlite3 /tmp/Cache.db "select count(*) from cfurl_cache_response;"
+# 期望 0。>0 说明登出没清干净 —— 那样磁盘上可能还留着含 access_token 的响应副本
+```
+
+⚠️ **为什么这条要单独验**：真机实测（2026-10-06）发现换令牌的响应**曾被系统写进这个库**
+（`access_token` / `refresh_token` 明文），而它**不受 Keychain 的 `AfterFirstUnlockThisDeviceOnly` 保护**；
+更关键的是 —— **改掉写入路径并不会清除已经写下的副本**，只有登出时的显式清理才会
+（`AuthCoordinator.signOut` → `HTTPCachePurging`）。
+
+**当前进度（2026-10-06）**：第 2 / 4 / 5 / 6 / 7 步已过（第 6/7 步由用户目视确认）；
+第 1 / 3 / 8 / 10 步待走；第 9 步已有观察（**Keychain 跨 App 重装保留** ⇒ 重装后仍是登录态）。
 
 ---
 
