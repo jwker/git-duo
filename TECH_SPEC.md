@@ -81,8 +81,9 @@
 | 30 | 客户端凭据与 PKCE 的关系 | **叠加，不是二选一**（用户 2026-10-05 拍板）：GitHub 明确「**不区分** public / confidential client」，换令牌与刷新都把 `client_secret` 标为 **Required** ⇒ **不存在"用 PKCE 换掉 secret"这条路**；官方对 public client 的建议本身就是"把 secret 打进包里 **+** 用 PKCE"。故本项目**内嵌 `client_secret`（软机密）并叠加 PKCE**。附带解锁：既然 secret 已在手（可做 Basic Auth）⇒ **登出可程序化撤销 GitHub 侧授权**（`DELETE /applications/{client_id}/grant`），消解了"文案已承诺撤销授权、实现却做不到"的旧矛盾 | 【已定】 |
 | 31 | 认证编排的落点 | **独立 `GitDuoAuth` Package**（用户 2026-10-06 拍板）：编排必须**同时**用 `GitHubAPI`（换令牌 / 刷新 / 撤销）与 `GitDuoCore`（Keychain 落盘），而这两包按依赖铁律**互不依赖** ⇒ 编排只能位于两者**之上**。落在包里而非 App target，是为了跟着 `make test` 跑**秒级单测**（App target 无测试 target）；App 层只剩 `ASWebAuthenticationSession` 胶水（系统 API，无逻辑可测）。代价：包拓扑 4→5（见 §2.2 / §3.1） | 【已定】 |
 | 32 | API 流量走不走系统 `URLCache` | **不走**（2026-10-06 真机实测后定）：`URLCache` 落盘的**不只是响应体，还有序列化后的请求对象** —— 设备 `Cache.db` 的 `cfurl_cache_blob_data.proto_props` 里明文躺着 `Authorization: Bearer ghu_…` 与 `_octo` Cookie（响应体是干净的，**泄露源是请求头**）。故本包**全部出网会话**统一走 `GitHubURLSession.noCache()`（`urlCache = nil` + 无 Cookie 罐）；§5.1 的 L2 / L3 缓存**自建**（只存 URL / ETag / 响应体 / 过期时间），**不回头启用系统缓存** | 【已定】 |
+| 33 | 数据层怎么拿令牌（含登录第 8 步的空窗） | **协议在 `GitHubAPI`、实现在 `GitDuoAuth`、错误在出口归一化**（用户 2026-10-06 拍板）：`AccessTokenProviding` 必须由 `GitHubAPI` 声明 —— 它**不能** import `GitDuoAuth`（依赖铁律，会成环），而"此刻该用哪枚令牌""401 之后怎么刷新"只有编排层知道。出口把"凭据不可用"统一成 `GitHubError.unauthorized`（断网 ⇒ `.transport`，其余**原样抛**不编造结论）⇒ **"断网 ≠ 登出"在数据层同样成立**。**例外是登录第 8 步**（`GET /user` 校验刚换到的令牌）：那一刻令牌**还没写进 Keychain**（"先验证再落盘"是有意顺序），provider 供不出来 ⇒ 用 `HTTPRequest.explicitToken` 显式交令牌，**且该请求 401 不触发刷新**（此时没有 `refresh_token` 可用，刷新只会白搭一次必败往返）。该字段**只此一处用途**，新端点一律走 provider —— 令牌的出口只有一个 | 【已定】 |
 
-> **状态汇总**：32 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+> **状态汇总**：33 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
 
 ### 1.2 三条"不可动摇"的约束
 
@@ -441,6 +442,12 @@ RootView
 
 两者共用一个 `HTTPTransport`（`URLSession` 封装），统一处理：请求头注入、令牌注入与刷新、ETag 条件请求、限流识别、错误归一化、重试。
 
+**【已落地 · 切片 2.1–2.6】** 实际收口比上表更狠一层：**两个客户端自己都不发网络**，全部交给 `HTTPTransport`（§4.1 的六件事的唯一落点），客户端只负责各自那层"形状" —— REST 侧是路径 / 查询串 / 解码 / `Link` 分页，GraphQL 侧是 `{query, variables}` 组装与 `body.errors` 判定。于是"某个新端点忘了带版本头""某个端点把 401 当成终态"这类缺陷在**结构上**不可能发生。
+
+- **配额闸门**（§4.5 策略 2）也接在 `HTTPTransport` 上，且**接在每一次尝试**而不是整个请求上：重试同样消耗配额，挡在闸门外等于给重试开后门。请求用 `HTTPRequest.rateLimitResource` 声明自己占哪个桶（默认 `.core`，间隔 0 不拦；**搜索类必须显式声明** `.search` / `.codeSearch`）。代码搜索额外**串行**（§4.5 原文要求）。
+- **令牌出口只有一个**：`AccessTokenProviding`（§4.1 第 2 件事）由编排层 `GitDuoAuth.AuthCoordinator` 实现，错误在出口归一化（决策 #33）。唯一例外是登录第 8 步的 `GET /user` —— 那时令牌还没进 Keychain，走 `HTTPRequest.explicitToken`。
+- **`GitHubUserEndpoint`** 已改为**只**通过 `GitHubRESTClient` 发请求（切片 2.6）。它对外的错误契约仍是 `OAuthError`（切片 1 的调用方与测试按它分支），内部有一张 `GitHubError → OAuthError` 的**折返表**；那张表是迁移的兼容层，**不是**可以照抄的模式 —— 新端点直接抛 `GitHubError`。
+
 ### 4.2 统一请求头
 
 ```
@@ -472,6 +479,13 @@ enum GitHubError: Error {
 **两条容易踩的坑**：
 1. **404 不等于不存在**——私有仓库无权限时 GitHub 也返回 404。UI 文案要写成"仓库不存在或你没有访问权限"，不能断言"不存在"。
 2. **GraphQL 的错误在 body 里**——返回 `200 OK` 且 `body.errors` 有值，甚至可能 `data` 与 `errors` 同时存在（部分成功）。**绝不能只看 HTTP 状态码判定成功**。
+
+**【已落地 · 切片 2.1】上面的 Swift 片段是**规格级**形状；实现有**两处**经拍板的差异（`GitHubError` 共 **9** case）：**
+
+1. **补 `case serverError(status: Int)`**：上面 8 个 case 没给 **5xx** 留落点，而"幂等 GET 有限退避重试"恰恰需要以 5xx 为触发条件。该 case 同时是**兜底** —— 5xx 与其余未被归类的状态码（400 / 415 / 451…）都落这里，所以**判"能不能重试"必须再看 `status` 是否 5xx**，不能只看 case 名。
+2. **`case graphQLErrors(messages: [String], partialData: Data?)`**：GraphQL 会**部分成功**，只抛一个错误会把那批**已经拿到的**数据白白丢掉（用户看到整页空白，而内容就在响应里）。故错误自带 `data` 字段的**原始 JSON 字节**（`data` 缺失或为 `null` 时为 `nil`），调用方自行解码出能用的那部分再决定怎么降级。用原始字节而非泛型：错误类型不认识各查询的 DTO。
+
+另外 403 有**三种**含义，实现里只靠响应头区分（§4.5）：主桶耗尽（`x-ratelimit-remaining == 0`）→ `.rateLimited`；二级限流（带 `Retry-After`）→ `.rateLimited(isSecondary: true)`；两者都不是 → 权限不足 `.forbidden`。混同的后果很具体：把"配额用光"报成"你没权限"，用户会去翻权限设置，而真正该做的是等一会儿。`Retry-After` **两种形式都要认**（秒数 与 HTTP-date，RFC 9110 §10.2.3）。
 
 ### 4.4 分页
 

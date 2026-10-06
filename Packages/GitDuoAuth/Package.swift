@@ -35,6 +35,9 @@ let package = Package(
             name: "GitDuoAuthTests",
             dependencies: [
                 "GitDuoAuth",
+                // 显式声明而非依赖传递可见性：测试要断言"出口错误已被归一化成 GitHubError"，
+                // 隐式拿到的模块一旦上游改动就会莫名编译失败。
+                .product(name: "GitHubAPI", package: "GitHubAPI"),
                 .product(name: "GitDuoCore", package: "GitDuoCore")
             ]
         )

@@ -98,4 +98,65 @@ struct GitHubUserEndpointTests {
             #expect((error as? OAuthError) == .invalidResponse)
         }
     }
+
+    // MARK: - 迁移后的兼容契约（2.6）
+
+    /// 本类型改走 `GitHubRESTClient` 之后，对外**仍然**只抛 `OAuthError`。
+    /// 这张折返表存在的唯一理由见 `GitHubUserEndpoint.legacy` 的说明。
+    @Test(
+        "GitHubError → OAuthError 折返：401 与 5xx 仍严格分开（前者登出，后者绝不）",
+        arguments: zip(
+            [
+                GitHubError.unauthorized,
+                .forbidden("nope"),
+                .rateLimited(resetAt: Date(timeIntervalSince1970: 0), isSecondary: true),
+                .notFound,
+                .conflict,
+                .validation(["a"]),
+                .serverError(status: 500),
+                .serverError(status: 502),
+                .transport(URLError(.notConnectedToInternet)),
+                .decoding(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "x"))),
+                .graphQLErrors(messages: ["x"], partialData: nil)
+            ],
+            [
+                OAuthError.httpStatus(401),
+                .httpStatus(403),
+                .httpStatus(403),
+                .httpStatus(404),
+                .httpStatus(409),
+                .httpStatus(422),
+                .httpStatus(500),
+                .httpStatus(502),
+                .invalidResponse,
+                .invalidResponse,
+                .invalidResponse
+            ]
+        )
+    )
+    func mapsErrorsToLegacyContract(_ input: GitHubError, _ expected: OAuthError) {
+        #expect(GitHubUserEndpoint.legacy(input) == expected)
+    }
+
+    @Test("折返后 401 与 500 依然不相等 —— 这条断言保住的就是「5xx 不登出」")
+    func legacyKeepsUnauthorizedDistinctFromServerError() {
+        let unauthorized = GitHubUserEndpoint.legacy(.unauthorized)
+        let serverError = GitHubUserEndpoint.legacy(.serverError(status: 500))
+
+        #expect(unauthorized != serverError)
+        #expect(unauthorized == .httpStatus(401))
+        #expect(serverError == .httpStatus(500))
+    }
+
+    @Test("迁移后走的是本包唯一的出网通道：版本头由 transport 统一注入")
+    func goesThroughTransport() async throws {
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(.json(#"{"login":"octocat"}"#))
+
+        _ = try await makeEndpoint(with: harness).fetchAuthenticatedUser(accessToken: token)
+
+        let request = try #require(harness.lastRequest)
+        #expect(request.value(forHTTPHeaderField: "User-Agent") == HTTPTransport.userAgent)
+        #expect(request.value(forHTTPHeaderField: "X-GitHub-Api-Version") == credentials.apiVersion)
+    }
 }

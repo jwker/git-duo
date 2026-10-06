@@ -31,15 +31,22 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         var status: Int
         var body: Data
         var headers: [String: String]
+        /// 非 nil 时改为**让请求失败**（模拟断网、超时这类网络层错误）。
+        var failure: URLError?
 
-        static func json(_ raw: String, status: Int = 200) -> Response {
-            Response(status: status,
-                     body: Data(raw.utf8),
-                     headers: ["Content-Type": "application/json"])
+        static func json(_ raw: String, status: Int = 200, headers: [String: String] = [:]) -> Response {
+            var merged = headers
+            merged["Content-Type"] = merged["Content-Type"] ?? "application/json"
+            return Response(status: status, body: Data(raw.utf8), headers: merged)
         }
 
-        static func empty(status: Int) -> Response {
-            Response(status: status, body: Data(), headers: [:])
+        static func empty(status: Int, headers: [String: String] = [:]) -> Response {
+            Response(status: status, body: Data(), headers: headers)
+        }
+
+        /// 请求在**网络层**失败（拿不到响应）—— 与 5xx 是两回事。
+        static func failing(_ code: URLError.Code) -> Response {
+            Response(status: 0, body: Data(), headers: [:], failure: URLError(code))
         }
     }
 
@@ -50,7 +57,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
         fileprivate let namespace: String
         private let lock = NSLock()
-        private var response: Response?
+        private var responses: [Response] = []
         private var recordedRequests: [URLRequest] = []
         private var recordedBodies: [Data?] = []
 
@@ -66,10 +73,18 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
             return URLSession(configuration: configuration)
         }
 
-        /// 设置下一次（及后续）请求的桩响应，并清空已记录的请求。
+        /// 设置桩响应：**该响应会被后续每次请求重复使用**，并清空已记录的请求。
         func stub(_ response: Response) {
+            stub([response])
+        }
+
+        /// 设置一串桩响应：按顺序消费，**最后一个会被重复使用**。
+        ///
+        /// 用于"第一次 401、第二次 200"这类必须区分次序的用例（如 401→刷新→重放）。
+        /// 单响应版本其实是这个的特例，`stub(_ response:)` 转发到这里。
+        func stub(_ sequence: [Response]) {
             lock.withLock {
-                self.response = response
+                responses = sequence
                 recordedRequests = []
                 recordedBodies = []
             }
@@ -77,7 +92,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
         func reset() {
             lock.withLock {
-                response = nil
+                responses = []
                 recordedRequests = []
                 recordedBodies = []
             }
@@ -95,7 +110,10 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
             lock.withLock {
                 recordedRequests.append(request)
                 recordedBodies.append(body)
-                return response
+
+                guard let next = responses.first else { return nil }
+                if responses.count > 1 { responses.removeFirst() }
+                return next
             }
         }
     }
@@ -125,6 +143,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     // MARK: - 旧用法（转发到默认 harness；勿与 harness 混用）
 
     static func stub(_ response: Response) { defaultHarness.stub(response) }
+
+    static func stub(_ sequence: [Response]) { defaultHarness.stub(sequence) }
 
     static func reset() { defaultHarness.reset() }
 
@@ -173,6 +193,10 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
         guard let stubbed, let url = request.url else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        if let failure = stubbed.failure {
+            client?.urlProtocol(self, didFailWithError: failure)
             return
         }
         guard let http = HTTPURLResponse(

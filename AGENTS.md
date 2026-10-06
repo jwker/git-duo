@@ -5,8 +5,8 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已完成并验收 —— 门禁、Keychain、PKCE、刷新、登出全部落地；1.8 真机验收 10/10 全过。**
-下一步是切片 2（GitHubAPI 客户端骨架）。
+**切片 1（Auth）已完成并验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 全部落地，四包单测全绿。**
+`make verify` = **四包单测 263 项 + 模拟器构建**，一条命令。
 
 | # | 内容 | 状态 |
 |---|---|---|
@@ -18,13 +18,25 @@
 | 1.6 | 登录段原型断言转 Swift 测试（权限 6 项 + 三项产品承诺） | ✅ |
 | 1.7 | 门禁接线：`RootView` 二分 + `LoginFlowView` + `WebAuthenticationSession` | ✅ |
 
-**四包单测 115 项全过**（GitHubAPI 55 · GitDuoAuth 39 · GitDuoCore 14 · GitDuoDesign 7）。
+**四包单测 263 项全过**（GitHubAPI 189 · GitDuoAuth 53 · GitDuoCore 14 · GitDuoDesign 7）。
+
+**切片 2（GitHubAPI 客户端骨架）—— 2.1–2.6 全部落地**（2026-10-06）：
+
+| # | 内容 | 状态 |
+|---|---|---|
+| 2.1 | 错误模型（9 case，含 5xx 兜底 `serverError`）+ 限流头解析 + `RateLimiter`（令牌桶 + 串行闸门） | ✅ |
+| 2.2 | `Link` 分页解析 + `Page<T>`（**不能 `split(",")`**：URL 里可能有逗号） | ✅ |
+| 2.3 | 自建 HTTP 响应缓存（内存 + 磁盘双层、LRU、`no-store` 尊重、写后按前缀失效） | ✅ |
+| 2.4 | `HTTPTransport` —— 统一请求头 / 令牌 / ETag 条件请求 / 401 重放 / 错误归一化 / 幂等 GET 退避 | ✅ |
+| 2.5 | `AuthCoordinator` 实现 `AccessTokenProviding`（**错误在出口归一化**，决策 #33）+ 配额闸门接线 + `GitHubRESTClient` + `GitHubGraphQLClient`（部分成功**抛错但带数据**） | ✅ |
+| 2.6 | `GET /user` 迁到新通道（`explicitToken` 解决"令牌还没进 Keychain"的空窗）+ 文档同步 | ✅ |
+
+▶ **下一步候选**：切片 3（首页 / 仓库列表等真正的业务端点）。动手前先读 `REVIEW-CHECKLIST.md` §1 的正本。
 
 ✅ **1.8 真机验收 10/10 全过 → 切片 1 验收完成**（2026-10-06，iPhone 17 Pro，自动签名已打通）：
 真授权（授权页权限 6 条＝P2）→ 令牌落 Keychain → **杀进程重启仍登录** →
 自动跳回 App（回调可用＝P3）→ 登出回登录页 → **GitHub 侧那条授权记录真的消失了** →
 **飞行模式下冷启动仍在主界面**（断网 ≠ 登出）→ 登出后 `Cache.db` **连一个 URL 都不剩**。
-▶ **下一步 = 切片 2（GitHubAPI 客户端骨架）**。
 **逐步流程、验收清单、错误对照见 `DEVICE-TESTING.md`**（`make device` 一键：构建 → 安装 → 启动）。
 ⚠️ **真机上的一条硬经验**：改掉写入路径**不会**清除已经落盘的副本 —— 发现磁盘上有敏感残留时，
 除了修写入路径，还要问"**谁负责清它**"（本项目补在 `AuthCoordinator.signOut`）。
@@ -42,7 +54,7 @@
 |---|---|---|
 | `redesign/prototype/` | **唯一可点验收依据**（入口 `index.html`；`scripts/` 16 个 JS · `styles/` 5 个 CSS） | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
-| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**32 项全部【已定】**） |
+| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**33 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 | `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |

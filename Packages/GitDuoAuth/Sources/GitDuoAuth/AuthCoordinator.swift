@@ -245,8 +245,37 @@ public actor AuthCoordinator {
 
     /// 取一个**当下可用**的访问令牌；已进入预刷新窗口则先刷新。
     ///
-    /// - Throws: `AuthError.notAuthenticated`（没有凭据）
+    /// ⚠️ 错误口径见 `AuthCoordinator+AccessTokenProviding.swift`：本方法**不是**原样透传，
+    ///    而是在边界把"凭据不可用"统一成 `GitHubError.unauthorized` —— 数据层据此决定
+    ///    要不要把用户踢回登录页，看不懂 `AuthError` 里那些更细的分类。
+    ///
+    /// - Throws: `GitHubError.unauthorized`（凭据不可用）；`GitHubError.transport`（断网）；
+    ///           其余错误原样上抛。
     public func validAccessToken() async throws -> String {
+        do {
+            return try await loadValidAccessToken()
+        } catch {
+            throw Self.asTokenProviderError(error)
+        }
+    }
+
+    /// **强制**刷新一次（不看还剩多久）。
+    ///
+    /// 供数据层在收到 **401** 时调用，随后重放原请求——**只重放一次**（§3.2 第 2 条）。
+    /// 并发调用会共享同一次刷新，不会打出一串刷新请求。
+    ///
+    /// - Throws: 同 `validAccessToken()`。
+    public func forceRefreshAccessToken() async throws -> String {
+        do {
+            return try await loadForcedRefreshToken()
+        } catch {
+            throw Self.asTokenProviderError(error)
+        }
+    }
+
+    /// 编排层内部的"取令牌"：错误保持 `AuthError` 原样（含 `notAuthenticated` 等细分），
+    /// 供本包与 App 层使用；对数据层出口才做归一化。
+    func loadValidAccessToken() async throws -> String {
         let loaded: StoredToken?
         do {
             loaded = try store.load()
@@ -262,11 +291,7 @@ public actor AuthCoordinator {
         return try await singleFlightRefresh(at: moment).accessToken
     }
 
-    /// **强制**刷新一次（不看还剩多久）。
-    ///
-    /// 供数据层在收到 **401** 时调用，随后重放原请求——**只重放一次**（§3.2 第 2 条）。
-    /// 并发调用会共享同一次刷新，不会打出一串刷新请求。
-    public func forceRefreshAccessToken() async throws -> String {
+    func loadForcedRefreshToken() async throws -> String {
         try await singleFlightRefresh(at: clock()).accessToken
     }
 

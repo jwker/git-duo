@@ -444,14 +444,92 @@ struct AuthCoordinatorTests {
 
     // MARK: - 令牌供给
 
-    @Test("未登录时索取令牌：抛 notAuthenticated（不静默返回空串）")
+    @Test("未登录时索取令牌：抛 GitHubError.unauthorized（不静默返回空串）")
     func validAccessTokenRequiresSession() async throws {
         StubURLProtocol.setStubs([])
         defer { StubURLProtocol.reset() }
 
-        await #expect(throws: AuthError.notAuthenticated) {
+        // ⚠️ 出口错误是**归一化后**的 GitHubError，不是内部的 AuthError ——
+        //    数据层不认识 AuthError，它只需要"凭据不可用 ⇒ 回登录页"这一个结论。
+        await #expect(throws: GitHubError.unauthorized) {
             _ = try await makeCoordinator().validAccessToken()
         }
+    }
+
+    @Test("编排层内部仍拿到细分的 AuthError（归一化不污染本包自己的语义）")
+    func loadValidAccessTokenKeepsAuthError() async throws {
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        await #expect(throws: AuthError.notAuthenticated) {
+            _ = try await makeCoordinator().loadValidAccessToken()
+        }
+    }
+
+    @Test("刷新时收到 401：数据层出口抛 unauthorized（refresh token 真的没了）")
+    func refreshUnauthorizedMapsToUnauthorized() async throws {
+        try store.save(storedToken(accessExpiresIn: 30))
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, "", status: 401)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let provider: any AccessTokenProviding = makeCoordinator()
+        await #expect(throws: GitHubError.unauthorized) {
+            _ = try await provider.validAccessToken()
+        }
+    }
+
+    @Test("刷新时收到 500：抛 serverError，**绝不算凭据失效**（§3.2 第 3 条：5xx 不登出）")
+    func refreshServerErrorDoesNotInvalidateCredentials() async throws {
+        try store.save(storedToken(accessExpiresIn: 30))
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, "", status: 500)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let provider: any AccessTokenProviding = makeCoordinator()
+        await #expect(throws: GitHubError.serverError(status: 500)) {
+            _ = try await provider.validAccessToken()
+        }
+        #expect(try loadStored() != nil, "5xx 之后凭据必须原地不动 —— 否则一次服务端抖动就把人登出")
+    }
+
+    @Test("令牌端点以 200 回传 error：也算凭据失效（状态码通过 ≠ 成功）")
+    func tokenEndpointErrorMapsToUnauthorized() async throws {
+        try store.save(storedToken(accessExpiresIn: 30))
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, #"{"error":"bad_refresh_token"}"#)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let provider: any AccessTokenProviding = makeCoordinator()
+        await #expect(throws: GitHubError.unauthorized) {
+            _ = try await provider.validAccessToken()
+        }
+    }
+
+    @Test("刷新时网络层失败：抛 .transport，**不是** unauthorized（断网 ≠ 登出）")
+    func refreshTransportFailureIsNotUnauthorized() async throws {
+        try store.save(storedToken(accessExpiresIn: 30))
+        // 空路由表 ⇒ 桩件以 `URLError` 失败，即"拿不到响应"
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let provider: any AccessTokenProviding = makeCoordinator()
+        var sawTransport = false
+        do {
+            _ = try await provider.validAccessToken()
+            Issue.record("没网就该抛错")
+        } catch let error as GitHubError {
+            guard case .transport = error else {
+                Issue.record("网络层失败必须归为 .transport，实际：\(error)")
+                return
+            }
+            sawTransport = true
+        }
+        #expect(sawTransport)
+        #expect(try loadStored() != nil, "断网绝不能把凭据清掉")
     }
 
     @Test("令牌新鲜：直接返回，不刷新（省一次往返，也省配额）")
@@ -510,6 +588,82 @@ struct AuthCoordinatorTests {
         #expect(
             StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1,
             "并发刷新必须共享同一个请求，否则 refresh_token 轮换会互相作废"
+        )
+    }
+
+    // MARK: - 与数据层接线（HTTPTransport ↔ AuthCoordinator）
+
+    /// 装配一个**真的**走 `AuthCoordinator` 取令牌的 transport。
+    ///
+    /// 这一段的用意：协议一致性本身是可编译性保证，但"两半合起来到底对不对"
+    /// 只有跑一遍才知道 —— 尤其"401 之后重放用的是新令牌"这件事，
+    /// 两边各自的单测都覆盖不到。
+    private func makeTransport(provider: any AccessTokenProviding) -> HTTPTransport {
+        let clock = Self.fixedNow
+        return HTTPTransport(
+            credentials: Self.credentials,
+            tokenProvider: provider,
+            session: StubURLProtocol.makeSession(),
+            cache: HTTPResponseCache(configuration: .memoryOnly()),
+            retryPolicy: .none,
+            clock: { clock },
+            sleeper: { _ in }
+        )
+    }
+
+    @Test("接线：数据端点 401 → 强制刷新一次 → 重放一次，且重放带的是**新令牌**")
+    func transportRefreshesAndReplaysThroughCoordinator() async throws {
+        try store.save(storedToken())  // 8 小时，不在预刷新窗口
+        StubURLProtocol.setStubs([
+            .response("GET", "/user", "", status: 401),
+            .response("POST", Self.tokenEndpointPath, Self.refreshedJSON)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let transport = makeTransport(provider: makeCoordinator())
+
+        // 数据端点永远 401 ⇒ 重放那一次同样失败，最终如实报 unauthorized
+        await #expect(throws: GitHubError.unauthorized) {
+            _ = try await transport.send(.get(URL(string: "https://api.github.com/user")!))
+        }
+
+        #expect(
+            StubURLProtocol.count(method: "GET", path: "/user") == 2,
+            "原请求 + 重放，**只重放一次**（§3.2 第 2 条）"
+        )
+        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+
+        let authorizations = StubURLProtocol.requests
+            .filter { $0.httpMethod == "GET" && $0.url?.path == "/user" }
+            .map { $0.value(forHTTPHeaderField: "Authorization") }
+        #expect(
+            authorizations == ["Bearer ghu_old", "Bearer ghu_new"],
+            "重放必须带刷新后的新令牌 —— 拿旧令牌重放等于白刷一次"
+        )
+    }
+
+    @Test("接线：并发 5 个 401 只触发**一次**刷新（否则 refresh_token 轮换会互相作废）")
+    func concurrent401sShareOneRefresh() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([
+            .response("GET", "/user", "", status: 401),
+            // 延迟制造"刷新还没回来"的窗口 —— 没有它，5 次刷新会一个接一个地跑完，测不出共享
+            .response("POST", Self.tokenEndpointPath, Self.refreshedJSON, delay: 0.3)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let transport = makeTransport(provider: makeCoordinator())
+        let url = URL(string: "https://api.github.com/user")!
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<5 {
+                group.addTask { _ = try? await transport.send(.get(url)) }
+            }
+        }
+
+        #expect(
+            StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1,
+            "并发 401 必须共享同一次刷新（single-flight 由 AuthCoordinator 保证）"
         )
     }
 
