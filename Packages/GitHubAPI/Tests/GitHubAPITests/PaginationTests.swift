@@ -160,11 +160,11 @@ struct PaginationTests {
     }
 
     @Test("map 保留分页信息，只换元素类型")
-    func mapPreservesPagination() throws {
+    func mapPreservesPagination() {
         let headers = HTTPHeaders(["Link": #"<https://a.test/2>; rel="next""#])
         let page = Page<Int>(items: [1, 2], headers: headers)
 
-        let mapped = try page.map { "n\($0)" }
+        let mapped = page.map { "n\($0)" }
 
         #expect(mapped.items == ["n1", "n2"])
         #expect(mapped.nextCursor?.absoluteString == "https://a.test/2")

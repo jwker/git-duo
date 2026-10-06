@@ -24,7 +24,8 @@ struct MainTabView: View {
             }
             Tab(AppTab.repos.title, systemImage: AppTab.repos.systemImage, value: AppTab.repos) {
                 NavigationStack(path: $router.repos) {
-                    ReposView()
+                    // 依赖从组合根**经本视图**传下去：`ReposView` 自己不构造客户端。
+                    ReposView(loader: env.repositories)
                         .navigationDestination(for: Route.self) { RouteView(route: $0) }
                 }
             }

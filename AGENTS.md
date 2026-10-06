@@ -5,8 +5,26 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已完成并验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 全部落地，四包单测全绿。**
-`make verify` = **四包单测 269 项 + 模拟器构建**，一条命令。
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地。**
+`make verify` = **五包单测 338 项 + 模拟器构建**，一条命令。
+
+> **切片 3 交付（2026-10-06）**：新增**领域层包 `GitDuoKit`**（决策 #34）+ 仓库列表的取数 / 分页 / 分区 / 卡片全线打通。
+> 逐项见下表与 `REVIEW-CHECKLIST.md` §6。
+
+| # | 内容 | 状态 |
+|---|---|---|
+| 3.1 | 新建 `GitDuoKit` 包（领域层）+ 登记 `Makefile PACKAGES` / `project.yml` | ✅ |
+| 3.2 | `RepositoryDTO` + `GitHubRepositoryEndpoint`（`user/repos` · `user/starred`，口径见决策 #35） | ✅ |
+| 3.3 | 领域模型 `Repository` / `Permissions` · `RepoListSegment` · `RepositoryMapper`（可写性判定唯一来源 = `permissions.push`） | ✅ |
+| 3.4 | `PagedListState`（分页状态机）· `RepositoryDataSource` · `LoadRepositoriesPage` | ✅ |
+| 3.5 | 设计系统：`CompactNumber`（k/m 缩写）· `LanguageColor`（linguist 词表 + 中性回退）· `SkeletonBar` | ✅ |
+| 3.6 | 表现层：`ReposView` 重写 + `RepoCard` / `RepoCardSkeleton` / `RepoListViewModel` + `AppEnvironment` 装配 | ✅ |
+| 3.7 | 文档同步 + `make verify` 闭环 | ✅ |
+
+**五包单测 338 项全过**（GitHubAPI 200 · GitDuoAuth 57 · GitDuoCore 21 · GitDuoDesign 14 · GitDuoKit 46）。
+⚠️ 网络桩件状态**按命名空间隔离**（每套件自持 `Harness`）⇒ 网络测试可自由并行，**不要加 `.serialized`**；忘了用 harness 会当场失败，那是**有意**的。
+
+### 切片 1（Auth）—— 已验收
 
 | # | 内容 | 状态 |
 |---|---|---|
@@ -18,10 +36,7 @@
 | 1.6 | 登录段原型断言转 Swift 测试（权限 6 项 + 三项产品承诺） | ✅ |
 | 1.7 | 门禁接线：`RootView` 二分 + `LoginFlowView` + `WebAuthenticationSession` | ✅ |
 
-**四包单测 269 项全过**（GitHubAPI 191 · GitDuoAuth 57 · GitDuoCore 14 · GitDuoDesign 7）。
-⚠️ 网络桩件状态**按命名空间隔离**（每套件自持 `Harness`）⇒ 网络测试可自由并行，**不要加 `.serialized`**；忘了用 harness 会当场失败，那是**有意**的。
-
-**切片 2（GitHubAPI 客户端骨架）—— 2.1–2.6 全部落地**（2026-10-06）：
+### 切片 2（GitHubAPI 客户端骨架）—— 2.1–2.6 全部落地（2026-10-06）
 
 | # | 内容 | 状态 |
 |---|---|---|
@@ -32,7 +47,7 @@
 | 2.5 | `AuthCoordinator` 实现 `AccessTokenProviding`（**错误在出口归一化**，决策 #33）+ 配额闸门接线 + `GitHubRESTClient` + `GitHubGraphQLClient`（部分成功**抛错但带数据**） | ✅ |
 | 2.6 | `GET /user` 迁到新通道（`explicitToken` 解决"令牌还没进 Keychain"的空窗）+ 文档同步 | ✅ |
 
-▶ **下一步候选**：切片 3（首页 / 仓库列表等真正的业务端点）。动手前先读 `REVIEW-CHECKLIST.md` §1 的正本。
+▶ **下一步候选**：切片 4（首页 + 探索 + 详情：置顶只读 / 双榜 / 只读态）。动手前先读 `REVIEW-CHECKLIST.md` §1 的正本。
 
 ✅ **1.8 真机验收 10/10 全过 → 切片 1 验收完成**（2026-10-06，iPhone 17 Pro，自动签名已打通）：
 真授权（授权页权限 6 条＝P2）→ 令牌落 Keychain → **杀进程重启仍登录** →
@@ -55,7 +70,7 @@
 |---|---|---|
 | `redesign/prototype/` | **唯一可点验收依据**（入口 `index.html`；`scripts/` 16 个 JS · `styles/` 5 个 CSS） | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
-| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**33 项全部【已定】**） |
+| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**35 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 | `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |
@@ -76,7 +91,7 @@
 
 ```bash
 make gen      # xcodegen 生成 GitDuo.xcodeproj（改 project.yml / 增删文件后必跑）
-make test     # 四个包的单测（Swift Testing，秒级）
+make test     # 五个包的单测（Swift Testing，秒级）
 make build    # 为 iOS 模拟器构建 App（不签名）
 make verify   # 以上全跑 —— 提交前必跑
 make device   # 真机：构建(带签名) → 安装 → 启动 —— 手测用，见 DEVICE-TESTING.md
@@ -87,15 +102,40 @@ make device   # 真机：构建(带签名) → 安装 → 启动 —— 手测�
 
 **没有可执行的验证命令的改动，等于没做。** 改完必须给出 `make verify` 的结果。
 
-> ⚠️ **`make build` / `make verify` 必须脱离沙箱且「前台」运行**：`xcodebuild` 解析 SwiftPM 依赖时会内部调用
-> `sandbox-exec`，在沙箱里会报 `sandbox-exec: sandbox_apply: Operation not permitted`（看起来像工程坏了，
-> 其实是权限）。`swift test` 会写 `~/.cache`，同理。报这个错时**不要改代码**，换非沙箱方式重跑。
->
+### ⚠️ 沙箱：报 `sandbox_apply: Operation not permitted` 时**不要改代码**
+
+**口诀：只要出现 `sandbox_apply: Operation not permitted`，一律是运行环境问题。** 它长得极像工程坏了。
+
+机理：某些受限运行环境（如被外层沙箱包裹的 shell）里，内核**拒绝一切嵌套 `sandbox-exec`** ——
+`(allow default)` 能应用，`(deny default)` 一律被拒。而 SwiftPM 与 Xcode **都会用 `sandbox-exec` 包裹子进程**，
+于是**同时**踩两个坑，且症状完全不同，极易把第二个误判成"源码写错了"：
+
+| 坑 | 症状 |
+|---|---|
+| ① **包解析**：SwiftPM 用沙箱编译 `Package.swift` 清单 | `xcodebuild: error: Could not resolve package dependencies: sandbox_apply…`（**每个包一行**） |
+| ② **宏展开**：编译器用沙箱拉起 `swift-plugin-server` | `@Observable` / `@State` / `#Preview` 报 *"produced malformed response"* —— **源码没问题**，宏根本没跑起来 |
+
+**本项目已在 `Makefile` 里自愈**（2026-10-06）：`sandbox-fix` 目标先探测本机沙箱是否可用，
+**探测通过 ⇒ 三个开关全为空，行为与从前一字不差**（健康机器上等于什么都没做）；探测失败才补开关。
+`build` / `device` 已自动带上，无需手工干预。跳过偏好写入：`make build SANDBOX_FIX=`。
+
+两个坑的开关不同，都不是"换个命令"能绕开的（**以下全是试过的死路，别再试**）：
+
+- 🚫 `-IDEPackageSupportDisableManifestSandbox` —— **不是 `xcodebuild` 的合法参数**（会只吐帮助文本）
+- 🚫 `SWIFTC_DISABLE_SANDBOX` / 任何环境变量形式 —— 管的是编译器子进程，**管不到清单沙箱**
+- 🚫 PATH 前置一个假的 `sandbox-exec` —— SwiftPM 里 `/usr/bin/sandbox-exec` 是**硬编码绝对路径**
+- 🚫 `HOME=<临时目录>` 隔离偏好 —— xcodebuild 走**真实用户偏好域**，不认 `$HOME`
+- 🚫 只预热 `swift package` 的清单缓存 —— Xcode 用的是**自己内嵌的 SwiftPM**，不共享那份缓存
+- ✅ 真正的开关：`swift`/`swiftc` 认 `--disable-sandbox` / `-disable-sandbox`；
+  Xcode 清单沙箱**只认用户默认值** `IDEPackageSupportDisableManifestSandbox`
+  （撤销：`defaults delete com.apple.dt.Xcode IDEPackageSupportDisableManifestSandbox`）
+
 > 🕳️ **两个更隐蔽的次生坑（2026-10-05 实测踩到）**：
-> 1. **放后台执行时沙箱豁免不生效** —— 同样报 `sandbox_apply`，且错误里全是 `swiftc` 的 manifest 编译参数，
->    极易误判成"Swift 包坏了"。**口诀：只要出现 `sandbox_apply: Operation not permitted`，一律是运行环境问题。**
+> 1. **放后台执行时沙箱豁免不生效** —— 但注意：**别只看这一条就断定"必须前台"**，先用上面的办法确认真因。
 > 2. **`rm -rf <大目录>` 会被安全机制拦截** —— 拦截后 `&&` 短路、**后续命令压根没执行**，
->    而日志文件里还留着上一次的内容 ⇒ 看起来"跑了但没通过"。**别用 `rm -rf` 做 clean**，直接让 xcodebuild 增量构建。
+>    而日志文件里还留着上一次的内容 ⇒ 看起来"跑了但没通过"。
+>    **别用 `rm -rf` 做 clean**，直接让 xcodebuild 增量构建（`make clean` 里的 `rm -rf` 同样会被拦）。
+>    ⚠️ 2026-10-06 又踩了一次：`rm -rf build/DerivedData && make verify` 被拦 ⇒ 整条短路、`make verify` 根本没跑。
 
 ---
 
@@ -107,11 +147,17 @@ make device   # 真机：构建(带签名) → 安装 → 启动 —— 手测�
 - **依赖单向**：数据层不得引用上层类型；领域层**不得出现 SwiftUI 类型**。
 - `AppEnvironment` 是**唯一依赖装配点**（`GitDuo/App/AppEnvironment.swift`）。
   View / ViewModel **不得自行构造客户端**。
-- 五个 Package 边界（`Packages/`）：`GitHubAPI`（网络 + OAuth **客户端**）· `GitDuoCore`（Keychain 等本地基础设施）·
-  `GitDuoAuth`（认证**编排**，依赖前两者 —— **决策 #31**）· `GitDuoDesign`（令牌 + 组件 + 玻璃封装）· App target（组合根 + 页面）。
-  `GitDuoDesign` 依赖 `GitDuoCore`，其余互不依赖。
+- **五个 Package** + App target（`Packages/` 与 `GitDuo/`）：
+  `GitHubAPI`（网络 + OAuth **客户端**）· `GitDuoCore`（Keychain 等本地基础设施）·
+  `GitDuoAuth`（认证**编排**，**决策 #31**）· `GitDuoDesign`（令牌 + 组件 + 玻璃封装）·
+  **`GitDuoKit`（领域层，决策 #34）** · `GitDuo` App target（组合根 + 页面）。
+  依赖铁律：`GitDuoDesign → GitDuoCore`；`GitDuoAuth → GitHubAPI + GitDuoCore`；`GitDuoKit → GitHubAPI + GitDuoCore`；**其余互不依赖**。
+  ⚠️ `GitHubAPI` **绝不能** import `GitDuoAuth`（会成环）；**数据层不得引用领域层** ⇒ `GitHubAPI` 里只有 `RepositoryDTO`、没有 `Repository`。
+  ⚠️ `GitDuoKit` **不得 import SwiftUI**（只出"是什么"，不出"长什么样"）。
   ⚠️ 编排为什么单独一层：它要**同时**用 `GitHubAPI`（换令牌）与 `GitDuoCore`（写 Keychain），
   而这两包互不依赖 ⇒ 只能在两者**之上**；落在包里而非 App，是为了能跑单测（App 无测试 target）。
+  ⚠️ 领域层为什么也单独成包（决策 #34）：**同样的理由** —— 可写性判定与分页状态机最需要被单测钉住，
+  放进没有测试 target 的 App 里等于只靠人工点击保证正确性。
 - 四个 Tab **各持一条独立 `NavigationStack`**。路由逻辑一律经 `Router.path(for:)` 按 `selection` 取栈，
   **禁止写死某个 Tab 的栈**（原型阶段因此出过导航错乱）。
 - 路由用值类型枚举 `Route` + `navigationDestination(for:)`；

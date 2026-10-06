@@ -82,8 +82,10 @@
 | 31 | 认证编排的落点 | **独立 `GitDuoAuth` Package**（用户 2026-10-06 拍板）：编排必须**同时**用 `GitHubAPI`（换令牌 / 刷新 / 撤销）与 `GitDuoCore`（Keychain 落盘），而这两包按依赖铁律**互不依赖** ⇒ 编排只能位于两者**之上**。落在包里而非 App target，是为了跟着 `make test` 跑**秒级单测**（App target 无测试 target）；App 层只剩 `ASWebAuthenticationSession` 胶水（系统 API，无逻辑可测）。代价：包拓扑 4→5（见 §2.2 / §3.1） | 【已定】 |
 | 32 | API 流量走不走系统 `URLCache` | **不走**（2026-10-06 真机实测后定）：`URLCache` 落盘的**不只是响应体，还有序列化后的请求对象** —— 设备 `Cache.db` 的 `cfurl_cache_blob_data.proto_props` 里明文躺着 `Authorization: Bearer ghu_…` 与 `_octo` Cookie（响应体是干净的，**泄露源是请求头**）。故本包**全部出网会话**统一走 `GitHubURLSession.noCache()`（`urlCache = nil` + 无 Cookie 罐）；§5.1 的 L2 / L3 缓存**自建**（只存 URL / ETag / 响应体 / 过期时间），**不回头启用系统缓存** | 【已定】 |
 | 33 | 数据层怎么拿令牌（含登录第 8 步的空窗） | **协议在 `GitHubAPI`、实现在 `GitDuoAuth`、错误在出口归一化**（用户 2026-10-06 拍板）：`AccessTokenProviding` 必须由 `GitHubAPI` 声明 —— 它**不能** import `GitDuoAuth`（依赖铁律，会成环），而"此刻该用哪枚令牌""401 之后怎么刷新"只有编排层知道。出口把"凭据不可用"统一成 `GitHubError.unauthorized`（断网 ⇒ `.transport`，其余**原样抛**不编造结论）⇒ **"断网 ≠ 登出"在数据层同样成立**。**例外是登录第 8 步**（`GET /user` 校验刚换到的令牌）：那一刻令牌**还没写进 Keychain**（"先验证再落盘"是有意顺序），provider 供不出来 ⇒ 用 `HTTPRequest.explicitToken` 显式交令牌，**且该请求 401 不触发刷新**（此时没有 `refresh_token` 可用，刷新只会白搭一次必败往返）。该字段**只此一处用途**，新端点一律走 provider —— 令牌的出口只有一个 | 【已定】 |
+| 34 | 领域层的落点 | **独立 `GitDuoKit` Package**（用户 2026-10-06 拍板）：领域模型（`Repository` / `Permissions`）、Mapper、业务判定（可写性 / 分段过滤）、分页状态机、取数仓储都放这里。理由与决策 #31 同源 —— **App target 没有测试 target**，而这一层恰恰最需要被单测钉住（可写性判错 ⇒ 用户改完文件提交时才吃 403；分页状态机判错 ⇒ 重复行 / 永远 loading /「加载更多」点了没反应）。依赖 `GitHubAPI` + `GitDuoCore`，**不得 import SwiftUI**（§2.1）。代价：包拓扑 5→6（含 App）（见 §2.2） | 【已定】 |
+| 35 | 仓库列表的取数口径 | **用默认 affiliation**（`affiliation=owner,collaborator,organization_member`，2026-10-06 拍板）：原 §4.6.2 写死 `affiliation=owner`，会把用户**有写权限的协作仓库与组织仓库整体漏掉** —— 而"能提交代码"正是客户端要支持的核心场景，漏掉即意味着用户找不到自己有权改的仓库。查询串写全（`sort=updated` / `per_page=30`），**不依赖服务端默认值**；公开 / 私有仍按 `private` 字段**本地**过滤（§9.3，分段切换不重新请求） | 【已定】 |
 
-> **状态汇总**：33 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+> **状态汇总**：35 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
 
 ### 1.2 三条"不可动摇"的约束
 
@@ -150,9 +152,12 @@
 | `GitDuoCore` | Package | Keychain、本地持久化、Markdown 渲染、unidiff 解析、语法高亮、格式化、日期 | 无 |
 | `GitDuoAuth` | Package | 认证**编排**：PKCE 材料生成与暂存、回调校验、换令牌、写 Keychain、single-flight 刷新、登出撤销（决策 #31） | GitHubAPI + GitDuoCore |
 | `GitDuoDesign` | Package | 设计令牌（色/字/间距）、通用组件、Liquid Glass 封装（`GlassButton` / `GlassChip` / `GlassBar`） | GitDuoCore |
+| `GitDuoKit` | Package | **领域层（决策 #34）**：领域模型（`Repository` / `Permissions`）、DTO→领域模型 Mapper、业务判定（可写性 / 分段过滤）、分页状态机、取数仓储 | GitHubAPI + GitDuoCore |
 | `GitDuo` | App target | 组合根 `AppEnvironment`、App 入口、路由注册、各 Feature 页面与 ViewModel | 以上全部 |
 
 **为什么这样切**：`GitHubAPI` 与 `GitDuoCore` 完全不依赖 UI，可独立跑单元测试、可被未来其他 target（如 Widget）复用；`GitDuoDesign` 把玻璃用法收敛到一处，避免"随手加玻璃"失控（这是本项目最易犯的错，见 §10）。
+
+**为什么领域层也要单独成包（决策 #34）**：理由与决策 #31 同源 —— **App target 没有测试 target**，而领域层恰恰是最需要被单测钉住的地方：可写性判定错了，用户会点进编辑器、改完文件、提交时才发现 403；分页状态机错了，会出现重复行、永远 loading、或「加载更多」点了没反应。放进没有测试的地方，等于让这些正确性只靠人工点击保证。依赖方向仍是 `GitDuoKit → GitHubAPI + GitDuoCore`，**数据层不得反向引用领域层** —— 所以 `GitHubAPI` 里不存在 `Repository`，只有 `RepositoryDTO`。
 
 **为什么编排要单独一层（决策 #31）**：它必须**同时**看见两边——换令牌只有 `GitHubAPI` 有、写 Keychain 只有 `GitDuoCore` 有，而这两包**互不依赖**。于是"同时看见两边"的逻辑只能待在它们**上面**，正如 App 层一直以来的位置；区别是它不碰 UI，因此**能跑单测**。若把它塞进 App target，这段最需要被验证的逻辑（`state` 校验、单飞刷新、登出降级）就会落进一个没有测试 target 的地方。
 
@@ -180,8 +185,10 @@ my-git/
 │   │   └── Sources/GitDuoCore/{Keychain,Store,Markdown,Diff,Highlight,Format}
 │   ├── GitDuoAuth/
 │   │   └── Sources/GitDuoAuth/          # 认证编排（决策 #31）
-│   └── GitDuoDesign/
-│       └── Sources/GitDuoDesign/{Tokens,Components,Glass}
+│   ├── GitDuoDesign/
+│   │   └── Sources/GitDuoDesign/{Tokens,Components,Glass}
+│   └── GitDuoKit/                       # 领域层（决策 #34）
+│       └── Sources/GitDuoKit/{Models,Mapping,Paging,Repos}
 └── GitDuo/
     ├── App/            GitDuoApp.swift · AppEnvironment.swift · RootView.swift
     ├── Navigation/      Router · Route · 各 Tab 栈
@@ -534,7 +541,7 @@ enum GitHubError: Error {
 
 | 功能 | 端点 | 备注 |
 |---|---|---|
-| 仓库列表（全部/公开/私有/Starred） | `GET /user/repos?affiliation=owner&sort=updated`；Starred 用 `GET /user/starred` | 公开/私有按 `private` 字段本地过滤 |
+| 仓库列表（全部/公开/私有/Starred） | `GET /user/repos?affiliation=owner,collaborator,organization_member&sort=updated&per_page=30`；Starred 用 `GET /user/starred` | 公开/私有按 `private` 字段**本地**过滤（§9.3：分段切换**不重新请求**）。⚠️ 取数口径见**决策 #35**：写死 `affiliation=owner` 会把用户有写权限的**协作仓库与组织仓库整体漏掉**；查询串写全，不依赖服务端默认值 |
 | 仓库头部 + Star/Watch/Fork 数 | `GET /repos/{owner}/{repo}` | |
 | Star 切换 | `PUT` / `DELETE /user/starred/{owner}/{repo}` | 计数由响应后本地 +1/−1，无需重拉 |
 | Watch | `GET /repos/{owner}/{repo}/subscription` | **本期只读计数，不实现订阅动作**（§3.5.2） |
@@ -882,9 +889,12 @@ enum Route: Hashable {
 
 ### 9.3 仓库列表
 
-- 数据：`GET /user/repos`（自己的）；Starred 段用 `GET /user/starred`。
-- 分段过滤：`全部 / 公开 / 私有 / Starred`。前三段可在**本地**基于 `private` 字段过滤（一次拉取即可），Starred 需另一份数据源。
-- 【已定】分段切换不重新请求（已全量拉取首页），但"加载更多"时按当前段决定后续请求。
+- 数据源**只有两个**：`GET /user/repos`（自己的 + 协作 + 组织，口径见决策 #35）与 `GET /user/starred`。
+- 分段过滤：`全部 / 公开 / 私有 / Starred`。前三段**共用** `GET /user/repos` 那一份分页数据，在**本地**按 `private` 字段过滤；Starred 段另取一份数据源。
+- 【已定】分段切换**不重新请求**；"加载更多"时**按当前段决定用哪个数据源**（前三段 ⇒ `user/repos` 的续页，Starred ⇒ `user/starred` 的续页）。
+
+⚠️ **取数时不得过滤（2026-10-06 实现期发现，务必照此）**：直觉上会想"在「私有」段加载更多时直接请求 `visibility=private`"，但这会让那一页的公开仓库被**当场丢弃** —— 用户切回「全部」时它们**永远不存在**，而界面上毫无迹象（既不报错、也不缺 loading，只是内容凭空少了）。正确做法是**取数只取数、过滤在展示层**：`PagedListState` 存全量条目，`visibleItems(segment:)` 才按段过滤。同理，`PagedListState` 判空要接收 `matching:` 谓词 —— 否则"条目非空但本段命中零条"会被渲染成"有内容的空列表"，而不是空态。两条性质各有一个守卫测试（`segmentSwitchNeverDropsData` / `segmentSwitchDoesNotRefetch`）。
+- 每段的空态文案**逐段不同**（原型为准）：全部「还没有仓库」· 公开「没有公开仓库」· 私有「没有私有仓库」· Starred「还没有 Starred 仓库」。失败态统一「加载失败」+ 重试，「继续加载」按钮用于空列表时仍可手动续页（空列表没有可滚内容，`.onAppear` 触发不到）。
 
 ### 9.4 仓库详情（自己的仓库 · 四分区）
 

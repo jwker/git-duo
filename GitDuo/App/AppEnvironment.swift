@@ -2,6 +2,7 @@ import Foundation
 import GitHubAPI
 import GitDuoAuth
 import GitDuoCore
+import GitDuoKit
 
 /// 组合根 —— **唯一的依赖装配点**。
 ///
@@ -32,6 +33,13 @@ final class AppEnvironment {
     /// 认证编排（`GitDuoAuth`）——生成 PKCE、换令牌、刷新、登出撤销都在里面。
     let authCoordinator: AuthCoordinator
 
+    /// **唯一**的出网通道（`GitHubAPI`）。所有端点共用它 ⇒ 共用同一份缓存、
+    /// 同一个配额闸门、同一套重试策略（切片 2 的核心决定）。
+    let restClient: GitHubRESTClient
+
+    /// 仓库列表的取数动作（`GitDuoKit` 的领域层）。
+    let repositories: LoadRepositoriesPage
+
     /// 每个 Tab 各自的导航栈
     let router = Router()
 
@@ -43,7 +51,35 @@ final class AppEnvironment {
         credentials: GitHubAppCredentials = AppConfig.credentials
     ) {
         self.tokenStore = tokenStore
-        self.authCoordinator = AuthCoordinator(credentials: credentials, tokenStore: tokenStore)
+
+        // ⚠️ 先造编排、再把它当令牌供给器传给数据层 —— 顺序不能反：
+        //    数据层的每个请求都要向它要令牌（决策 #33：出口只有这一个）。
+        let coordinator = AuthCoordinator(credentials: credentials, tokenStore: tokenStore)
+        self.authCoordinator = coordinator
+
+        let client = GitHubRESTClient(
+            credentials: credentials,
+            tokenProvider: coordinator,
+            cache: Self.makeHTTPCache()
+        )
+        self.restClient = client
+        self.repositories = LoadRepositoriesPage(
+            source: GitHubRepositoryEndpoint(client: client)
+        )
+    }
+
+    /// 接口缓存（§5.1 的 L2：内存 + 磁盘，**自建**，绝不启用系统 `URLCache` —— 决策 #32）。
+    ///
+    /// 目录由组合根注入（而不是在包内拼路径）：包不知道 App 的容器长什么样，
+    /// 测试则指向临时目录。放在 `Caches/` 下 —— 它是"可丢弃的加速器"，
+    /// 系统在空间紧张时可以清理，登出时也会被显式清空（§3.6）。
+    private static func makeHTTPCache() -> HTTPResponseCache {
+        var configuration = HTTPResponseCache.Configuration.standard
+        configuration.directory = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("GitDuoCache", isDirectory: true)
+        return HTTPResponseCache(configuration: configuration)
     }
 
     // MARK: - 启动
@@ -158,8 +194,7 @@ enum AuthNotice: Equatable {
 /// 已消解：`TokenStore` 的 Keychain 实现（切片 1 → `KeychainTokenStore`，前置条件 P4）。
 enum SkeletonPlaceholders {
     static let registry: [String] = [
-        "GitHubRESTClient / ETag 缓存 / 分页 / 限流（切片 2）",
-        "GitHubGraphQLClient（切片 2）",
-        "各 Feature 的 Repository 与 ViewModel（切片 3+）"
+        "其余 Tab 根页与推入页（`RouteView` 仍走 `SkeletonScreen`，切片 4+）",
+        "`GitHubGraphQLClient`：切片 2 已实现，但**尚无调用方**（首页置顶在切片 4 接入）"
     ]
 }

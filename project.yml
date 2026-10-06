@@ -17,6 +17,8 @@ packages:
     path: Packages/GitDuoCore
   GitDuoDesign:
     path: Packages/GitDuoDesign
+  GitDuoKit:
+    path: Packages/GitDuoKit
 
 configFiles:
   Debug: Secrets.xcconfig
@@ -45,6 +47,8 @@ targets:
         product: GitDuoCore
       - package: GitDuoDesign
         product: GitDuoDesign
+      - package: GitDuoKit
+        product: GitDuoKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gitduo.app   # ⚠️ 占位（Bundle ID 属「发布准备」待补项）

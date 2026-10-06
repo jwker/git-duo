@@ -87,8 +87,12 @@ public enum Theme {
     }
 }
 
-private extension Color {
-    /// 仅用于本文件的令牌定义；**业务代码不得调用**（避免绕过语义令牌写死色值）。
+/// 十六进制色值 → `Color`，**仅供 `GitDuoDesign` 内部的令牌定义使用**
+/// （`Theme` 与 `LanguageColor` 都要用它，故不再是 `private`）。
+///
+/// ⚠️ 它**不是 `public`**：业务代码拿不到它，也就写不出内联色值 ——
+///    这正是"颜色必须走语义令牌"（§10.7）在类型系统上的那道防线。
+extension Color {
     init(hex: UInt32) {
         self.init(
             .sRGB,
