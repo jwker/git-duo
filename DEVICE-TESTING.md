@@ -133,6 +133,11 @@ done
    （本项目基线 = 13:23 那两条）。
 3. **WAL 模式**：只拉 `Cache.db` 会读到旧视图，`-wal` / `-shm` 必须一起拉。
    若 `pragma wal_checkpoint(FULL)` 返回 `log=0`，说明该 WAL 里**没有有效帧**，别拿它当"没数据"的证据。
+4. **先看列的类型，再谈"变了没有"**（我自己踩过）：`cfurl_cache_response.time_stamp` 是
+   **TEXT、UTC**（`2026-10-06 07:29:42`），**不是 CF 绝对时间**。
+   我当时按 `datetime(time_stamp + 978307200, 'unixepoch', 'localtime')` 读 —— SQLite 把文本强转成
+   数字 `2026` 再加偏移，**新旧记录都渲染成同一个 `2001-01-01 08:33:46`**，
+   于是得出"时间戳一个字没变"的错结论（实则读法坏了）。**直接 `select time_stamp` 读原列。**
 
 **当前进度（2026-10-06，iPhone 17 Pro）**：
 
