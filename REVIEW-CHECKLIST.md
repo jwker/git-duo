@@ -1,7 +1,10 @@
-# REVIEW-CHECKLIST —— GitDuo 2.0 开工评审
+# REVIEW-CHECKLIST —— GitDuo 2.0 开工评审 · 兼「切片计划正本」
 
-> **用途**：20 分钟评审的**唯一材料**。
-> **目标不是**"文档写得对不对"（规格已过内部一致性：决策表 29/29 全【已定】、开放问题清零、260 条断言守着原型），
+> **用途（两项，均长期有效）**：
+> ① **切片计划的正本** —— 切片顺序（§1）· 完成定义（§2）· 前置条件（§3）· 262 断言→切片映射（§4）· 决策记录（§5）。
+>    `AGENTS.md §7` 只放**指针**、不复制本文内容（2026-10-06 起），避免两份真相漂移。
+> ② **开工评审的材料与结论存档** —— 2026-10-05 评审：范围冻结、D1–D4 全定。
+> **目标不是**"文档写得对不对"（规格已过内部一致性：决策表 30/30 全【已定】、开放问题清零、262 条断言守着原型），
 > **而是**"能不能开工"。
 >
 > 阅读方式：只看这 5 节。**只回你不同意的**，没意见的按「推荐」执行。
@@ -56,24 +59,30 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 | # | 前置条件 | 谁给 | 卡住什么 | 当前状态 |
 |---|---|---|---|---|
-| **P1** | 🔒 **GitHub App 已创建**（Settings → Developer settings → GitHub Apps） | 你 | 切片 1 全部 | ⬜ 未知 |
-| **P2** | 🔒 **App 权限勾选 6 项**：`Contents(RW)` · `Issues(RW)` · `Pull requests(RW)` · `Metadata(R)` · `Starring(RW)` · `Followers(RW)` | 你 | 缺 Starring/Followers 会让 Star / 关注 **直接 403** | ⬜ 未知 |
-| **P3** | 🔒 **回调 URL 已配置** `gitduo://oauth/callback`（**不要**勾 "Request user authorization during installation"——勾了会绕过 `state` + PKCE） | 你 | 切片 1 回调收不到 | ⬜ 未知 |
+| **P1** | 🔒 **GitHub App 已创建**（Settings → Developer settings → GitHub Apps） | 你 | 切片 1 全部 | ✅ **已建**（2026-10-06 凭据在手） |
+| **P2** | 🔒 **App 权限勾选 6 项**：`Contents(RW)` · `Issues(RW)` · `Pull requests(RW)` · `Metadata(R)` · `Starring(RW)` · `Followers(RW)` | 你 | 缺 Starring/Followers 会让 Star / 关注 **直接 403** | ⬜ **待自查**（§6 第 1 项 · 1 分钟） |
+| **P3** | 🔒 **回调 URL 已配置** `gitduo://oauth/callback`（**不要**勾 "Request user authorization during installation"——勾了会绕过 `state` + PKCE） | 你 | 切片 1 回调收不到 | ⬜ **待自查**（§6 第 1–2 项） |
 | **P4** | `InMemoryTokenStore` → **Keychain 实现** | 我（切片 1 内） | 骨架期为跑通 UI 用内存实现，**必须在切片 1 替换** | 📌 已登记 |
-| **P5** | 🔒 **`Secrets.xcconfig` 填真实 `client_id` + `client_secret`** | 你 | 授权页打不开 / 换令牌失败（当前两项均为 `REPLACE_ME` 占位） | ⬜ 待填 |
+| **P5** | 🔒 **`Secrets.xcconfig` 填真实 `client_id` + `client_secret`** | 你 | 只填一项会在换令牌那步失败（决策 #30 强制 secret） | ✅ **已完成**（2026-10-06 实测：格式干净 + 已注入构建产物） |
 | **P6** | 🔒 三处留白（界面语言 / App 图标 / 发布准备） | 你 | 不影响功能，仅影响"能否提审" | 📌 已确认暂不补 |
 
-**P1–P3 + P5 是真正的卡点**：代码层面无解，只有你能在 GitHub 侧配置。
-👉 **逐栏怎么填、勾什么不勾什么、填完怎么自检，见 `GITHUB-APP-SETUP.md`**（2026-10-05 按官方文档核对）。
-**建议**：评审通过后**当天就去建 App**（10 分钟），这样切片 1 一写完就能真跑。
+**P1 / P5 已完成（2026-10-06 实测）**：`Secrets.xcconfig` 两项格式干净、被 git 正确忽略、**已确认注入构建产物**
+（`GitDuoClientID` 20 字符 / `GitDuoClientSecret` 40 字符 —— 非占位、非未展开字面量）；
+回调 scheme `gitduo` 已在产物中；`make verify` 全绿（三包单测 + 模拟器构建）。
 
-> ⏳ 待你确认：P1–P3 / P5 由你提供；P4 / P6 按现状。
+**还剩 P2 / P3 一次 1 分钟自查**（代码层面验不了，只能你在 GitHub 侧看）：
+照 `GITHUB-APP-SETUP.md` §6 打开授权页链接 → ① 数权限是不是 **6 条**、与原型登录页预告**一字不差**（验 P2）；
+② 点 Authorize，看是否跳到 `gitduo://oauth/callback?code=…&state=…`（验 P3）。
+另需确认：App 设置页里 **没有勾** "Request user authorization during installation"、**Webhook 已关**。
+👉 逐栏怎么填、勾什么不勾什么见 `GITHUB-APP-SETUP.md`（含 §6.1 两条"看起来能验、其实验不了"的坑）。
+
+> ⏳ 待你确认：P2 / P3 两项自查；P1 / P5 已完成，P4 / P6 按现状。
 
 ---
 
-## 4. 清单 D · 验收资产映射（260 条断言 → Swift 测试）
+## 4. 清单 D · 验收资产映射（262 条断言 → Swift 测试）
 
-原型的 jsdom 回归脚本（`~/.workbuddy/binaries/node/workspace/harness.js`，**260 条断言**）
+原型的 jsdom 回归脚本（`~/.workbuddy/binaries/node/workspace/harness.js`，**262 条断言**）
 是**历次讨论结论的结晶**——它比文档更能反映"实际约定"。切片落地时**按域逐条转成 Swift 测试，不要凭记忆重写行为**。
 
 | harness 段落 | 行 | 转成哪个切片的测试 |
@@ -178,10 +187,9 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 ## 6. 下一步
 
 1. ✅ **D1 / D2 / D3 / D4 已全部拍板并落地**（见上；决策表现为 **30/30 全【已定】**）。
-2. ⏳ **你去建 GitHub App**（P1–P3 + P5，约 10 分钟）——**照 `GITHUB-APP-SETUP.md` 走**，两个注意点：
-   ① **不要勾**"Request user authorization during installation"（会绕过 `state` 与 PKCE）；
-   ② **Client ID 与 Client secret 都要抄**（方案 A 需两者齐全，只填一个会在换令牌那步失败）。
-   这是唯一还挡在切片 1 前面的东西。
+2. ✅ **GitHub App 已建、凭据已填**（2026-10-06）。**唯一残留 = P2 / P3 自查**（§6 授权页链接，1 分钟）：
+   ① 权限清单是否 6 条；② 回调是否落到 `gitduo://oauth/callback`。
+   这两项**不阻塞开工** —— 切片 1 的代码可以照写，真机联调前补齐即可。
 3. ▶ 我开**切片 1（Auth）**：PKCE → 回调 → 换令牌（带 secret）→ Keychain（替换 P4 占位）→ 刷新 single-flight → **登出撤销** → 门禁，
    同步把 harness 的登录段断言转成 Swift 测试。
 
