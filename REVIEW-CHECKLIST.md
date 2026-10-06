@@ -189,9 +189,9 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 1. ✅ **D1–D4 已全部拍板并落地**（见上；决策表现为 **32/32 全【已定】**）。
 2. ✅ **GitHub App 已建、凭据已填**（2026-10-06），`P1` / `P4` / `P5` 已完成。
 3. ✅ **切片 1（Auth）已交付**（2026-10-06）：PKCE → 回调 → 换令牌（带 secret）→ Keychain → 刷新 single-flight → **登出撤销** → 门禁；harness 登录段断言已转成 Swift 测试（`GitHubOAuthClientTests` / `AuthCoordinatorTests` / `LoginCopyTests`）。
-4. ◐ **P2 / P3 自查**：**P3（回调落地 `gitduo://oauth/callback`）= ✅ 已由真机实测反证**（真实授权成功、自动跳回 App）；
-   **P2（授权页权限清单是否 6 条）仍待目视确认** —— 1.8 第 3 步走一遍即可，1 分钟。
-5. ◐ **1.8 真机验收**（`DEVICE-TESTING.md` §2）进度（2026-10-06，iPhone 17 Pro）：**10 步中 8 步已过**
+4. ✅ **P2 / P3 自查已过**：**P3（回调落地 `gitduo://oauth/callback`）** 由真机实测反证（真实授权成功、自动跳回 App）；
+   **P2（授权页权限清单 6 条）** 用户已在 `github.com/settings/apps` 目视确认。
+5. ✅ **1.8 真机验收全部通过**（`DEVICE-TESTING.md` §2）—— **10 步 10 过**（2026-10-06，iPhone 17 Pro）
    - ✅ **第 1 步**（登出态冷启动 ⇒ 落登录页、无「凭据缺失」提示）—— 已实拍留证。
    - ✅ **第 4 步**（授权后**自动**跳回 App 进主界面）。
    - ✅ **第 5 步**（杀进程重启仍登录）—— **本切片核心价值之一**，已过。
@@ -200,10 +200,15 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
    - ✅ **第 7 步**（GitHub 侧授权**真的**被撤销）—— 用户已在 `settings/apps/authorizations` 目视确认。
      这条以前只存在于文案承诺里，**现在是可兑现的事实** —— **另一项核心价值**。
    - ✅ **第 10 步**（登出后设备 `Cache.db` 一条不剩）—— 拉设备库实测 **0 条**：
-     那份 13:23 落盘、含 `access_token` / `refresh_token` 的残留**真被清掉了**（判据见 `DEVICE-TESTING.md` §2）。
+     那份 13:23 落盘、含 `access_token` / `refresh_token` 的残留**真被清掉了**。
+     **15:45 复验（决策 #32 之后）证据更硬**：修复前那次登录留下的 `api.github.com/user` 一条，
+     在 15:42 重装（**升级安装不清容器**）后理应仍在，而 15:45 登出后**消失了** ⇒
+     只能是被登出清理删掉的（首次那个"空"还夹着"重装可能清容器"的混淆项，这次没有）。
+     且修复后**连 URL 都一个不剩**（`strings` 搜 `github.com` = 0）—— 判据见 `DEVICE-TESTING.md` §2。
    - ◐ **第 9 步**已有观察：**Keychain 跨 App 重装保留**；另附带证实 Keychain entitlement 链路真机可用（无 `-34018`）。
    - ✅ **第 8 步**（飞行模式冷启动 ⇒ 仍在主界面）—— 实拍留证：状态栏飞行模式 + `当前账号 @jwker`（§3.2「断网 ≠ 登出」）。
-   - ⬜ 第 **3** 步（P2 自查：目视授权页权限是否 6 条）。
+   - ✅ **第 3 步**（**P2 自查**：授权页权限清单）—— 用户在 `github.com/settings/apps` 目视确认为 **6 条**，
+     与登录页预告一致（Contents / Issues / Pull requests / Metadata / Starring / Followers）。
    - 🔧 **验收途中挖出并已修的三件事**（2026-10-06）：
      ① **令牌响应曾被 URL 缓存落盘**（真机 `Library/Caches/com.gitduo.app/Cache.db`）⇒ 令牌专用会话（`ephemeral` + `urlCache = nil`）；
      ② **登出不会清那份残留** ⇒ 新增 `HTTPCachePurging`（`GitDuoCore`），`AuthCoordinator.signOut()` 无条件清理；
