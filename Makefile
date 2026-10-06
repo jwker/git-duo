@@ -6,13 +6,14 @@
 SHELL := /bin/bash
 SCHEME := GitDuo
 SIMULATOR_DESTINATION := generic/platform=iOS Simulator
-PACKAGES := GitHubAPI GitDuoCore GitDuoDesign
+# ⚠️ 新增 Package 必须登记在此，否则它不会进 `make test`（"漏跑"比"跑失败"更危险）
+PACKAGES := GitHubAPI GitDuoAuth GitDuoCore GitDuoDesign
 
 .PHONY: help gen test test-% build verify clean
 
 help:
 	@echo "make gen      xcodegen 生成 GitDuo.xcodeproj（改 project.yml / 增删文件后必跑）"
-	@echo "make test     跑三个 Swift Package 的全部单测（Swift Testing）"
+	@echo "make test     跑四个 Swift Package 的全部单测（Swift Testing）"
 	@echo "make build    为 iOS 模拟器构建 App（无签名）"
 	@echo "make verify   以上全跑（提交前必跑）"
 
@@ -39,7 +40,7 @@ build: gen
 
 # ── 验证闭环 ────────────────────────────────────────────────────────────────
 verify: test build
-	@echo "✅ verify 通过：三包单测 + 模拟器构建"
+	@echo "✅ verify 通过：四个包单测 + 模拟器构建"
 
 clean:
 	rm -rf GitDuo.xcodeproj build

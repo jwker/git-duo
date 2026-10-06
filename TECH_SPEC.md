@@ -25,7 +25,7 @@
 | 【已定】 | 已经拍板的技术决策，后续不再反复 |
 | 【待定】 | 受外部平台约束或尚未决策，需要确认后才能开工的项 |
 
-> 本版 **30 项决策全部为【已定】**，无【待定】项。
+> 本版 **31 项决策全部为【已定】**，无【待定】项。
 
 ### 0.3 术语
 
@@ -78,9 +78,9 @@
 | 27 | 授权回调 / URL scheme 安全 | **自定义 scheme 不视为安全边界**：PKCE + 一次性 `state` + 回调只带 `code`/`state`（**绝不带令牌**）+ 拒绝静默授权 + scheme 不承载深链；抢注 / 劫持的四类场景与残余风险已登记，收敛方向为 claimed HTTPS（Universal Link）（见 §3.9） | 【已定】 |
 | 28 | 当前分支的作用域 | **按仓库分别记忆的会话状态**（`RepositoryScope.branch(for:)`），不是全局唯一值；进入仓库时记忆失效则**回落 `defaultBranch`**（见 §9.4.1） | 【已定】 |
 | 29 | 收藏夹项目数 | **由归属映射推导**，不做独立计数器；换列表 = 源夹 −1 且目标夹 +1，删除夹时其中的项回落默认夹（见 §9.12） | 【已定】 |
-| 30 | 客户端是否持有 `client_secret` | **内嵌持有**（用户 2026-10-05 拍板）：GitHub 换令牌**强制要求** `client_secret`（官方参数表 Required），且官方明确「**does not distinguish between public and confidential clients**」⇒ 不存在"用 PKCE 换掉 secret"这条路；官方对 native app 的建议正是「**打进包里 + 用 PKCE**」。定位为**软机密**（挡随手薅、不挡反编译），**PKCE + 一次性 `state` 仍是主防线**，不因持有 secret 而放松。附带解锁"退出登录可程序化撤销授权"（见 §3.1 / §3.6 / §3.7） | 【已定】 |
+| 31 | 认证编排的落点 | **独立 `GitDuoAuth` Package**（用户 2026-10-06 拍板）：编排必须**同时**用 `GitHubAPI`（换令牌 / 刷新 / 撤销）与 `GitDuoCore`（Keychain 落盘），而这两包按依赖铁律**互不依赖** ⇒ 编排只能位于两者**之上**。落在包里而非 App target，是为了跟着 `make test` 跑**秒级单测**（App target 无测试 target）；App 层只剩 `ASWebAuthenticationSession` 胶水（系统 API，无逻辑可测）。代价：包拓扑 4→5（见 §2.2 / §3.1） | 【已定】 |
 
-> **状态汇总**：30 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+> **状态汇总**：31 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
 
 ### 1.2 三条"不可动摇"的约束
 
@@ -143,12 +143,15 @@
 
 | 模块 | 类型 | 职责 | 依赖 |
 |---|---|---|---|
-| `GitHubAPI` | Package | REST / GraphQL 客户端、DTO、分页、ETag 缓存、限流、错误模型、OAuth 授权流程 | 无（仅 Foundation） |
+| `GitHubAPI` | Package | REST / GraphQL 客户端、DTO、分页、ETag 缓存、限流、错误模型、OAuth **客户端**（授权 URL / 换令牌 / 刷新 / 撤销） | 无（仅 Foundation） |
 | `GitDuoCore` | Package | Keychain、本地持久化、Markdown 渲染、unidiff 解析、语法高亮、格式化、日期 | 无 |
+| `GitDuoAuth` | Package | 认证**编排**：PKCE 材料生成与暂存、回调校验、换令牌、写 Keychain、single-flight 刷新、登出撤销（决策 #31） | GitHubAPI + GitDuoCore |
 | `GitDuoDesign` | Package | 设计令牌（色/字/间距）、通用组件、Liquid Glass 封装（`GlassButton` / `GlassChip` / `GlassBar`） | GitDuoCore |
 | `GitDuo` | App target | 组合根 `AppEnvironment`、App 入口、路由注册、各 Feature 页面与 ViewModel | 以上全部 |
 
 **为什么这样切**：`GitHubAPI` 与 `GitDuoCore` 完全不依赖 UI，可独立跑单元测试、可被未来其他 target（如 Widget）复用；`GitDuoDesign` 把玻璃用法收敛到一处，避免"随手加玻璃"失控（这是本项目最易犯的错，见 §10）。
+
+**为什么编排要单独一层（决策 #31）**：它必须**同时**看见两边——换令牌只有 `GitHubAPI` 有、写 Keychain 只有 `GitDuoCore` 有，而这两包**互不依赖**。于是"同时看见两边"的逻辑只能待在它们**上面**，正如 App 层一直以来的位置；区别是它不碰 UI，因此**能跑单测**。若把它塞进 App target，这段最需要被验证的逻辑（`state` 校验、单飞刷新、登出降级）就会落进一个没有测试 target 的地方。
 
 **Feature 内部分层**（`GitDuo/Features/<Name>/`）：
 
@@ -172,6 +175,8 @@ my-git/
 │   │   └── Sources/GitHubAPI/{REST,GraphQL,Auth,DTO,Cache,Pagination}
 │   ├── GitDuoCore/
 │   │   └── Sources/GitDuoCore/{Keychain,Store,Markdown,Diff,Highlight,Format}
+│   ├── GitDuoAuth/
+│   │   └── Sources/GitDuoAuth/          # 认证编排（决策 #31）
 │   └── GitDuoDesign/
 │       └── Sources/GitDuoDesign/{Tokens,Components,Glass}
 └── GitDuo/
@@ -184,7 +189,7 @@ my-git/
 
 ### 2.4 组合根
 
-`AppEnvironment` 是唯一的依赖装配点，持有：`AuthSession`（令牌状态）、`GitHubRESTClient`、`GitHubGraphQLClient`、`CacheStore`、`LocalStore`、各 Repository。通过 SwiftUI Environment 注入，**不在 View 内直接构造客户端**。
+`AppEnvironment` 是唯一的依赖装配点，持有：`AuthCoordinator`（认证编排，决策 #31）、`GitHubRESTClient`、`GitHubGraphQLClient`、`CacheStore`、`LocalStore`、各 Repository。通过 SwiftUI Environment 注入，**不在 View 内直接构造客户端**。
 
 ---
 
@@ -208,6 +213,7 @@ my-git/
 - 【已定 · 决策 #30】**`client_secret` 内嵌进 App**：GitHub 换令牌**强制要求**它，且官方不区分 public / confidential 客户端（**不存在"用 PKCE 换掉 secret"这条路**），官方对 native app 的建议正是"打进包里 + 用 PKCE"。因此本项目的定位是：**secret 属"软机密"**（挡得住随手 curl 调接口，**挡不住反编译**），**PKCE + 一次性 `state` 才是真正的防线**，不因持有 secret 而放松（§3.9）。它只出现在「换令牌 / 刷新 / 撤销」三条请求里，不进日志与崩溃上报（§14）。
 - 【已定】首次兑换令牌时可携带 `repository_id` 参数，把该令牌的可访问范围**进一步收窄到单个仓库**（GitHub App 独有能力，OAuth App 做不到）——预留给未来的"单仓库工作模式"。
 - 【已定】走用户授权路线**不需要 App 私钥**（私钥仅用于"以 App 自身身份"签发安装令牌，本项目用不到）。
+- 【已定 · 决策 #31】**编排落在独立的 `GitDuoAuth` 包**（`AuthCoordinator`，`actor`）：步骤 5–8 的串联、single-flight 刷新、登出撤销都在那里；`GitHubAPI` 只管"发哪个请求"，`GitDuoCore` 只管"存哪里"。App 层仅保留 `ASWebAuthenticationSession` 的胶水封装（系统 API，无逻辑可测）与界面。
 - 【已定】**URL scheme 不是安全边界**：自定义 scheme 可能被其他 App 抢注、回调可能被劫持。防御依赖 **PKCE + 一次性 `state`**，而非"只有本 App 能收到回调"这一假设；四类风险场景、已采纳缓解与残余风险见 §3.9。
 
 ### 3.2 令牌生命周期与刷新

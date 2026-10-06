@@ -5,10 +5,26 @@
 
 ## 0. 当前阶段
 
-**骨架已立，尚未开始功能切片。** 仓库里没有假数据冒充成品——
-所有未落地的界面都是 `SkeletonScreen`，明确标注"哪个切片落地 + 对应文档章节"。
+**切片 1（Auth）已完成 —— 门禁、Keychain、PKCE、刷新、登出全部落地。**
+下一步是切片 2（GitHubAPI 客户端骨架）。
 
-第一条真代码是 `Packages/GitHubAPI/Sources/GitHubAPI/Auth/PKCE.swift`（RFC 7636 向量已验证）。
+| # | 内容 | 状态 |
+|---|---|---|
+| 1.1 | `KeychainTokenStore`（GitDuoCore）—— 真实 Keychain，替换骨架期内存占位 | ✅（前置条件 **P4 已消解**） |
+| 1.2 | `GitHubOAuthClient` / `GitHubAppCredentials`（GitHubAPI）—— 换令牌 / 刷新 / 撤销 | ✅ |
+| 1.3 | `OAuthCallback`（GitHubAPI）—— 形状校验 + 一次性 `state` | ✅ |
+| 1.4 | `AuthCoordinator`（**GitDuoAuth**，决策 #31）—— 授权编排 + **single-flight** 刷新 | ✅ |
+| 1.5 | 登出四步：撤销 → 清 Keychain → 清账号数据 → 重置导航栈 | ✅ ①②④ 落地；③ 待各 Feature 存储就位后接入 |
+| 1.6 | 登录段原型断言转 Swift 测试（权限 6 项 + 三项产品承诺） | ✅ |
+| 1.7 | 门禁接线：`RootView` 二分 + `LoginFlowView` + `WebAuthenticationSession` | ✅ |
+
+**四包单测 98 项全过**（GitHubAPI 43 · GitDuoAuth 36 · GitDuoCore 12 · GitDuoDesign 7）。
+
+⚠️ **仍未做（1.8）**：真机手测 —— 真授权 → 令牌落 Keychain → **杀进程重启仍登录**。
+它需要 `REVIEW-CHECKLIST.md` §3 的 P2 / P3 那两项 GitHub 侧自查先通过（代码层面验不了）。
+在那之前，切片 1 只能说"本地全绿"，不能说"已验收"。
+
+未落地的界面一律用 `SkeletonScreen` 占位，**没有假数据冒充成品**（登记见 `AppEnvironment.swift`）。
 
 ---
 
@@ -38,7 +54,7 @@
 
 ```bash
 make gen      # xcodegen 生成 GitDuo.xcodeproj（改 project.yml / 增删文件后必跑）
-make test     # 三个包的单测（Swift Testing，秒级）
+make test     # 四个包的单测（Swift Testing，秒级）
 make build    # 为 iOS 模拟器构建 App（不签名）
 make verify   # 以上全跑 —— 提交前必跑
 ```
@@ -65,9 +81,11 @@ make verify   # 以上全跑 —— 提交前必跑
 - **依赖单向**：数据层不得引用上层类型；领域层**不得出现 SwiftUI 类型**。
 - `AppEnvironment` 是**唯一依赖装配点**（`GitDuo/App/AppEnvironment.swift`）。
   View / ViewModel **不得自行构造客户端**。
-- 四个 Package 边界（`Packages/`）：`GitHubAPI`（网络+认证）· `GitDuoCore`（本地基础设施）·
-  `GitDuoDesign`（令牌+组件+玻璃封装）· App target（组合根+页面）。
+- 五个 Package 边界（`Packages/`）：`GitHubAPI`（网络 + OAuth **客户端**）· `GitDuoCore`（Keychain 等本地基础设施）·
+  `GitDuoAuth`（认证**编排**，依赖前两者 —— **决策 #31**）· `GitDuoDesign`（令牌 + 组件 + 玻璃封装）· App target（组合根 + 页面）。
   `GitDuoDesign` 依赖 `GitDuoCore`，其余互不依赖。
+  ⚠️ 编排为什么单独一层：它要**同时**用 `GitHubAPI`（换令牌）与 `GitDuoCore`（写 Keychain），
+  而这两包互不依赖 ⇒ 只能在两者**之上**；落在包里而非 App，是为了能跑单测（App 无测试 target）。
 - 四个 Tab **各持一条独立 `NavigationStack`**。路由逻辑一律经 `Router.path(for:)` 按 `selection` 取栈，
   **禁止写死某个 Tab 的栈**（原型阶段因此出过导航错乱）。
 - 路由用值类型枚举 `Route` + `navigationDestination(for:)`；

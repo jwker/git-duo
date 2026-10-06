@@ -21,10 +21,13 @@ struct GitDuoApp: App {
     }
 
     /// 授权回调入口。
-    /// ⚠️ 这里只做**分流**，真正的校验（`state` 一致 → 换令牌）在切片 1 的 `AuthSession` 中实现。
-    /// 骨架期必须**明确拒绝**非回调 URL，避免 scheme 变成任意深链入口（§3.9 缓解项 6）。
+    ///
+    /// ⚠️ 本轮 scheme **只服务 OAuth 回调**：非回调 URL 一律丢弃，
+    ///    避免公开的 scheme 变成任意深链入口（§3.9 缓解项 6）。
+    ///    完整的形状校验（scheme + host + path）在 `AuthCoordinator` 里再做一遍——
+    ///    这里只是第一道闸，两道都不算多。
     private func handleCallback(_ url: URL) {
         guard url.scheme == AppConfig.callbackScheme else { return }
-        // 切片 1：把 url 交给 AuthSession.completeAuthorization(with:)
+        Task { await environment.handleCallback(url) }
     }
 }

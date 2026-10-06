@@ -43,7 +43,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 **每个切片的"做完" = 同时满足这 4 条**（缺一不可，已写入 `AGENTS.md`）：
 
-1. ☐ `make verify` 通过（三包单测 + 模拟器构建）
+1. ☐ `make verify` 通过（四包单测 + 模拟器构建）
 2. ☐ 该片涉及的**原型断言已转成 Swift 测试并全绿**（映射见第 4 节）
 3. ☐ 与原型**逐屏对照无差异**（原型是唯一可点验收依据）
 4. ☐ 文档已同步（改行为先改 `PRD.md` + `TECH_SPEC.md`，含决策表汇总行）
@@ -62,13 +62,13 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 | **P1** | 🔒 **GitHub App 已创建**（Settings → Developer settings → GitHub Apps） | 你 | 切片 1 全部 | ✅ **已建**（2026-10-06 凭据在手） |
 | **P2** | 🔒 **App 权限勾选 6 项**：`Contents(RW)` · `Issues(RW)` · `Pull requests(RW)` · `Metadata(R)` · `Starring(RW)` · `Followers(RW)` | 你 | 缺 Starring/Followers 会让 Star / 关注 **直接 403** | ⬜ **待自查**（§6 第 1 项 · 1 分钟） |
 | **P3** | 🔒 **回调 URL 已配置** `gitduo://oauth/callback`（**不要**勾 "Request user authorization during installation"——勾了会绕过 `state` + PKCE） | 你 | 切片 1 回调收不到 | ⬜ **待自查**（§6 第 1–2 项） |
-| **P4** | `InMemoryTokenStore` → **Keychain 实现** | 我（切片 1 内） | 骨架期为跑通 UI 用内存实现，**必须在切片 1 替换** | 📌 已登记 |
+| **P4** | `InMemoryTokenStore` → **Keychain 实现** | 我（切片 1 内） | 骨架期为跑通 UI 用内存实现，**必须在切片 1 替换** | ✅ **已完成**（2026-10-06：`KeychainTokenStore`，真实 Keychain 往返 9 项单测） |
 | **P5** | 🔒 **`Secrets.xcconfig` 填真实 `client_id` + `client_secret`** | 你 | 只填一项会在换令牌那步失败（决策 #30 强制 secret） | ✅ **已完成**（2026-10-06 实测：格式干净 + 已注入构建产物） |
 | **P6** | 🔒 三处留白（界面语言 / App 图标 / 发布准备） | 你 | 不影响功能，仅影响"能否提审" | 📌 已确认暂不补 |
 
 **P1 / P5 已完成（2026-10-06 实测）**：`Secrets.xcconfig` 两项格式干净、被 git 正确忽略、**已确认注入构建产物**
 （`GitDuoClientID` 20 字符 / `GitDuoClientSecret` 40 字符 —— 非占位、非未展开字面量）；
-回调 scheme `gitduo` 已在产物中；`make verify` 全绿（三包单测 + 模拟器构建）。
+回调 scheme `gitduo` 已在产物中；`make verify` 全绿（四包单测 + 模拟器构建）。
 
 **还剩 P2 / P3 一次 1 分钟自查**（代码层面验不了，只能你在 GitHub 侧看）：
 照 `GITHUB-APP-SETUP.md` §6 打开授权页链接 → ① 数权限是不是 **6 条**、与原型登录页预告**一字不差**（验 P2）；

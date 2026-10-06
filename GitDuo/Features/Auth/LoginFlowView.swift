@@ -1,0 +1,168 @@
+import GitDuoAuth
+import GitDuoDesign
+import SwiftUI
+
+/// 登录门禁 —— 未认证时的**全屏**界面（PRD §4.0.1 / TECH_SPEC §3.8）。
+///
+/// 铁律：此时**不构建 `TabView`**。否则 Tab 栏会露在登录页下方，
+/// 各 Tab 的 `.task` 还会带着空令牌发请求。
+struct LoginFlowView: View {
+
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        switch env.authState {
+        case .authenticating:
+            AuthorizingView()
+        case .unauthenticated, .authenticated:
+            LoginFormView()
+        }
+    }
+}
+
+// MARK: - 登录页
+
+private struct LoginFormView: View {
+
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Theme.Spacing.xl) {
+                hero
+                permissionCard
+                foot
+            }
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.top, Theme.Spacing.xxl)
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+        .background(Theme.Palette.background)
+    }
+
+    private var hero: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            // ⚠️ 品牌标识（GitHub mark）属「发布准备」待补项，与 App 图标同批
+            //（`project.yml` 已注明）。此处在补上之前用代码符号占位。
+            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                .font(.system(size: 46, weight: .semibold))
+                .foregroundStyle(Theme.Palette.textPrimary)
+
+            Text("GitDuo")
+                .font(Theme.Font.largeTitle)
+                .foregroundStyle(Theme.Palette.textPrimary)
+
+            Text("为 iPhone 打造的 GitHub 客户端\n代码 · Issues · Pull Requests 一站浏览")
+                .font(Theme.Font.footnote)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Theme.Palette.textSecondary)
+        }
+        .padding(.top, Theme.Spacing.l)
+    }
+
+    private var permissionCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            Text("登录后 GitDuo 会申请")
+                .font(Theme.Font.footnote)
+                .foregroundStyle(Theme.Palette.textSecondary)
+
+            ForEach(AuthPermission.all) { permission in
+                HStack(alignment: .top, spacing: Theme.Spacing.s) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.Palette.accentStrong)
+                        .padding(.top, 3)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(permission.title)
+                            .font(Theme.Font.bodyStrong)
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                        Text(permission.detail)
+                            .font(Theme.Font.caption)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.l)
+        .background(Theme.Palette.surface, in: .rect(cornerRadius: Theme.Radius.card))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.card)
+                .stroke(Theme.Palette.borderSoft)
+        }
+    }
+
+    private var foot: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Button {
+                Task { await env.signIn() }
+            } label: {
+                Text("使用 GitHub 登录")
+                    .font(Theme.Font.bodyStrong)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
+            .disabled(!AppConfig.isConfigured)
+
+            if let notice = env.notice {
+                HStack(alignment: .top, spacing: Theme.Spacing.xs) {
+                    Image(systemName: notice.isError ? "exclamationmark.triangle" : "info.circle")
+                    Text(notice.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(Theme.Font.caption)
+                .foregroundStyle(notice.isError ? Theme.Palette.destructive : Theme.Palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // 三句产品承诺走单一数据源（`AuthDisclosure`）：它们必须与实现同时成立，
+            // 因此不能是散在这里的三句字面量——那边的单测守着"文案没退回去"。
+            VStack(spacing: Theme.Spacing.xs) {
+                ForEach(AuthDisclosure.allCases, id: \.self) { disclosure in
+                    Text(disclosure.text)
+                        .foregroundStyle(disclosure == .installScope
+                            ? Theme.Palette.textSecondary
+                            : Theme.Palette.textTertiary)
+                }
+            }
+            .font(Theme.Font.caption)
+            .multilineTextAlignment(.center)
+
+            if !AppConfig.isConfigured {
+                Text("未检测到 client_id / client_secret（Secrets.xcconfig）")
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.destructive)
+            }
+        }
+    }
+}
+
+// MARK: - 授权中
+
+/// 系统浏览器关闭 → 换令牌 → 写 Keychain 之间的短暂等待态。
+///
+/// ⚠️ 真正消耗时间的是 `ASWebAuthenticationSession` 那一段，而那时系统浏览器盖在
+///    App 上面，用户看到的是 GitHub 的页面 —— 所以这个界面只在**收尾**时露出来，
+///    文案必须如实说明此刻在做什么（换令牌、写 Keychain），而不是含糊的"请稍候"。
+private struct AuthorizingView: View {
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            ProgressView()
+                .controlSize(.large)
+
+            Text("正在完成授权…")
+                .font(Theme.Font.bodyStrong)
+                .foregroundStyle(Theme.Palette.textPrimary)
+
+            Text("已收到回调 \(AppConfig.callbackURL)\n正在用授权码换取令牌并写入 Keychain")
+                .font(Theme.Font.caption)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Theme.Palette.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Palette.background)
+    }
+}

@@ -1,0 +1,621 @@
+import Foundation
+import GitHubAPI
+import GitDuoCore
+import Testing
+
+@testable import GitDuoAuth
+
+/// `AuthCoordinator` 的行为规格 —— 切片 1 的核心验收。
+///
+/// 依据：TECH_SPEC §3.1（授权流程八步）、§3.2（刷新与 single-flight）、
+///      §3.6（登出与撤销降级）、§3.8（取消 / 失败的出口）、§12.2。
+///
+/// `.serialized`：`StubURLProtocol` 的路由表是进程内共享状态，并行会互相覆盖。
+@Suite("AuthCoordinator · 授权编排 / 刷新 / 登出", .serialized)
+struct AuthCoordinatorTests {
+
+    // MARK: - 夹具
+
+    private static let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private static let credentials = GitHubAppCredentials(
+        clientID: "Iv23liTESTclientid",
+        clientSecret: "s3cr3t-soft",
+        callbackURL: "gitduo://oauth/callback",
+        apiVersion: "2026-03-10"
+    )
+
+    private static let tokenEndpointPath = "/login/oauth/access_token"
+    private static let revokePath = "/applications/Iv23liTESTclientid/grant"
+
+    // ⚠️ 写成**单行**：raw string（`#"""`）里反斜杠是字面量，用它续行会把 `\` 喂进 JSON。
+    private static let successJSON = """
+    {"access_token":"ghu_abc","expires_in":28800,"refresh_token":"ghr_xyz","refresh_token_expires_in":15897600,"token_type":"bearer","scope":""}
+    """
+
+    private static let refreshedJSON = """
+    {"access_token":"ghu_new","expires_in":28800,"refresh_token":"ghr_new","refresh_token_expires_in":15897600,"token_type":"bearer","scope":""}
+    """
+
+    private let store = InMemoryTokenStore()
+
+    private func makeCoordinator() -> AuthCoordinator {
+        AuthCoordinator(
+            credentials: Self.credentials,
+            tokenStore: store,
+            session: StubURLProtocol.makeSession(),
+            clock: { Self.fixedNow }
+        )
+    }
+
+    private func storedToken(
+        access: String = "ghu_old",
+        refresh: String = "ghr_old",
+        accessExpiresIn: TimeInterval = 8 * 3600,
+        refreshExpiresIn: TimeInterval = 15_897_600,
+        login: String = "jiangjiang"
+    ) -> StoredToken {
+        StoredToken(
+            accessToken: access,
+            refreshToken: refresh,
+            accessTokenExpiry: Self.fixedNow.addingTimeInterval(accessExpiresIn),
+            refreshTokenExpiry: Self.fixedNow.addingTimeInterval(refreshExpiresIn),
+            login: login
+        )
+    }
+
+    private func callbackURL(code: String, state: String) -> URL {
+        URL(string: "gitduo://oauth/callback?code=\(code)&state=\(state)")!
+    }
+
+    /// 从授权 URL 里取回 `state` —— 它才是回调该带的值（`beginAuthorization` 不外泄 verifier）。
+    private func state(of authorizeURL: URL) throws -> String {
+        let items = try #require(
+            URLComponents(url: authorizeURL, resolvingAgainstBaseURL: false)?.queryItems
+        )
+        return try #require(items.first { $0.name == "state" }?.value)
+    }
+
+    private func loadStored() throws -> StoredToken? {
+        try store.load()
+    }
+
+    // MARK: - 启动恢复
+
+    @Test("无凭据：直接未认证，且一个请求都不发")
+    func restoreWithoutCredentials() async throws {
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let state = await makeCoordinator().restore()
+
+        #expect(state == .unauthenticated)
+        #expect(StubURLProtocol.requests.isEmpty, "启动不该为了'确认未登录'去打扰 GitHub")
+    }
+
+    @Test("凭据新鲜：直接放行，不发请求（启动要快，也要省配额）")
+    func restoreWithFreshToken() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let state = await makeCoordinator().restore()
+
+        #expect(state == .authenticated(login: "jiangjiang"))
+        #expect(StubURLProtocol.requests.isEmpty)
+    }
+
+    @Test("access token 进入预刷新窗口：刷一次并落盘轮换后的令牌")
+    func restoreRefreshesWhenNearExpiry() async throws {
+        // 只剩 60 秒 → 落在"过期前 5 分钟"的窗口内
+        try store.save(storedToken(accessExpiresIn: 60))
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.refreshedJSON)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let state = await makeCoordinator().restore()
+
+        #expect(state == .authenticated(login: "jiangjiang"))
+        let stored = try #require(try loadStored())
+        #expect(stored.accessToken == "ghu_new")
+        #expect(stored.refreshToken == "ghr_new", "刷新会轮换 refresh_token，两个都要换掉")
+        #expect(stored.login == "jiangjiang", "登录名不能因为刷新而丢失")
+        #expect(stored.accessTokenExpiry == Self.fixedNow.addingTimeInterval(28_800))
+        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+    }
+
+    @Test("refresh token 已过期（6 个月）：清掉残留并回登录页，不发请求")
+    func restoreWhenRefreshTokenExpired() async throws {
+        try store.save(storedToken(refreshExpiresIn: -1))
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let state = await makeCoordinator().restore()
+
+        #expect(state == .unauthenticated)
+        #expect(try loadStored() == nil, "过期的凭据必须清掉，否则每次启动都在同一处失败")
+        #expect(StubURLProtocol.requests.isEmpty)
+    }
+
+    @Test("刷新遇网络故障：**不清凭据**，仍然放行（断网不等于被登出）")
+    func restoreKeepsCredentialsOnNetworkFailure() async throws {
+        try store.save(storedToken(accessExpiresIn: 60))
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, status: 500)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let state = await makeCoordinator().restore()
+
+        #expect(state == .authenticated(login: "jiangjiang"), "一次断网不该把用户登出")
+        #expect(try loadStored() != nil, "凭据必须留着——它很可能还在有效期内")
+    }
+
+    @Test("refresh token 被撤销（令牌端点以 200 回传错误）：清凭据并回登录页")
+    func restoreSignsOutWhenRefreshTokenRevoked() async throws {
+        try store.save(storedToken(accessExpiresIn: 60))
+        StubURLProtocol.setStubs([
+            .response(
+                "POST", Self.tokenEndpointPath,
+                #"{"error":"bad_refresh_token","error_description":"The refresh token is invalid."}"#
+            )
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let state = await makeCoordinator().restore()
+
+        #expect(state == .unauthenticated)
+        #expect(try loadStored() == nil)
+    }
+
+    // MARK: - 发起授权
+
+    @Test("授权 URL：恰好 5 个参数，且**不含** client_secret 与 code_verifier")
+    func beginAuthorizationURLShape() async throws {
+        let url = try await makeCoordinator().beginAuthorization()
+        let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        let fields = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") })
+
+        #expect(url.path == "/login/oauth/authorize")
+        #expect(fields["client_id"] == "Iv23liTESTclientid")
+        #expect(fields["redirect_uri"] == "gitduo://oauth/callback")
+        #expect(fields["code_challenge_method"] == "S256")
+        #expect(fields["state"]?.isEmpty == false)
+        #expect(fields["code_challenge"]?.isEmpty == false)
+        #expect(fields.count == 5)
+
+        #expect(fields["client_secret"] == nil, "授权 URL 会留在浏览器历史里，绝不能带 secret")
+        #expect(fields["code_verifier"] == nil, "verifier 只存内存，绝不外传")
+    }
+
+    @Test("每次发起授权都换一个 state（一次性，不可复用）")
+    func beginAuthorizationUsesFreshState() async throws {
+        let coordinator = makeCoordinator()
+        let first = try state(of: try await coordinator.beginAuthorization())
+        let second = try state(of: try await coordinator.beginAuthorization())
+
+        #expect(first != second)
+    }
+
+    @Test("凭据未配置：拒绝发起授权，不产生注定失败的跳转")
+    func beginAuthorizationRefusesWhenNotConfigured() async throws {
+        let coordinator = AuthCoordinator(
+            credentials: GitHubAppCredentials(
+                clientID: "",
+                clientSecret: "",
+                callbackURL: "gitduo://oauth/callback",
+                apiVersion: "2026-03-10"
+            ),
+            tokenStore: store,
+            session: StubURLProtocol.makeSession(),
+            clock: { Self.fixedNow }
+        )
+
+        await #expect(throws: AuthError.notConfigured) {
+            _ = try await coordinator.beginAuthorization()
+        }
+    }
+
+    // MARK: - 处理回调
+
+    @Test("完整授权：校验 state → 换令牌 → GET /user → 写 Keychain")
+    func completeAuthorizationHappyPath() async throws {
+        let coordinator = makeCoordinator()
+        let authorizeURL = try await coordinator.beginAuthorization()
+        let expectedState = try state(of: authorizeURL)
+
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.successJSON),
+            .response("GET", "/user", #"{"login":"jiangjiang"}"#)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: callbackURL(code: "the-code", state: expectedState)
+        )
+
+        #expect(outcome == .authenticated(login: "jiangjiang"))
+        let stored = try #require(try loadStored())
+        #expect(stored.accessToken == "ghu_abc")
+        #expect(stored.refreshToken == "ghr_xyz")
+        #expect(stored.login == "jiangjiang")
+        #expect(stored.accessTokenExpiry == Self.fixedNow.addingTimeInterval(28_800))
+        #expect(stored.refreshTokenExpiry == Self.fixedNow.addingTimeInterval(15_897_600))
+        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+        #expect(StubURLProtocol.count(method: "GET", path: "/user") == 1)
+    }
+
+    @Test("换令牌请求体带 client_secret，且 verifier 是本次授权生成的那个")
+    func completeAuthorizationSendsPKCEMaterial() async throws {
+        let coordinator = makeCoordinator()
+        let authorizeURL = try await coordinator.beginAuthorization()
+        let expectedState = try state(of: authorizeURL)
+
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.successJSON),
+            .response("GET", "/user", #"{"login":"jiangjiang"}"#)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        _ = await coordinator.completeAuthorization(
+            callbackURL: callbackURL(code: "the-code", state: expectedState)
+        )
+
+        let exchange = try #require(
+            StubURLProtocol.requests.first { $0.httpMethod == "POST" }
+        )
+        let body = try #require(StubURLProtocol.bodyData(of: exchange))
+        let fields = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+
+        #expect(fields["client_secret"] == "s3cr3t-soft")
+        #expect(fields["redirect_uri"] == "gitduo://oauth/callback")
+        let verifier = try #require(fields["code_verifier"])
+        #expect(verifier.count >= 43, "RFC 7636 §4.1 要求 43–128 字符")
+
+        // verifier 必须与授权 URL 里的 challenge 对应（S256），否则换令牌会被拒
+        let items = try #require(URLComponents(url: authorizeURL, resolvingAgainstBaseURL: false)?.queryItems)
+        let challenge = try #require(items.first { $0.name == "code_challenge" }?.value)
+        #expect(PKCE.codeChallenge(for: verifier) == challenge)
+    }
+
+    @Test("不是本 App 的回调：静默丢弃，且不碰网络")
+    func completeAuthorizationIgnoresForeignScheme() async throws {
+        let coordinator = makeCoordinator()
+        _ = try await coordinator.beginAuthorization()
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: URL(string: "evil://oauth/callback?code=x&state=y")!
+        )
+
+        #expect(outcome == .ignored)
+        #expect(StubURLProtocol.requests.isEmpty)
+    }
+
+    @Test("伪装路径（host 不同）：同样丢弃 —— 只比 path 会漏掉它")
+    func completeAuthorizationIgnoresDisguisedHost() async throws {
+        let coordinator = makeCoordinator()
+        _ = try await coordinator.beginAuthorization()
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: URL(string: "gitduo://evil/callback?code=x&state=y")!
+        )
+
+        #expect(outcome == .ignored)
+        #expect(StubURLProtocol.requests.isEmpty)
+    }
+
+    @Test("state 不匹配：拒绝，且绝不拿这个 code 去换令牌")
+    func completeAuthorizationRejectsStateMismatch() async throws {
+        let coordinator = makeCoordinator()
+        _ = try await coordinator.beginAuthorization()
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.successJSON)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: callbackURL(code: "attacker-code", state: "not-the-state")
+        )
+
+        #expect(outcome == .failed(.callbackRejected(.stateMismatch)))
+        #expect(StubURLProtocol.requests.isEmpty, "state 不对就绝不能把 code 发出去")
+        #expect(try loadStored() == nil)
+    }
+
+    @Test("用户取消（error=access_denied）：算正常操作，不报错、不写凭据")
+    func completeAuthorizationTreatsDenialAsCancelled() async throws {
+        let coordinator = makeCoordinator()
+        _ = try await coordinator.beginAuthorization()
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: URL(string: "gitduo://oauth/callback?error=access_denied&error_description=The+user+denied")!
+        )
+
+        #expect(outcome == .cancelled, "取消不是错误——文案上不该吓唬用户")
+        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(try loadStored() == nil)
+    }
+
+    @Test("GitHub 回传其他 error：失败，且文案不做网址编码直出")
+    func completeAuthorizationReportsServiceError() async throws {
+        let coordinator = makeCoordinator()
+        _ = try await coordinator.beginAuthorization()
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: URL(string: "gitduo://oauth/callback?error=bad_verification_code&error_description=Code+expired")!
+        )
+
+        #expect(outcome == .failed(.callbackRejected(
+            .serviceError(code: "bad_verification_code", description: "Code expired")
+        )))
+        if case let .failed(error) = outcome {
+            let text = error.errorDescription ?? ""
+            #expect(!text.contains("+"), "`+` 必须还原成空格，否则用户看到的是 Code+expired")
+        }
+    }
+
+    @Test("没有等待中的授权就收到回调：按 state 不匹配拒绝（不会凭空登录）")
+    func completeAuthorizationWithoutPendingContext() async throws {
+        let coordinator = makeCoordinator()
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: callbackURL(code: "the-code", state: "any-state")
+        )
+
+        #expect(outcome == .failed(.callbackRejected(.stateMismatch)))
+    }
+
+    @Test("同一个回调投递两次：第二次必须失败（state 一次性）")
+    func completeAuthorizationRejectsReplay() async throws {
+        let coordinator = makeCoordinator()
+        let authorizeURL = try await coordinator.beginAuthorization()
+        let expectedState = try state(of: authorizeURL)
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.successJSON),
+            .response("GET", "/user", #"{"login":"jiangjiang"}"#)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let callback = callbackURL(code: "the-code", state: expectedState)
+        let first = await coordinator.completeAuthorization(callbackURL: callback)
+        let second = await coordinator.completeAuthorization(callbackURL: callback)
+
+        #expect(first == .authenticated(login: "jiangjiang"))
+        #expect(second == .failed(.callbackRejected(.stateMismatch)))
+    }
+
+    @Test("换令牌失败：不写凭据 —— 宁可没登录，也不要半个凭据")
+    func completeAuthorizationDoesNotPersistOnExchangeFailure() async throws {
+        let coordinator = makeCoordinator()
+        let authorizeURL = try await coordinator.beginAuthorization()
+        let expectedState = try state(of: authorizeURL)
+        StubURLProtocol.setStubs([
+            .response(
+                "POST", Self.tokenEndpointPath,
+                #"{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired."}"#
+            )
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: callbackURL(code: "the-code", state: expectedState)
+        )
+
+        #expect(outcome == .failed(.oauth(.tokenEndpointError(
+            code: "bad_verification_code",
+            description: "The code passed is incorrect or expired."
+        ))))
+        #expect(try loadStored() == nil)
+    }
+
+    @Test("GET /user 校验失败（401）：不写凭据，授权视为未完成")
+    func completeAuthorizationDoesNotPersistWhenProfileFails() async throws {
+        let coordinator = makeCoordinator()
+        let authorizeURL = try await coordinator.beginAuthorization()
+        let expectedState = try state(of: authorizeURL)
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.successJSON),
+            .response("GET", "/user", "", status: 401)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await coordinator.completeAuthorization(
+            callbackURL: callbackURL(code: "the-code", state: expectedState)
+        )
+
+        #expect(outcome == .failed(.oauth(.httpStatus(401))))
+        #expect(try loadStored() == nil, "步骤 8 没过就不算登录（§3.1）")
+    }
+
+    // MARK: - 令牌供给
+
+    @Test("未登录时索取令牌：抛 notAuthenticated（不静默返回空串）")
+    func validAccessTokenRequiresSession() async throws {
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        await #expect(throws: AuthError.notAuthenticated) {
+            _ = try await makeCoordinator().validAccessToken()
+        }
+    }
+
+    @Test("令牌新鲜：直接返回，不刷新（省一次往返，也省配额）")
+    func validAccessTokenReturnsFreshToken() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let token = try await makeCoordinator().validAccessToken()
+
+        #expect(token == "ghu_old")
+        #expect(StubURLProtocol.requests.isEmpty)
+    }
+
+    @Test("令牌进入预刷新窗口：先刷新再返回新令牌")
+    func validAccessTokenRefreshesWhenNeeded() async throws {
+        try store.save(storedToken(accessExpiresIn: 30))
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.refreshedJSON)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let token = try await makeCoordinator().validAccessToken()
+
+        #expect(token == "ghu_new")
+        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+    }
+
+    // MARK: - single-flight
+
+    @Test("并发 5 次强制刷新：令牌端点只收到 1 个请求（并发刷新会互相作废）")
+    func refreshIsSingleFlight() async throws {
+        try store.save(storedToken(accessExpiresIn: 60))
+        StubURLProtocol.setStubs([
+            .response("POST", Self.tokenEndpointPath, Self.refreshedJSON, delay: 0.3)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let coordinator = makeCoordinator()
+        let results = await withTaskGroup(of: Result<String, any Error>.self) { group in
+            for _ in 0..<5 {
+                group.addTask {
+                    do { return .success(try await coordinator.forceRefreshAccessToken()) }
+                    catch { return .failure(error) }
+                }
+            }
+            var collected: [Result<String, any Error>] = []
+            for await result in group { collected.append(result) }
+            return collected
+        }
+
+        #expect(results.count == 5)
+        for result in results {
+            #expect(try result.get() == "ghu_new", "所有调用者都应拿到同一次刷新的结果")
+        }
+        #expect(
+            StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1,
+            "并发刷新必须共享同一个请求，否则 refresh_token 轮换会互相作废"
+        )
+    }
+
+    // MARK: - 登出
+
+    @Test("登出：先撤销 GitHub 侧授权（DELETE grant，Basic Auth），再清本地凭据")
+    func signOutRevokesThenClears() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([
+            .response("DELETE", Self.revokePath, status: 204)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await makeCoordinator().signOut()
+
+        #expect(outcome == .revoked)
+        #expect(try loadStored() == nil)
+
+        let revoke = try #require(StubURLProtocol.requests.first)
+        #expect(revoke.httpMethod == "DELETE")
+        #expect(revoke.url?.path == Self.revokePath)
+        let expectedAuth = "Basic " + Data("Iv23liTESTclientid:s3cr3t-soft".utf8).base64EncodedString()
+        #expect(revoke.value(forHTTPHeaderField: "Authorization") == expectedAuth)
+
+        let body = try #require(StubURLProtocol.bodyData(of: revoke))
+        let fields = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(fields["access_token"] == "ghu_old")
+    }
+
+    @Test("撤销失败（422）：**仍清空本地凭据**，只把结局降级")
+    func signOutClearsLocallyWhenRevokeFails() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([
+            .response("DELETE", Self.revokePath, status: 422)
+        ])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await makeCoordinator().signOut()
+
+        #expect(outcome == .revokedLocallyOnly, "降级文案：提示'未能撤销 GitHub 侧授权'")
+        #expect(try loadStored() == nil, "撤销失败不阻塞登出（§3.6）")
+    }
+
+    @Test("离线撤销（网络错误）：同样本地登出成功")
+    func signOutClearsLocallyWhenOffline() async throws {
+        try store.save(storedToken())
+        StubURLProtocol.setStubs([])   // 无路由 ⇒ 请求失败
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await makeCoordinator().signOut()
+
+        #expect(outcome == .revokedLocallyOnly)
+        #expect(try loadStored() == nil)
+    }
+
+    @Test("无凭据时登出：视为已登出，不发请求")
+    func signOutWithoutCredentials() async throws {
+        StubURLProtocol.setStubs([])
+        defer { StubURLProtocol.reset() }
+
+        let outcome = await makeCoordinator().signOut()
+
+        #expect(outcome == .revoked)
+        #expect(StubURLProtocol.requests.isEmpty)
+    }
+
+    // MARK: - 文案红线
+
+    @Test("错误文案绝不泄漏 secret / 令牌 / 授权码")
+    func errorDescriptionsDoNotLeakSecrets() {
+        let errors: [AuthError] = [
+            .notConfigured,
+            .notAuthenticated,
+            .refreshTokenExpired,
+            .missingAuthorizationContext,
+            .callbackRejected(.stateMismatch),
+            .callbackRejected(.missingCode),
+            .callbackRejected(.missingState),
+            .callbackRejected(.serviceError(code: "bad_verification_code", description: "the-code")),
+            .credentialStoreFailed,
+            .oauth(.notConfigured),
+            .oauth(.invalidResponse),
+            .oauth(.httpStatus(500)),
+            .oauth(.tokenEndpointError(code: "bad_verification_code", description: "the-code")),
+            .oauth(.missingAccessToken),
+            .oauth(.missingRefreshToken),
+            .oauth(.revokeFailed(422))
+        ]
+
+        for error in errors {
+            let text = error.errorDescription ?? ""
+            #expect(!text.isEmpty, "\(error) 没有面向用户的文案")
+            #expect(!text.contains("s3cr3t-soft"), "文案泄漏了 secret：\(text)")
+            #expect(!text.contains("ghu_"), "文案泄漏了访问令牌：\(text)")
+            #expect(!text.contains("ghr_"), "文案泄漏了刷新令牌：\(text)")
+            #expect(!text.contains("the-code"), "文案泄漏了授权码：\(text)")
+        }
+    }
+
+    @Test("只有'凭据失效'类错误才该导致登出；网络故障不算")
+    func onlyCredentialErrorsInvalidateSession() {
+        #expect(AuthError.refreshTokenExpired.invalidatesCredentials)
+        #expect(AuthError.oauth(.httpStatus(401)).invalidatesCredentials)
+        #expect(AuthError.oauth(.tokenEndpointError(code: "bad_refresh_token", description: nil))
+            .invalidatesCredentials)
+
+        #expect(!AuthError.oauth(.httpStatus(500)).invalidatesCredentials)
+        #expect(!AuthError.oauth(.httpStatus(403)).invalidatesCredentials)
+        #expect(!AuthError.oauth(.invalidResponse).invalidatesCredentials)
+        #expect(!AuthError.notConfigured.invalidatesCredentials)
+        #expect(!AuthError.notAuthenticated.invalidatesCredentials)
+    }
+}

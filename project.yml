@@ -11,6 +11,8 @@ options:
 packages:
   GitHubAPI:
     path: Packages/GitHubAPI
+  GitDuoAuth:
+    path: Packages/GitDuoAuth
   GitDuoCore:
     path: Packages/GitDuoCore
   GitDuoDesign:
@@ -37,6 +39,8 @@ targets:
     dependencies:
       - package: GitHubAPI
         product: GitHubAPI
+      - package: GitDuoAuth
+        product: GitDuoAuth
       - package: GitDuoCore
         product: GitDuoCore
       - package: GitDuoDesign

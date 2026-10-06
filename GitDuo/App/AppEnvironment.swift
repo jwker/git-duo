@@ -1,52 +1,163 @@
 import Foundation
 import GitHubAPI
+import GitDuoAuth
 import GitDuoCore
 
 /// 组合根 —— **唯一的依赖装配点**。
 ///
 /// 依据：TECH_SPEC §2.4。
 /// 铁律：View / ViewModel **不得自行构造客户端**，一律从 environment 取。
-///
-/// 本文件当前处于骨架阶段：只装配"已存在的东西"。
-/// 各 Feature 的 Repository / ViewModel 在其对应垂直切片并入（顺序见 AGENTS.md）。
 @MainActor
 @Observable
 final class AppEnvironment {
 
-    /// 认证状态（驱动 `RootView` 的门禁二分）
-    var authState: AuthState
+    // MARK: - 状态
 
-    /// 凭据存储。生产实现应为 Keychain 版本；骨架期用内存实现以便跑通 UI。
-    /// ⚠️ 切片 1（Auth）必须替换为 Keychain 实现 —— 见 REVIEW-CHECKLIST 前置条件 P4。
+    /// 认证状态（驱动 `RootView` 的门禁二分）
+    var authState: AuthState = .unauthenticated
+
+    /// 启动恢复是否仍在进行。
+    /// 用它把"启动那一瞬"与"确实未登录"分开——否则冷启动会先闪一下登录页，
+    /// 再跳进主界面（已登录用户每次启动都看得到，很廉价但很显眼的瑕疵）。
+    var isBootstrapping = true
+
+    /// 登录失败 / 登出降级的一次性提示
+    var notice: AuthNotice?
+
+    // MARK: - 依赖
+
+    /// 凭据存储。生产实现是 Keychain（`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`，§3.3）。
     let tokenStore: any TokenStore
+
+    /// 认证编排（`GitDuoAuth`）——生成 PKCE、换令牌、刷新、登出撤销都在里面。
+    let authCoordinator: AuthCoordinator
 
     /// 每个 Tab 各自的导航栈
     let router = Router()
 
+    /// 系统浏览器胶水（无逻辑，因此不注入、不可替身）
+    @ObservationIgnored private let webAuth = WebAuthenticationSession()
+
     init(
-        authState: AuthState = .unauthenticated,
-        tokenStore: any TokenStore = InMemoryTokenStore()
+        tokenStore: any TokenStore = KeychainTokenStore(),
+        credentials: GitHubAppCredentials = AppConfig.credentials
     ) {
-        self.authState = authState
         self.tokenStore = tokenStore
+        self.authCoordinator = AuthCoordinator(credentials: credentials, tokenStore: tokenStore)
     }
 
-    /// 骨架期的"跳过登录"开关：仅供在登录切片落地前检视主界面。
-    /// ⚠️ 切片 1 完成后必须删除（不得出现在任何发布构建里）。
-    func debugBypassLogin() {
-        authState = .authenticated(login: "jiangjiang")
+    // MARK: - 启动
+
+    /// 冷启动时决定进主界面还是登录页。
+    func bootstrap() async {
+        switch await authCoordinator.restore() {
+        case let .authenticated(login):
+            authState = .authenticated(login: login)
+        case .unauthenticated:
+            authState = .unauthenticated
+        }
+        isBootstrapping = false
+    }
+
+    // MARK: - 登录
+
+    /// 点「使用 GitHub 登录」→ 系统浏览器 → 回调 → 换令牌 → 进主界面。
+    func signIn() async {
+        guard case .unauthenticated = authState else { return }
+
+        notice = nil
+        authState = .authenticating
+
+        do {
+            let authorizeURL = try await authCoordinator.beginAuthorization()
+            let callbackURL = try await webAuth.authenticate(
+                url: authorizeURL,
+                callbackScheme: AppConfig.callbackScheme
+            )
+            apply(await authCoordinator.completeAuthorization(callbackURL: callbackURL))
+        } catch {
+            // 已被别处的回调处理完了（见 `apply` 里的守卫）——不要再改动状态
+            guard case .authenticating = authState else { return }
+            authState = .unauthenticated
+            if !WebAuthenticationSession.isUserCancellation(error) {
+                notice = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    /// 系统把 `gitduo://` 交回 App 时的入口（`onOpenURL`）。
+    func handleCallback(_ url: URL) async {
+        apply(await authCoordinator.completeAuthorization(callbackURL: url))
+    }
+
+    /// 把编排层的结局落到 UI 状态。
+    private func apply(_ outcome: AuthCoordinator.AuthorizationOutcome) {
+        switch outcome {
+        case let .authenticated(login):
+            authState = .authenticated(login: login)
+            notice = nil
+
+        case .cancelled, .ignored:
+            // 用户取消 / 不是给我们的回调：回登录页，**不报错**（§3.8 出口表）
+            if case .authenticating = authState { authState = .unauthenticated }
+
+        case let .failed(error):
+            // ⚠️ 这道守卫不是多余的：回调可能被投递两次——`ASWebAuthenticationSession`
+            //    自己拦一次，系统 `onOpenURL` 再转一次。若不加守卫，第二次必然拿到的
+            //    `stateMismatch`（state 是一次性的）会把**刚成功的登录**打回登录页。
+            guard case .authenticating = authState else { return }
+            authState = .unauthenticated
+            notice = .error(error.errorDescription ?? "登录失败，请重试")
+        }
+    }
+
+    // MARK: - 登出
+
+    /// §3.6 的登出四步。①② 在 `AuthCoordinator`（能单测）；③④ 在这里——
+    /// 它们分别依赖各 Feature 的存储与导航层，编排层不认识这些。
+    func signOut() async {
+        let outcome = await authCoordinator.signOut()
+
+        // ③ 清空与该账号绑定的本地数据（最近访问 / 收藏夹与归属映射 / 搜索历史 /
+        //    按仓库的分支记忆 / 接口与图片缓存）—— 这些存储属各 Feature，
+        //    在切片 3+ 逐个落地时**接入此处**。
+        // ④ 重置全部导航栈与 Tab 选中项
+        router.resetAll()
+
+        authState = .unauthenticated
+        notice = outcome == .revoked
+            ? .info("已退出登录 · 已同时撤销 GitHub 侧授权")
+            : .info("已退出登录 · 本机令牌已清除（未能撤销 GitHub 侧授权）")
     }
 }
 
-// MARK: - 骨架期占位类型说明
+// MARK: - 提示
 
-/// ⚠️ 以下类型是**契约占位**，将在对应切片被真实实现替换：
-/// - `TokenStore`（GitDuoCore）：Keychain 实现 —— 切片 1
-/// - `GitHubRESTClient` / `GitHubGraphQLClient`（GitHubAPI）：切片 2
-/// 占位不是"以后再补"，而是**明确标注的待办**：任何以占位形式存在的类型都必须在此登记。
+/// 登录页的一次性提示（错误或说明）。
+enum AuthNotice: Equatable {
+    case error(String)
+    case info(String)
+
+    var text: String {
+        switch self {
+        case let .error(text), let .info(text): text
+        }
+    }
+
+    var isError: Bool {
+        if case .error = self { return true }
+        return false
+    }
+}
+
+// MARK: - 骨架期占位登记
+
+/// ⚠️ 任何以**占位**（stub）形式存在的类型都必须登记在此（AGENTS.md §5.2）；
+/// 真实实现落地时把对应条目**一并删除**——留着不删，登记册就退化成了装饰。
+///
+/// 已消解：`TokenStore` 的 Keychain 实现（切片 1 → `KeychainTokenStore`，前置条件 P4）。
 enum SkeletonPlaceholders {
     static let registry: [String] = [
-        "TokenStore.Keychain 实现（切片 1）",
         "GitHubRESTClient / ETag 缓存 / 分页 / 限流（切片 2）",
         "GitHubGraphQLClient（切片 2）",
         "各 Feature 的 Repository 与 ViewModel（切片 3+）"

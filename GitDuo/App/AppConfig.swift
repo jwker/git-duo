@@ -1,4 +1,5 @@
 import Foundation
+import GitHubAPI
 
 /// App 运行时配置的**唯一读取点**。
 ///
@@ -29,22 +30,22 @@ enum AppConfig {
     /// 回调完整 URL：`gitduo://oauth/callback`
     static let callbackURL = "gitduo://oauth/callback"
 
-    /// 授权端点（§3.1 步骤 3）
-    static let authorizeEndpoint = URL(string: "https://github.com/login/oauth/authorize")!
-
-    /// 换令牌端点（§3.1 步骤 6，**必须携带 `client_secret`**）
-    static let accessTokenEndpoint = URL(string: "https://github.com/login/oauth/access_token")!
-
-    /// 撤销整项授权（登出时调用，§3.6）：
-    /// `DELETE /applications/{client_id}/grant`，Basic Auth 用 `client_id` : `client_secret`。
-    /// 未配置 client_id 时返回 nil（调用方直接走"仅清本地"的降级路径）。
-    static var revokeGrantURL: URL? {
-        guard !gitHubClientID.isEmpty else { return nil }
-        return URLComponents(string: "https://api.github.com/applications/\(gitHubClientID)/grant")?.url
-    }
-
     /// 所有请求必须携带的 API 版本头（§3.6）
     static let apiVersion = "2026-03-10"
+
+    /// 组装成数据层要的凭据结构 —— 组合根**唯一一次**把配置交给下层的地方。
+    ///
+    /// ⚠️ 端点的 URL（授权页 / 换令牌 / 撤销 grant）**不在这里定义**：
+    ///    它们属于 `GitHubAppCredentials`（`GitHubAPI`），由它按 `client_id` 派生。
+    ///    本文件早先也存过一份，两份真相必然漂移（登出端点就是例子）——已删除。
+    static var credentials: GitHubAppCredentials {
+        GitHubAppCredentials(
+            clientID: gitHubClientID,
+            clientSecret: gitHubClientSecret,
+            callbackURL: callbackURL,
+            apiVersion: apiVersion
+        )
+    }
 
     private static func infoValue(_ key: String) -> String {
         (Bundle.main.object(forInfoDictionaryKey: key) as? String ?? "")

@@ -1,5 +1,6 @@
-import SwiftUI
+import GitDuoCore
 import GitDuoDesign
+import SwiftUI
 
 /// 根视图 —— 按认证状态**二分**。
 ///
@@ -10,57 +11,28 @@ struct RootView: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        switch env.authState {
-        case .unauthenticated, .authenticating:
-            LoginFlowPlaceholder()
-        case let .authenticated(login):
-            MainTabView(login: login)
-        }
+        content
+            // 冷启动恢复凭据（读 Keychain，必要时刷新一次）。只在根视图出现时跑一次。
+            .task { await env.bootstrap() }
     }
-}
 
-/// ⚠️ 登录流程占位 —— **切片 1 用真实的 `LoginFlowView` 替换整个类型**。
-/// 现在只提供"进入主界面"的临时通道，让主界面骨架可被检视。
-private struct LoginFlowPlaceholder: View {
-
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.l) {
-            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(Theme.Palette.textSecondary)
-
-            Text("GitDuo")
-                .font(Theme.Font.largeTitle)
-                .foregroundStyle(Theme.Palette.textPrimary)
-
-            Text("登录流程 · 切片 1 落地")
-                .font(Theme.Font.footnote)
-                .foregroundStyle(Theme.Palette.textSecondary)
-
-            Text("PRD §4.0 / TECH_SPEC §3.1 · §3.8")
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Palette.textTertiary)
-
-            if !AppConfig.isConfigured {
-                Text("未检测到 client_id（Secrets.xcconfig）")
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.destructive)
+    @ViewBuilder
+    private var content: some View {
+        if env.isBootstrapping {
+            // 启动那一瞬：既不是登录页也不是主界面。
+            // 直接渲染登录页会让已登录用户每次启动都看到一次"闪一下"。
+            Theme.Palette.background.ignoresSafeArea()
+        } else {
+            switch env.authState {
+            case .unauthenticated, .authenticating:
+                LoginFlowView()
+            case let .authenticated(login):
+                MainTabView(login: login)
             }
-
-            // ⚠️ 临时通道：切片 1 完成后删除
-            Button("跳过登录（骨架期临时）") {
-                env.debugBypassLogin()
-            }
-            .buttonStyle(.glass)
-            .padding(.top, Theme.Spacing.m)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.Palette.background)
     }
 }
 
 #Preview {
-    RootView().environment(AppEnvironment())
+    RootView().environment(AppEnvironment(tokenStore: InMemoryTokenStore()))
 }
