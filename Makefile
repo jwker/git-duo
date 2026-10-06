@@ -61,7 +61,14 @@ device: gen
 		-allowProvisioningUpdates \
 		-derivedDataPath build/DerivedData-dev \
 		build
-	$(MAKE) install-device launch-device
+	$(MAKE) install-device
+	@$(MAKE) launch-device 2>/dev/null || { \
+		echo ""; \
+		echo "⚠️  启动未成功。构建与安装均已成功，最常见的原因是**设备锁屏**。"; \
+		echo "    解锁设备后重跑：make launch-device"; \
+		echo "    若这是第一次安装，还需先在设备上信任证书："; \
+		echo "      设置 → 通用 → VPN与设备管理 → 开发者 App → 信任"; \
+	}
 
 install-device:
 	xcrun devicectl device install app --device $(DEVICE_ID) $(DEVICE_APP)

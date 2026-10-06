@@ -16,15 +16,22 @@
 | 4 | 填 Team ID | `Secrets.xcconfig` 的 `GITDUO_DEVELOPMENT_TEAM` | 见下方取值方法 |
 
 **第 1 步是整个流程里唯一无法用命令代替的**（需要密码，通常还有两步验证）。
-本机现在的状态：钥匙串里有证书 `Apple Development: 331360520@qq.com (59T955ND9K)`，
-但 **Xcode 账号列表是空的** ⇒ 自动签名无人可问，构建报 `No Accounts`。
+本机状态（2026-10-06）：账号**已登录**，Team = `35FZY67FQU`（"weiku jiang (Personal Team)"，免费个人团队），
+Xcode 已自动生成 `com.gitduo.app` 的 profile（有效期至 10-13 —— 免费账号 7 天）。
+注意：钥匙串里另有一个**别的 Team**（`59T955ND9K`）的旧证书残留，**不要照它填**（见下）。
 
-**第 4 步取值**（括号里那串就是）：
+**第 4 步取值 —— 必须以「Xcode 登录账号的 Team」为准，不是钥匙串里那串：**
 
 ```bash
-security find-identity -v -p codesigning
-# 1) 1D492B... "Apple Development: 331360520@qq.com (59T955ND9K)"  ← 填 59T955ND9K
+defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier
+# → { "E76A6B0E-…" = ( { teamID = 35FZY67FQU; teamName = "… (Personal Team)"; } ); }
+#                       ↑ 填这个
 ```
+
+⚠️ **`security find-identity -v -p codesigning` 给出的 Team 可能与登录账号不同**（换过账号/换过机的常见残留）。
+两者不一致时，`xcodebuild` 会拿着一个没人认领的 Team ID 去找账号，报**极具误导性的**
+`No Accounts: Add a new account in Accounts settings` —— 让人误以为账号没登录（2026-10-06 实际踩到，
+排查花了半天）。**判据：`No Accounts` 先查 Team 是否对得上，再怀疑账号。**
 
 Team ID 和 client_id 一样属**本机个人配置**，所以放在 git-ignored 的 `Secrets.xcconfig`，
 **不写进 `project.yml`**（别人 clone 后不会误用你的团队）。
@@ -88,7 +95,8 @@ xcrun devicectl list devices       # 取 UDID
 | 报错 | 真因 | 解法 |
 |---|---|---|
 | `Signing for "GitDuo" requires a development team` | 没配 Team | §0 第 4 步 |
-| `No Accounts: Add a new account in Accounts settings` | Xcode 没登录 Apple ID | §0 第 1 步 🔒 |
+| `No Accounts: Add a new account in Accounts settings` | ① **`GITDUO_DEVELOPMENT_TEAM` 与登录账号的 Team 不符**（更常见、更误导）② Xcode 没登录 Apple ID | 先对 Team（§0 第 4 步），再查账号（§0 第 1 步 🔒） |
+| `Unable to install … ` / `Unable to launch … because the device was not … unlocked` | 设备锁屏（**构建与安装其实已成功**） | 解锁设备后重跑 `make launch-device` |
 | `No profiles for 'com.gitduo.app' were found` | 账号没登录，或 Bundle ID 被他人占用 | 先做 §0 第 1 步；仍失败则改 `project.yml` 的 `PRODUCT_BUNDLE_IDENTIFIER` |
 | `Unable to install … device is locked` | 设备锁屏 | 解锁设备 |
 | `Untrusted Developer` / 图标点了闪退 | 未信任证书 | §1 的「VPN与设备管理」放行 |
@@ -107,6 +115,16 @@ xcrun devicectl list devices       # 取 UDID
 | 3 | **杀进程后的持久化** | 模拟器重置/重装的行为与真机不同；真机还能顺带观察"删 App 不清 Keychain" |
 | 4 | **真实浏览器授权与回调** | 真机调起的是真实 Safari 会话、真实 GitHub 登录态、真实 `gitduo://` 跳回（模拟器的 `simctl openurl` 会先被**系统**确认框拦一道，App 侧处置验不到） |
 | 5 | **签名 / 描述文件 / 证书信任** | 模拟器构建走 `CODE_SIGNING_ALLOWED=NO`，整条链路根本没被行使 |
+
+> **实测记录（2026-10-06，iPhone 17 Pro）**：自动签名产出的 entitlements **只有三项** ——
+> `application-identifier` · `com.apple.developer.team-identifier` · `get-task-allow`，
+> **不含 `keychain-access-groups`**。按 iOS 规则，缺该 entitlement 时 Keychain 的默认 access group
+> 回落到 `application-identifier`（`TEAMID.com.gitduo.app`）⇒ **预期可用**，已列为 1.8 的实测项。
+> 若登录时 Keychain 写入失败并报 `errSecMissingEntitlement (-34018)`，再显式补该 entitlement。
+>
+> ```bash
+> codesign -d --entitlements :- build/DerivedData-dev/Build/Products/Debug-iphoneos/GitDuo.app
+> ```
 
 ---
 
