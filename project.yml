@@ -49,6 +49,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gitduo.app   # ⚠️ 占位（Bundle ID 属「发布准备」待补项）
         PRODUCT_NAME: GitDuo
+        # 真机签名（本机配置，取自 Secrets.xcconfig，**不把 Team ID 写死进版本库**）。
+        # 模拟器构建走 CODE_SIGNING_ALLOWED=NO，不读这两项 ⇒ 没有 Secrets.xcconfig 也能 make build。
+        # 免费个人 Apple ID 可用：本 App 不需要任何特殊 entitlement（Keychain 走默认 access group）。
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(GITDUO_DEVELOPMENT_TEAM)
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: "2.0"
         GENERATE_INFOPLIST_FILE: NO

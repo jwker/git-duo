@@ -21,7 +21,9 @@
 **四包单测 98 项全过**（GitHubAPI 43 · GitDuoAuth 36 · GitDuoCore 12 · GitDuoDesign 7）。
 
 ⚠️ **仍未做（1.8）**：真机手测 —— 真授权 → 令牌落 Keychain → **杀进程重启仍登录**。
-它需要 `REVIEW-CHECKLIST.md` §3 的 P2 / P3 那两项 GitHub 侧自查先通过（代码层面验不了）。
+**逐步流程、验收清单、错误对照见 `DEVICE-TESTING.md`**（`make device` 一键：构建 → 安装 → 启动）。
+当前卡点：**Xcode 里没有登录 Apple ID**（钥匙串有证书、但账号列表为空）⇒ 自动签名报 `No Accounts`。
+这一步代码层面无解，需手动做一次（`DEVICE-TESTING.md` §0 第 1 步）。
 在那之前，切片 1 只能说"本地全绿"，不能说"已验收"。
 
 未落地的界面一律用 `SkeletonScreen` 占位，**没有假数据冒充成品**（登记见 `AppEnvironment.swift`）。
@@ -37,6 +39,7 @@
 | `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**30 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
+| `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |
 
 **冲突裁决顺序：原型 > TECH_SPEC > PRD > 任何推测。**
 发现三者不一致时：**先报告，不要自行选一个实现**。
@@ -57,7 +60,11 @@ make gen      # xcodegen 生成 GitDuo.xcodeproj（改 project.yml / 增删文�
 make test     # 四个包的单测（Swift Testing，秒级）
 make build    # 为 iOS 模拟器构建 App（不签名）
 make verify   # 以上全跑 —— 提交前必跑
+make device   # 真机：构建(带签名) → 安装 → 启动 —— 手测用，见 DEVICE-TESTING.md
 ```
+
+> `make device` 与 `make verify` **互不影响**：前者需要 `Secrets.xcconfig` 里的 `GITDUO_DEVELOPMENT_TEAM`
+> 且要设备在线；后者走 `CODE_SIGNING_ALLOWED=NO`，没有签名配置也能跑 ⇒ 保住秒级闭环。
 
 **没有可执行的验证命令的改动，等于没做。** 改完必须给出 `make verify` 的结果。
 
@@ -146,6 +153,8 @@ make verify   # 以上全跑 —— 提交前必跑
 | 配额与性能预算 | TECH_SPEC §13.2、§13.3 |
 | 风险登记表 / 未来工作 | TECH_SPEC §15、§16 |
 | 页面与行为（产品口径） | PRD §4（页面）· §5（弹层）· §6（横切） |
+| 真机测试 / 手测验收 | `DEVICE-TESTING.md` |
+| GitHub App 配置 / 凭据 | `GITHUB-APP-SETUP.md` · `Secrets.xcconfig.example` |
 
 ---
 
