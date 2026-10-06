@@ -27,16 +27,14 @@ public struct GitHubOAuthClient: Sendable {
         self.session = session ?? Self.makeTokenSession()
     }
 
-    /// 令牌专用会话：**`urlCache = nil`** ⇒ 任何响应都无从落盘（`ephemeral` 同时不落盘 cookies）。
+    /// 令牌专用会话：**`urlCache = nil`** ⇒ 任何响应都无从落盘。
     ///
     /// 依据：TECH_SPEC §3.1 / §3.7 —— `client_secret` 与令牌响应不得进入任何缓存。
     /// ⚠️ 光设 `URLRequest.cachePolicy` **不够**：默认策略下 `URLCache` 仍会把响应存下来，
     ///    所以"不挂缓存"必须落在会话上；`cachePolicy` 只是第二道（见 `makeFormRequest`）。
+    ///    配置本体收在 `GitHubURLSession.noCache()` —— 与 API 会话共用一份，避免两处漂移。
     private static func makeTokenSession() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.urlCache = nil
-        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        return URLSession(configuration: configuration)
+        GitHubURLSession.noCache()
     }
 
     // MARK: - 步骤 3：授权页 URL

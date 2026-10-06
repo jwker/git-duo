@@ -89,7 +89,9 @@ public actor AuthCoordinator {
     ///
     /// ⚠️ `session` 默认为 `nil`，且**原样**转给 `GitHubOAuthClient` —— 后者借此选一个
     ///    不挂 `URLCache` 的专用会话（令牌响应不得落盘，§3.1 / §3.7）。
-    ///    只有 `GitHubUserEndpoint`（`GET /user`，不含机密）走 `URLSession.shared`。
+    ///    `GitHubUserEndpoint`（`GET /user`）同样**不走 `URLSession.shared`**——
+    ///    `URLCache` 连**请求对象**一起落盘，`Authorization` 头会明文进 `Cache.db`
+    ///    （2026-10-06 真机实测）；它默认走 `GitHubURLSession.shared`。
     public init(
         credentials: GitHubAppCredentials,
         tokenStore: any TokenStore,
@@ -101,7 +103,7 @@ public actor AuthCoordinator {
             oauthClient: GitHubOAuthClient(credentials: credentials, session: session),
             userEndpoint: GitHubUserEndpoint(
                 credentials: credentials,
-                session: session ?? .shared
+                session: session ?? GitHubURLSession.shared
             ),
             tokenStore: tokenStore,
             cachePurger: cachePurger,

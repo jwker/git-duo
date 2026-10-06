@@ -14,6 +14,12 @@ import Foundation
 /// - `URLProtocol` 拿到的 `request.httpBody` 通常是 `nil`，真实数据在 `httpBodyStream`
 ///   （见 `bodyData(of:)`）。
 /// - 静态状态在 Swift 6 严格并发下必须显式保护 ⇒ 用到本桩件的套件**必须 `.serialized`**。
+///
+/// ⚠️⚠️ **`.serialized` 只管套件内部**（2026-10-06 在 `GitHubAPITests` 真吃过）：Swift Testing
+/// 默认让**不同套件并行**，两个都用桩件的套件会互相覆盖响应 —— 症状是"单跑全绿、全量跑挂"
+/// （请求数变 0、或解出 `invalidResponse`），看着像代码坏了。
+/// 本包目前**只有一个套件**用它，故尚未触发；**一旦出现第二个，请照 `GitHubAPITests/StubURLProtocol.swift`
+/// 的 `Harness` 做法**改成"每套一份命名空间"，而不是靠 `.serialized` 硬扛。
 final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     /// 一条路由规则。`method` / `path` 为 `nil` 表示"任意"。

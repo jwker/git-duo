@@ -18,15 +18,19 @@
 | 1.6 | 登录段原型断言转 Swift 测试（权限 6 项 + 三项产品承诺） | ✅ |
 | 1.7 | 门禁接线：`RootView` 二分 + `LoginFlowView` + `WebAuthenticationSession` | ✅ |
 
-**四包单测 105 项全过**（GitHubAPI 45 · GitDuoAuth 39 · GitDuoCore 14 · GitDuoDesign 7）。
+**四包单测 115 项全过**（GitHubAPI 55 · GitDuoAuth 39 · GitDuoCore 14 · GitDuoDesign 7）。
 
-▶ **1.8 真机验收 7/10 已过**（iPhone 17 Pro，自动签名已打通）：真授权 → 令牌落 Keychain →
+▶ **1.8 真机验收 8/10 已过**（iPhone 17 Pro，自动签名已打通）：真授权 → 令牌落 Keychain →
 **杀进程重启仍登录**（Keychain 跨重装持久，实测无 `-34018`）→ 登出回登录页 →
-**GitHub 侧那条授权记录真的消失了** → **登出后设备上的 `Cache.db` 一条不剩**。
-⬜ 剩：第 3 步（P2 目视：授权页权限是否 6 条）、第 8 步（飞行模式冷启动）。
+**GitHub 侧那条授权记录真的消失了** → 登出后 `Cache.db` 一条不剩 →
+**飞行模式下冷启动仍在主界面**（断网 ≠ 登出）。
+⬜ 剩：第 3 步（P2 目视：授权页权限是否 6 条）。
 **逐步流程、验收清单、错误对照见 `DEVICE-TESTING.md`**（`make device` 一键：构建 → 安装 → 启动）。
 ⚠️ **真机上的一条硬经验**：改掉写入路径**不会**清除已经落盘的副本 —— 发现磁盘上有敏感残留时，
 除了修写入路径，还要问"**谁负责清它**"（本项目补在 `AuthCoordinator.signOut`）。
+⚠️ **同类第二课（同一天，更隐蔽）**：`URLCache` 落盘的**不只是响应体，还有序列化请求对象** ⇒
+一个"响应里没有凭据"的请求（`GET /user`）照样把 `Authorization: Bearer ghu_…` 写进 `Cache.db`。
+**"响应不含机密"推不出"这个请求可以走系统缓存"**；本包现在**所有出网会话都不挂 `URLCache`**（见 `GitHubURLSession`，决策 #32）。
 
 未落地的界面一律用 `SkeletonScreen` 占位，**没有假数据冒充成品**（登记见 `AppEnvironment.swift`）。
 
@@ -38,7 +42,7 @@
 |---|---|---|
 | `redesign/prototype/` | **唯一可点验收依据**（入口 `index.html`；`scripts/` 16 个 JS · `styles/` 5 个 CSS） | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
-| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**31 项全部【已定】**） |
+| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**32 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 | `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |

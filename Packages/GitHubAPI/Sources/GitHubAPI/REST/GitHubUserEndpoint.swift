@@ -10,14 +10,22 @@ import Foundation
 ///
 /// 令牌由调用方逐次传入，而非构造时注入：本类型因此是无状态的，
 /// 也就天然不会被误当成"凭据持有者"。
+///
+/// ⚠️ **默认会话不是 `URLSession.shared`**（2026-10-06 真机实测后改）：共享会话带磁盘缓存，
+/// 而 `URLCache` 会把**序列化后的请求对象**一并落盘 —— 于是这个请求的
+/// `Authorization: Bearer ghu_…` 头明文进了 `Cache.db`（响应体是干净的，泄露源是请求头）。
+/// 现在默认走 `GitHubURLSession.shared`（`urlCache = nil`，结构性不落盘）。
 public struct GitHubUserEndpoint: Sendable {
 
     private let credentials: GitHubAppCredentials
-    private let session: URLSession
 
-    public init(credentials: GitHubAppCredentials, session: URLSession = .shared) {
+    /// internal（而非 private）：供测试断言"默认会话不落盘"。
+    let session: URLSession
+
+    /// - Parameter session: 仅测试需要注入桩件（`StubURLProtocol`）。
+    public init(credentials: GitHubAppCredentials, session: URLSession? = nil) {
         self.credentials = credentials
-        self.session = session
+        self.session = session ?? GitHubURLSession.shared
     }
 
     /// 校验令牌并取回登录名。

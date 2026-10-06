@@ -7,9 +7,24 @@ import Foundation
 /// ⚠️ 两个必须处理的坑（不处理的话断言会"莫名"看不到内容）：
 /// 1. **`URLProtocol` 拿到的 `request.httpBody` 通常是 `nil`** —— URLSession 会把 body
 ///    转换成 `httpBodyStream`。要断言请求体，必须先把它读出来（见 `bodyData(of:)`）。
-/// 2. **静态状态在 Swift 6 严格并发下必须显式保护** —— 这里用 `NSLock` + `nonisolated(unsafe)`。
-///    因此用到本桩件的测试套件**必须 `.serialized`**，否则会互相覆盖桩响应。
+/// 2. **静态状态在 Swift 6 严格并发下必须显式保护** —— 用 `NSLock` + `nonisolated(unsafe)`。
+///
+/// ⚠️⚠️ **第三个坑（2026-10-06 真吃过，代价是"单跑全绿、全量跑挂"）**：
+/// Swift Testing **默认让不同套件并行执行**，而 `.serialized` 只保证**套件内部**串行 ——
+/// 于是两个用桩件的套件会互相覆盖桩响应：A 设好响应，B 一句 `stub(...)` 就把它清掉，
+/// A 拿到的请求数变成 0、或解出 `invalidResponse`。**症状像代码坏了，其实是测试互相踩**。
+/// 解法：**每个套件自持一个 `Harness`**（下方），状态按命名空间隔离，天然可并行。
+///
+/// 两种用法：
+/// - **新代码（推荐）**：`private let harness = StubURLProtocol.makeHarness()`，
+///   之后 `harness.makeSession()` / `harness.stub(_:)` / `harness.requestCount` …
+/// - **旧用法（兼容保留）**：直接用静态方法 —— 它们全部转发到**默认 harness**，
+///   因此"一个包里只有一个套件用桩件"时照旧能跑；一旦有第二个套件接入，请改用 harness。
 final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+
+    /// 命名空间标记 —— 挂在会话的附加请求头上，`startLoading` 据此找回所属桩状态。
+    /// 桩会话的 `protocolClasses` 只含本类，请求不会真的出网，所以这个头不会外泄。
+    fileprivate static let namespaceHeader = "X-Stub-Harness"
 
     /// 一次桩响应
     struct Response: Sendable {
@@ -28,50 +43,100 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         }
     }
 
-    private struct State {
-        var response: Response?
-        var requests: [URLRequest] = []
-        var bodies: [Data?] = []
+    // MARK: - Harness：一套彼此独立的桩状态
+
+    /// 一个测试套件（或一个用例）自持一套，彼此不干扰。
+    final class Harness: @unchecked Sendable {
+
+        fileprivate let namespace: String
+        private let lock = NSLock()
+        private var response: Response?
+        private var recordedRequests: [URLRequest] = []
+        private var recordedBodies: [Data?] = []
+
+        fileprivate init(namespace: String) {
+            self.namespace = namespace
+        }
+
+        /// 用本套桩件装配 session（每个用例建一个，避免共享状态）。
+        func makeSession() -> URLSession {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [StubURLProtocol.self]
+            configuration.httpAdditionalHeaders = [StubURLProtocol.namespaceHeader: namespace]
+            return URLSession(configuration: configuration)
+        }
+
+        /// 设置下一次（及后续）请求的桩响应，并清空已记录的请求。
+        func stub(_ response: Response) {
+            lock.withLock {
+                self.response = response
+                recordedRequests = []
+                recordedBodies = []
+            }
+        }
+
+        func reset() {
+            lock.withLock {
+                response = nil
+                recordedRequests = []
+                recordedBodies = []
+            }
+        }
+
+        var requests: [URLRequest] { lock.withLock { recordedRequests } }
+
+        var requestCount: Int { lock.withLock { recordedRequests.count } }
+
+        var lastRequest: URLRequest? { lock.withLock { recordedRequests.last } }
+
+        var lastBody: Data? { lock.withLock { recordedBodies.last ?? nil } }
+
+        fileprivate func record(_ request: URLRequest, body: Data?) -> Response? {
+            lock.withLock {
+                recordedRequests.append(request)
+                recordedBodies.append(body)
+                return response
+            }
+        }
     }
 
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var state = State()
+    // MARK: - 注册表（命名空间 → harness）
 
-    // MARK: - 测试侧控制
+    private static let registryLock = NSLock()
+    nonisolated(unsafe) private static var harnesses: [String: Harness] = [:]
 
-    /// 设置下一次（及后续）请求的桩响应，并清空已记录的请求。
-    static func stub(_ response: Response) {
-        lock.lock()
-        defer { lock.unlock() }
-        state = State()
-        state.response = response
+    /// 默认 harness：承接下方向旧的静态用法。
+    private static let defaultHarness = Harness(namespace: "default")
+
+    /// 新建一套独立桩状态（推荐用法）。
+    static func makeHarness() -> Harness {
+        let harness = Harness(namespace: UUID().uuidString)
+        registryLock.withLock { harnesses[harness.namespace] = harness }
+        return harness
     }
 
-    static func reset() {
-        lock.lock()
-        defer { lock.unlock() }
-        state = State()
+    private static func harness(for request: URLRequest) -> Harness {
+        guard let namespace = request.value(forHTTPHeaderField: namespaceHeader) else {
+            return defaultHarness
+        }
+        return registryLock.withLock { harnesses[namespace] } ?? defaultHarness
     }
 
-    static var requestCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return state.requests.count
-    }
+    // MARK: - 旧用法（转发到默认 harness；勿与 harness 混用）
 
-    static var lastRequest: URLRequest? {
-        lock.lock()
-        defer { lock.unlock() }
-        return state.requests.last
-    }
+    static func stub(_ response: Response) { defaultHarness.stub(response) }
 
-    static var lastBody: Data? {
-        lock.lock()
-        defer { lock.unlock() }
-        return state.bodies.last ?? nil
-    }
+    static func reset() { defaultHarness.reset() }
 
-    /// 用本桩件装配一个 session（每个用例建一个，避免共享状态）。
+    static var requests: [URLRequest] { defaultHarness.requests }
+
+    static var requestCount: Int { defaultHarness.requestCount }
+
+    static var lastRequest: URLRequest? { defaultHarness.lastRequest }
+
+    static var lastBody: Data? { defaultHarness.lastBody }
+
+    /// 装配一个走**默认 harness** 的 session（不带命名空间头）。
     static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
@@ -104,12 +169,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         let body = StubURLProtocol.bodyData(of: request)
-
-        StubURLProtocol.lock.lock()
-        StubURLProtocol.state.requests.append(request)
-        StubURLProtocol.state.bodies.append(body)
-        let stubbed = StubURLProtocol.state.response
-        StubURLProtocol.lock.unlock()
+        let stubbed = StubURLProtocol.harness(for: request).record(request, body: body)
 
         guard let stubbed, let url = request.url else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))

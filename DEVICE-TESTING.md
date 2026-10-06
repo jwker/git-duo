@@ -93,7 +93,7 @@ xcrun devicectl list devices       # 取 UDID
 > 而**设置页属切片 9**。为让本切片验收能走完，暂时把「退出登录」直接放在**「我的」Tab 根页**；
 > 切片 9 迁入设置页时**补齐二次确认弹层**（TECH_SPEC §3.6 要求，暂缺）。
 
-### 第 10 步怎么做（登出后缓存必须为空）
+### 第 10 步怎么做（缓存必须为空）
 
 ```bash
 DEV=00008150-001044A00EFB801C; BID=com.gitduo.app
@@ -101,13 +101,23 @@ xcrun devicectl device copy from --device $DEV --domain-type appDataContainer \
   --domain-identifier $BID --source Library/Caches/$BID/Cache.db --destination /tmp/Cache.db
 # ⚠️ 若库是 WAL 模式，把 -wal / -shm 一并取回，否则读到的是旧视图
 sqlite3 /tmp/Cache.db "select count(*) from cfurl_cache_response;"
-# 期望 0。>0 说明登出没清干净 —— 那样磁盘上可能还留着含 access_token 的响应副本
+# 期望 0（决策 #32 之后：API 会话不挂 URLCache，**任何时刻**都该是 0，不只是登出后）
+# >0 ⇒ 要么登出没清干净，要么有人又把某个请求放回了带缓存的会话上
+
+# ★ 第二道、更直接：直接搜令牌前缀（只看计数，不打印内容）
+for f in Cache.db Cache.db-wal; do
+  strings /tmp/$f | grep -c 'ghu_\|ghr_' | sed "s/^/$f: /"
+done
+# 期望 0 / 0。⚠️ URLCache 落盘的不只是响应体 —— request_object / proto_props 里会躺着
+# 整个 Authorization 头（2026-10-06 实测命中过 2 次），所以"响应体没凭据"不等于"这库干净"
 ```
 
 ⚠️ **为什么这条要单独验**：真机实测（2026-10-06）发现换令牌的响应**曾被系统写进这个库**
 （`access_token` / `refresh_token` 明文），而它**不受 Keychain 的 `AfterFirstUnlockThisDeviceOnly` 保护**；
 更关键的是 —— **改掉写入路径并不会清除已经写下的副本**，只有登出时的显式清理才会
 （`AuthCoordinator.signOut` → `HTTPCachePurging`）。
+**同一天的第二次实测又发现**：`URLCache` 连**序列化请求对象**一起落盘 ⇒ `GET /user` 这种
+"响应全是公开资料"的请求，也把 `Authorization: Bearer ghu_…` 写进了库（决策 #32）。
 
 ### 第 10 步的判据（容易读错，单独立一条）
 
@@ -126,10 +136,12 @@ sqlite3 /tmp/Cache.db "select count(*) from cfurl_cache_response;"
 
 **当前进度（2026-10-06，iPhone 17 Pro）**：
 
-- ✅ **第 1 / 2 / 4 / 5 / 6 / 7 / 10 步**（第 1 步已实拍：登出态杀进程冷启动 ⇒ 登录页；第 6 / 7 步由用户目视确认）
+- ✅ **第 1 / 2 / 4 / 5 / 6 / 7 / 8 / 10 步**
+  - 第 1 步已实拍：登出态杀进程冷启动 ⇒ 登录页（无「凭据缺失」提示）
+  - 第 6 / 7 步由用户目视确认（回登录页 · GitHub 侧授权记录真的消失）
+  - 第 8 步已实拍：**飞行模式下杀进程冷启动 ⇒ 仍在主界面 `@jwker`**（断网 ≠ 登出，§3.2）
 - ◐ **第 9 步**已有观察：**Keychain 跨 App 重装保留**（重装后仍是登录态）
-- ⬜ **第 3 步**（P2 自查：授权页权限清单是否 6 条 —— 需目视 GitHub 授权页，1 分钟）
-- ⬜ **第 8 步**（飞行模式冷启动 —— 需先处于登录态）
+- ⬜ **第 3 步**（P2 自查：授权页权限清单是否 6 条 —— 需目视 GitHub 授权页）
 
 ---
 

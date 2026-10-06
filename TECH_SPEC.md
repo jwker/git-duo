@@ -78,9 +78,11 @@
 | 27 | 授权回调 / URL scheme 安全 | **自定义 scheme 不视为安全边界**：PKCE + 一次性 `state` + 回调只带 `code`/`state`（**绝不带令牌**）+ 拒绝静默授权 + scheme 不承载深链；抢注 / 劫持的四类场景与残余风险已登记，收敛方向为 claimed HTTPS（Universal Link）（见 §3.9） | 【已定】 |
 | 28 | 当前分支的作用域 | **按仓库分别记忆的会话状态**（`RepositoryScope.branch(for:)`），不是全局唯一值；进入仓库时记忆失效则**回落 `defaultBranch`**（见 §9.4.1） | 【已定】 |
 | 29 | 收藏夹项目数 | **由归属映射推导**，不做独立计数器；换列表 = 源夹 −1 且目标夹 +1，删除夹时其中的项回落默认夹（见 §9.12） | 【已定】 |
+| 30 | 客户端凭据与 PKCE 的关系 | **叠加，不是二选一**（用户 2026-10-05 拍板）：GitHub 明确「**不区分** public / confidential client」，换令牌与刷新都把 `client_secret` 标为 **Required** ⇒ **不存在"用 PKCE 换掉 secret"这条路**；官方对 public client 的建议本身就是"把 secret 打进包里 **+** 用 PKCE"。故本项目**内嵌 `client_secret`（软机密）并叠加 PKCE**。附带解锁：既然 secret 已在手（可做 Basic Auth）⇒ **登出可程序化撤销 GitHub 侧授权**（`DELETE /applications/{client_id}/grant`），消解了"文案已承诺撤销授权、实现却做不到"的旧矛盾 | 【已定】 |
 | 31 | 认证编排的落点 | **独立 `GitDuoAuth` Package**（用户 2026-10-06 拍板）：编排必须**同时**用 `GitHubAPI`（换令牌 / 刷新 / 撤销）与 `GitDuoCore`（Keychain 落盘），而这两包按依赖铁律**互不依赖** ⇒ 编排只能位于两者**之上**。落在包里而非 App target，是为了跟着 `make test` 跑**秒级单测**（App target 无测试 target）；App 层只剩 `ASWebAuthenticationSession` 胶水（系统 API，无逻辑可测）。代价：包拓扑 4→5（见 §2.2 / §3.1） | 【已定】 |
+| 32 | API 流量走不走系统 `URLCache` | **不走**（2026-10-06 真机实测后定）：`URLCache` 落盘的**不只是响应体，还有序列化后的请求对象** —— 设备 `Cache.db` 的 `cfurl_cache_blob_data.proto_props` 里明文躺着 `Authorization: Bearer ghu_…` 与 `_octo` Cookie（响应体是干净的，**泄露源是请求头**）。故本包**全部出网会话**统一走 `GitHubURLSession.noCache()`（`urlCache = nil` + 无 Cookie 罐）；§5.1 的 L2 / L3 缓存**自建**（只存 URL / ETag / 响应体 / 过期时间），**不回头启用系统缓存** | 【已定】 |
 
-> **状态汇总**：31 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+> **状态汇总**：32 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
 
 ### 1.2 三条"不可动摇"的约束
 
@@ -235,7 +237,12 @@ my-git/
 - App 元数据（过期时间、账号登录名、App 安装标识）存 Keychain 附属条目或 UserDefaults（非敏感）。
 - ⚠️ 凭据**绝不写入**：日志、崩溃上报、剪贴板、UserDefaults 明文、任何磁盘缓存目录。
 - ⚠️ **令牌请求必须走「不挂 `URLCache` 的会话」**（2026-10-06 真机实测补齐）：`URLSession.shared` 默认带磁盘缓存，会把**换令牌响应**（含 `access_token` / `refresh_token`）写进 `Library/Caches/<bundle-id>/Cache.db` —— 与上一条直接冲突（真机上取回该文件已确认）。
-  实现落点：`GitHubOAuthClient` 自持一个 `URLSessionConfiguration.ephemeral` + `urlCache = nil` 的会话（`makeTokenSession`），**并**给三条令牌请求显式设 `cachePolicy = .reloadIgnoringLocalAndRemoteCacheData`。两道缺一不可：只设 `cachePolicy` 挡不住"存"，只换会话也挡不住将来有人把会话换回 `.shared`。由 `GitHubOAuthClientTests` 两条断言守住。
+- ⚠️⚠️ **同一个坑还有第二层，且更隐蔽：`URLCache` 连「序列化后的请求对象」一起落盘**（2026-10-06 真机二次实测，决策 #32）。
+  设备 `Cache.db` 的 `cfurl_cache_blob_data.proto_props` 里明文躺着 `Authorization` + `Bearer` + `ghu_…`，外加 GitHub 的 `_octo` Cookie。
+  **响应体是干净的（`/user` 只返回公开资料），泄露源是请求头** —— 也就是说"响应不含机密"**推不出**"这个请求可以走系统缓存"。
+- ⚠️ **结论：本项目所有出网会话都不挂 `URLCache`**（不只令牌请求）。落点 = `GitHubURLSession.noCache()`（`urlCache = nil` + `requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData` + 无 Cookie 罐），
+  令牌客户端与 `GET /user` 共用这一份配置；`GitHubURLSessionTests` 四条断言守住（含"默认会话不落盘"）。
+  ⚠️ 别用"给请求设 `cachePolicy`"代替：那个字段描述的是**取用时**是否走缓存，挡不住**存**。
 
 ### 3.4 权限清单
 
@@ -595,7 +602,7 @@ enum GitHubError: Error {
 | 层 | 内容 | 生命周期 | 实现 |
 |---|---|---|---|
 | L1 内存 LRU | 已解码的领域模型（列表首页、当前仓库树、当前 PR/Issue） | 随进程 | `actor CacheStore`，容量按条数/字节双限 |
-| L2 HTTP 缓存 | 原始响应体（`URLCache`） | 按 `Cache-Control` | `URLSessionConfiguration` 配 `URLCache`，容量上限 50–100MB |
+| L2 HTTP 缓存 | 原始响应体 + `ETag` / `Cache-Control` | 按 `Cache-Control` | **自建**（`actor`，内存 + 上限 50–100MB）。⚠️ **不用系统 `URLCache`** —— 它会把**序列化请求对象**一并落盘，`Authorization` 头因此进磁盘（2026-10-06 实测，决策 #32） |
 | L3 磁盘持久化 | JSON 快照 + ETag + 时间戳（离线可看） | 7–30 天，按 LRU 淘汰 | 自建目录 `Caches/GitDuoCache/`，key = 规范化 URL 的 SHA256 |
 
 **为什么自建 L3 而不直接用 SwiftData**：缓存是"可丢弃的加速器"，不需要迁移、关系与查询能力；文件 + LRU 更简单、可控、易清理（PRD §4.19 的"清除缓存"要能报告大小并一键清空）。
