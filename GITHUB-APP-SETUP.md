@@ -35,7 +35,7 @@ GitHub 给 native app 的官方建议是**把 secret 打进包里 + 用 PKCE**�
 | `TECH_SPEC.md:315` | 参数表「`client_secret` \| **不存入客户端**」 |
 | `AGENTS.md:81` | 铁律 9「`client_secret` **永不进入客户端**」 |
 | `PRD.md:265` | 「安全：客户端不持有 client secret」 |
-| `redesign/prototype.html:1816` | 登录页 fnote「客户端不持有 client secret」 |
+| `redesign/prototype/scripts/13-auth.js:38` | 登录页 fnote「客户端内嵌的 secret 属"软机密"」 |
 | `GitDuo/App/AppConfig.swift:7,31` | 注释同上 |
 
 **结论（2026-10-05 用户拍板）**：**采用方案 A —— 内嵌 `client_secret` + PKCE**，即 GitHub 官方建议。

@@ -5,7 +5,7 @@
 | 产品名称 | GitDuo 2.0 |
 | 文档版本 | v1.0 |
 | 文档状态 | 待评审 |
-| 上游需求 | `PRD.md` v1.0（产品需求，功能唯一依据）、`redesign/prototype.html`（交互形态参照） |
+| 上游需求 | `PRD.md` v1.0（产品需求，功能唯一依据）、`redesign/prototype/`（交互形态参照，入口 `index.html`） |
 | 本文职责 | 把产品需求翻译为可实现的技术方案：技术选型、系统架构、模块划分、数据与网络设计、功能落地方案、实现规范与风险 |
 
 ---
@@ -1221,7 +1221,7 @@ GlassEffectContainer(spacing: 12) {
 **护栏**：`GitDuoDesignTests.ThemeTests.tertiaryTextContrast` 已固化为「页面底 **≥ 2.85**」的下界断言——
 将来任何调色若低于此值会使测试失败，届时必须连同本偏差一并重新评估。
 
-**若将来要求达标**：把 `#8B949E` 加深至 `#6E7781` 一类（约 3.2:1），但**必须同步修改 `redesign/prototype.html`** 并回写 PRD §7。
+**若将来要求达标**：把 `#8B949E` 加深至 `#6E7781` 一类（约 3.2:1），但**必须同步修改 `redesign/prototype/styles/01-base.css` 的 `--text3`** 并回写 PRD §7。
 
 ---
 

@@ -11,7 +11,7 @@ import SwiftUI
 ///    因此**玻璃着色值也必须走令牌**（`glassTint`），不得内联色值。
 public enum Theme {
 
-    // MARK: - 颜色（浅色为唯一实现，取值与原型 `redesign/prototype.html` 的 `:root` 一致）
+    // MARK: - 颜色（浅色为唯一实现，取值与原型 `redesign/prototype/styles/01-base.css` 的 `:root` 一致）
 
     public enum Palette {
         public static let background      = Color(hex: 0xF6F8FA)

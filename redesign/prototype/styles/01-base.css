@@ -1,0 +1,24 @@
+/* ══ GitDuo 2.0 原型 · 01 · CSS 变量与全局重置 ══ */
+
+  :root{
+    --bg:#f6f8fa; --card:#ffffff; --border:#d0d7de; --border-soft:#e8ecef;
+    --text:#1f2328; --text2:#656d76; --text3:#8b949e;
+    --link:#0969da; --green:#1f883d; --open:#1a7f37; --closed-i:#8250df;
+    --closed-p:#cf222e; --merge:#8250df;
+    --add-bg:#dafbe1; --add-tx:#116329; --del-bg:#ffebe9; --del-tx:#cf222e;
+    --code-bg:#f6f8fa; --chip:#eff2f5;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",sans-serif;
+    background:linear-gradient(160deg,#e9edf2 0%,#dfe5ec 100%);
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:28px 16px 40px;color:var(--text);
+  }
+  .stage-title{font-size:20px;font-weight:700;margin-bottom:4px}
+  .stage-sub{font-size:13px;color:var(--text2);margin-bottom:18px}
+  .mode-switch{display:flex;background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:22px}
+  .mode-switch button{border:none;background:transparent;padding:8px 22px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer}
+  .mode-switch button.on{background:var(--text);color:#fff}
+  .hint{font-size:12px;color:var(--text3);margin-top:16px;max-width:560px;text-align:center;line-height:1.7}
+

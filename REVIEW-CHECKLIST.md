@@ -167,7 +167,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 | 6 | `TECH_SPEC` §3.8 / §9.15 / §14 / §15 / §16 | 登出文案、设置页、安全表新增 secret 行、风险 #11 关闭 + **新增 #17（软机密）** |
 | 7 | `AGENTS.md` 铁律 9 | 由"永不进入客户端"改为"内嵌（软机密）+ 只许出现在 3 条请求里、不进日志" |
 | 8 | `PRD` §4.0.1 / §5.11 / §8 | 安全说明改为"退出登录即同时撤销 GitHub 侧授权"；补撤销失败降级文案 |
-| 9 | `redesign/prototype.html` | 登录页 fnote / 安全说明 / 退出登录弹层与 toast 全部同步；harness 新增 3 条断言 |
+| 9 | `redesign/prototype/scripts/13-auth.js` | 登录页 fnote / 安全说明 / 退出登录弹层与 toast 全部同步；harness 新增 3 条断言 |
 | 10 | 工程 | `AppConfig` 新增 `gitHubClientSecret` + `revokeGrantURL`；`project.yml` 注入 `GitDuoClientSecret`；`Secrets.xcconfig(.example)` 加第二项 |
 
 **附带解锁的能力**：登出时**可真正撤销 GitHub 侧授权**——这消解了一处既有矛盾：

@@ -39,6 +39,6 @@ struct SkeletonScreen: View {
     SkeletonScreen(
         title: "首页",
         slice: "骨架占位 · 切片 4 落地",
-        reference: "PRD §4.1 / prototype.html #stackArea"
+        reference: "PRD §4.1 / prototype/index.html #stackArea"
     )
 }
