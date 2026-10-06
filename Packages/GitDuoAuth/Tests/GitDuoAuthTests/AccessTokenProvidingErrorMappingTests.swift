@@ -9,10 +9,11 @@ import Testing
 ///
 /// 依据：`AccessTokenProviding` 的错误约定；TECH_SPEC §3.2（凭据失效才登出）。
 ///
-/// ⚠️ 本套件**刻意不碰网络桩件**（全部是纯函数断言）。原因：本包的
-/// `StubURLProtocol` 用的是进程级静态状态，而 Swift Testing 默认让不同套件**并行** ——
-/// 第二个用桩件的套件会和 `AuthCoordinatorTests` 互相覆盖响应，
-/// 症状是"单跑全绿、全量跑挂"。凡需要发请求的用例一律并入 `AuthCoordinatorTests`。
+/// ⚠️ 本套件全是**纯函数断言**，故意不发请求。
+///
+/// 这**不是**在规避什么：2026-10-06 起本包桩件已改成按命名空间隔离的 `Harness`，
+/// 想发请求随时可以（用法见 `AuthCoordinatorTests`），不需要 `.serialized`。
+/// 只是因为这张映射表本身没有网络参与 —— 加个桩件只会让断言变模糊。
 @Suite("AuthCoordinator · 令牌出口错误口径")
 struct AccessTokenProvidingErrorMappingTests {
 

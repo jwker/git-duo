@@ -6,8 +6,8 @@ import Testing
 /// `GitHubOAuthClient` 的行为规格。
 ///
 /// 依据：TECH_SPEC §3.1（步骤 3 / 6）、§3.2（刷新）、§3.6（撤销）、决策 #30。
-/// `.serialized`：`StubURLProtocol` 的桩响应是进程内共享状态，并行会互相覆盖。
-@Suite("GitHubOAuthClient · 授权 / 换令牌 / 刷新 / 撤销", .serialized)
+/// **不需要 `.serialized`**：桩件状态按命名空间隔离（见 `harness`），套件内部与套件之间都可并行。
+@Suite("GitHubOAuthClient · 授权 / 换令牌 / 刷新 / 撤销")
 struct GitHubOAuthClientTests {
 
     private let credentials = GitHubAppCredentials(
@@ -17,8 +17,11 @@ struct GitHubOAuthClientTests {
         apiVersion: "2026-03-10"
     )
 
+    /// 本套件专属的桩件状态 —— Swift Testing 为**每个用例**新建套件实例，故每次都是全新的。
+    private let harness = StubURLProtocol.makeHarness()
+
     private func makeClient() -> GitHubOAuthClient {
-        GitHubOAuthClient(credentials: credentials, session: StubURLProtocol.makeSession())
+        GitHubOAuthClient(credentials: credentials, session: harness.makeSession())
     }
 
     private func formFields(_ request: URLRequest) throws -> [String: String] {
@@ -92,8 +95,8 @@ struct GitHubOAuthClientTests {
 
     @Test("换令牌成功：解析出 access / refresh / 有效期")
     func exchangeSuccess() async throws {
-        StubURLProtocol.stub(.json(successJSON))
-        defer { StubURLProtocol.reset() }
+        harness.stub(.json(successJSON))
+        defer { harness.reset() }
 
         let token = try await makeClient().exchangeCode("the-code", codeVerifier: "the-verifier")
 
@@ -102,16 +105,16 @@ struct GitHubOAuthClientTests {
         #expect(token.expiresIn == 28_800)
         #expect(token.refreshTokenExpiresIn == 15_897_600)
         #expect(token.scope == "", "GitHub App 用户令牌的 scope 恒为空串（§3.4）")
-        #expect(StubURLProtocol.requestCount == 1)
+        #expect(harness.requestCount == 1)
     }
 
     @Test("令牌端点以 HTTP 200 返回业务错误时也必须失败 —— 不能只看状态码")
     func exchangeBusinessErrorDespite200() async throws {
-        StubURLProtocol.stub(.json(
+        harness.stub(.json(
             #"{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired."}"#,
             status: 200
         ))
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let client = makeClient()
         await #expect(throws: OAuthError.tokenEndpointError(
@@ -124,8 +127,8 @@ struct GitHubOAuthClientTests {
 
     @Test("响应缺 refresh_token 时失败 —— 静默刷新依赖它（§3.2）")
     func exchangeMissingRefreshToken() async throws {
-        StubURLProtocol.stub(.json(#"{"access_token":"ghu_abc","expires_in":28800,"token_type":"bearer"}"#))
-        defer { StubURLProtocol.reset() }
+        harness.stub(.json(#"{"access_token":"ghu_abc","expires_in":28800,"token_type":"bearer"}"#))
+        defer { harness.reset() }
 
         let client = makeClient()
         await #expect(throws: OAuthError.missingRefreshToken) {
@@ -135,8 +138,8 @@ struct GitHubOAuthClientTests {
 
     @Test("响应缺 access_token 时失败")
     func exchangeMissingAccessToken() async throws {
-        StubURLProtocol.stub(.json(#"{"refresh_token":"ghr_xyz","expires_in":28800}"#))
-        defer { StubURLProtocol.reset() }
+        harness.stub(.json(#"{"refresh_token":"ghr_xyz","expires_in":28800}"#))
+        defer { harness.reset() }
 
         let client = makeClient()
         await #expect(throws: OAuthError.missingAccessToken) {
@@ -146,8 +149,8 @@ struct GitHubOAuthClientTests {
 
     @Test("非 2xx 状态码映射为 httpStatus")
     func exchangeHTTPError() async throws {
-        StubURLProtocol.stub(.empty(status: 500))
-        defer { StubURLProtocol.reset() }
+        harness.stub(.empty(status: 500))
+        defer { harness.reset() }
 
         let client = makeClient()
         await #expect(throws: OAuthError.httpStatus(500)) {
@@ -157,8 +160,8 @@ struct GitHubOAuthClientTests {
 
     @Test("响应不是 JSON 时映射为 invalidResponse（不崩溃）")
     func exchangeNonJSONBody() async throws {
-        StubURLProtocol.stub(.json("<html>502 Bad Gateway</html>"))
-        defer { StubURLProtocol.reset() }
+        harness.stub(.json("<html>502 Bad Gateway</html>"))
+        defer { harness.reset() }
 
         let client = makeClient()
         await #expect(throws: OAuthError.invalidResponse) {
@@ -185,10 +188,10 @@ struct GitHubOAuthClientTests {
 
     @Test("刷新成功：拿到轮换后的新令牌")
     func refreshSuccess() async throws {
-        StubURLProtocol.stub(.json(
+        harness.stub(.json(
             #"{"access_token":"ghu_new","expires_in":28800,"refresh_token":"ghr_new","refresh_token_expires_in":15897600,"token_type":"bearer","scope":""}"#
         ))
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let token = try await makeClient().refresh(refreshToken: "ghr_old")
         #expect(token.accessToken == "ghu_new")
@@ -231,18 +234,18 @@ struct GitHubOAuthClientTests {
 
     @Test("撤销成功：204；404 也算已撤销（幂等，重复登出不该报失败）")
     func revokeAcceptsSuccessAndNotFound() async throws {
-        StubURLProtocol.stub(.empty(status: 204))
-        defer { StubURLProtocol.reset() }
+        harness.stub(.empty(status: 204))
+        defer { harness.reset() }
         try await makeClient().revokeAuthorization(accessToken: "ghu_abc")
 
-        StubURLProtocol.stub(.empty(status: 404))
+        harness.stub(.empty(status: 404))
         try await makeClient().revokeAuthorization(accessToken: "ghu_abc")
     }
 
     @Test("撤销失败：422 → revokeFailed（调用方降级但不阻塞登出，§3.6）")
     func revokeReportsFailure() async throws {
-        StubURLProtocol.stub(.empty(status: 422))
-        defer { StubURLProtocol.reset() }
+        harness.stub(.empty(status: 422))
+        defer { harness.reset() }
 
         let client = makeClient()
         await #expect(throws: OAuthError.revokeFailed(422)) {
@@ -290,7 +293,7 @@ struct GitHubOAuthClientTests {
                 callbackURL: "gitduo://oauth/callback",
                 apiVersion: "2026-03-10"
             ),
-            session: StubURLProtocol.makeSession()
+            session: harness.makeSession()
         )
 
         #expect(client.credentials.isConfigured == false)

@@ -10,8 +10,9 @@ import Testing
 /// 依据：TECH_SPEC §3.1（授权流程八步）、§3.2（刷新与 single-flight）、
 ///      §3.6（登出与撤销降级）、§3.8（取消 / 失败的出口）、§12.2。
 ///
-/// `.serialized`：`StubURLProtocol` 的路由表是进程内共享状态，并行会互相覆盖。
-@Suite("AuthCoordinator · 授权编排 / 刷新 / 登出", .serialized)
+/// **不需要 `.serialized`**：桩件状态按命名空间隔离（见 `harness`），套件内部与套件之间都可并行。
+/// （早期版本把路由表放在进程级静态变量里、靠 `.serialized` 硬扛 —— 那正是"单跑全绿、全量跑挂"的温床。）
+@Suite("AuthCoordinator · 授权编排 / 刷新 / 登出")
 struct AuthCoordinatorTests {
 
     // MARK: - 夹具
@@ -42,11 +43,17 @@ struct AuthCoordinatorTests {
     /// 接口缓存清理器的替身 —— 登出必须调用它（见 `signOutPurgesHTTPCache`）。
     private let purger = SpyCachePurger()
 
+    /// 本套件专属的桩件状态。
+    ///
+    /// Swift Testing **为每个用例新建一个套件实例** ⇒ 每次测试都拿到一份全新的 harness，
+    /// 套件内并行、跨套件并行都不互相踩。
+    private let harness = StubURLProtocol.makeHarness()
+
     private func makeCoordinator() -> AuthCoordinator {
         AuthCoordinator(
             credentials: Self.credentials,
             tokenStore: store,
-            session: StubURLProtocol.makeSession(),
+            session: harness.makeSession(),
             cachePurger: purger,
             clock: { Self.fixedNow }
         )
@@ -88,35 +95,35 @@ struct AuthCoordinatorTests {
 
     @Test("无凭据：直接未认证，且一个请求都不发")
     func restoreWithoutCredentials() async throws {
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let state = await makeCoordinator().restore()
 
         #expect(state == .unauthenticated)
-        #expect(StubURLProtocol.requests.isEmpty, "启动不该为了'确认未登录'去打扰 GitHub")
+        #expect(harness.requests.isEmpty, "启动不该为了'确认未登录'去打扰 GitHub")
     }
 
     @Test("凭据新鲜：直接放行，不发请求（启动要快，也要省配额）")
     func restoreWithFreshToken() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let state = await makeCoordinator().restore()
 
         #expect(state == .authenticated(login: "jiangjiang"))
-        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(harness.requests.isEmpty)
     }
 
     @Test("access token 进入预刷新窗口：刷一次并落盘轮换后的令牌")
     func restoreRefreshesWhenNearExpiry() async throws {
         // 只剩 60 秒 → 落在"过期前 5 分钟"的窗口内
         try store.save(storedToken(accessExpiresIn: 60))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.refreshedJSON)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let state = await makeCoordinator().restore()
 
@@ -126,29 +133,29 @@ struct AuthCoordinatorTests {
         #expect(stored.refreshToken == "ghr_new", "刷新会轮换 refresh_token，两个都要换掉")
         #expect(stored.login == "jiangjiang", "登录名不能因为刷新而丢失")
         #expect(stored.accessTokenExpiry == Self.fixedNow.addingTimeInterval(28_800))
-        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+        #expect(harness.count(method: "POST", path: Self.tokenEndpointPath) == 1)
     }
 
     @Test("refresh token 已过期（6 个月）：清掉残留并回登录页，不发请求")
     func restoreWhenRefreshTokenExpired() async throws {
         try store.save(storedToken(refreshExpiresIn: -1))
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let state = await makeCoordinator().restore()
 
         #expect(state == .unauthenticated)
         #expect(try loadStored() == nil, "过期的凭据必须清掉，否则每次启动都在同一处失败")
-        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(harness.requests.isEmpty)
     }
 
     @Test("刷新遇网络故障：**不清凭据**，仍然放行（断网不等于被登出）")
     func restoreKeepsCredentialsOnNetworkFailure() async throws {
         try store.save(storedToken(accessExpiresIn: 60))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, status: 500)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let state = await makeCoordinator().restore()
 
@@ -159,13 +166,13 @@ struct AuthCoordinatorTests {
     @Test("refresh token 被撤销（令牌端点以 200 回传错误）：清凭据并回登录页")
     func restoreSignsOutWhenRefreshTokenRevoked() async throws {
         try store.save(storedToken(accessExpiresIn: 60))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response(
                 "POST", Self.tokenEndpointPath,
                 #"{"error":"bad_refresh_token","error_description":"The refresh token is invalid."}"#
             )
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let state = await makeCoordinator().restore()
 
@@ -212,7 +219,7 @@ struct AuthCoordinatorTests {
                 apiVersion: "2026-03-10"
             ),
             tokenStore: store,
-            session: StubURLProtocol.makeSession(),
+            session: harness.makeSession(),
             clock: { Self.fixedNow }
         )
 
@@ -229,11 +236,11 @@ struct AuthCoordinatorTests {
         let authorizeURL = try await coordinator.beginAuthorization()
         let expectedState = try state(of: authorizeURL)
 
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.successJSON),
             .response("GET", "/user", #"{"login":"jiangjiang"}"#)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: callbackURL(code: "the-code", state: expectedState)
@@ -246,8 +253,8 @@ struct AuthCoordinatorTests {
         #expect(stored.login == "jiangjiang")
         #expect(stored.accessTokenExpiry == Self.fixedNow.addingTimeInterval(28_800))
         #expect(stored.refreshTokenExpiry == Self.fixedNow.addingTimeInterval(15_897_600))
-        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
-        #expect(StubURLProtocol.count(method: "GET", path: "/user") == 1)
+        #expect(harness.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+        #expect(harness.count(method: "GET", path: "/user") == 1)
     }
 
     @Test("换令牌请求体带 client_secret，且 verifier 是本次授权生成的那个")
@@ -256,18 +263,18 @@ struct AuthCoordinatorTests {
         let authorizeURL = try await coordinator.beginAuthorization()
         let expectedState = try state(of: authorizeURL)
 
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.successJSON),
             .response("GET", "/user", #"{"login":"jiangjiang"}"#)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         _ = await coordinator.completeAuthorization(
             callbackURL: callbackURL(code: "the-code", state: expectedState)
         )
 
         let exchange = try #require(
-            StubURLProtocol.requests.first { $0.httpMethod == "POST" }
+            harness.requests.first { $0.httpMethod == "POST" }
         )
         let body = try #require(StubURLProtocol.bodyData(of: exchange))
         let fields = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
@@ -287,47 +294,47 @@ struct AuthCoordinatorTests {
     func completeAuthorizationIgnoresForeignScheme() async throws {
         let coordinator = makeCoordinator()
         _ = try await coordinator.beginAuthorization()
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: URL(string: "evil://oauth/callback?code=x&state=y")!
         )
 
         #expect(outcome == .ignored)
-        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(harness.requests.isEmpty)
     }
 
     @Test("伪装路径（host 不同）：同样丢弃 —— 只比 path 会漏掉它")
     func completeAuthorizationIgnoresDisguisedHost() async throws {
         let coordinator = makeCoordinator()
         _ = try await coordinator.beginAuthorization()
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: URL(string: "gitduo://evil/callback?code=x&state=y")!
         )
 
         #expect(outcome == .ignored)
-        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(harness.requests.isEmpty)
     }
 
     @Test("state 不匹配：拒绝，且绝不拿这个 code 去换令牌")
     func completeAuthorizationRejectsStateMismatch() async throws {
         let coordinator = makeCoordinator()
         _ = try await coordinator.beginAuthorization()
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.successJSON)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: callbackURL(code: "attacker-code", state: "not-the-state")
         )
 
         #expect(outcome == .failed(.callbackRejected(.stateMismatch)))
-        #expect(StubURLProtocol.requests.isEmpty, "state 不对就绝不能把 code 发出去")
+        #expect(harness.requests.isEmpty, "state 不对就绝不能把 code 发出去")
         #expect(try loadStored() == nil)
     }
 
@@ -335,15 +342,15 @@ struct AuthCoordinatorTests {
     func completeAuthorizationTreatsDenialAsCancelled() async throws {
         let coordinator = makeCoordinator()
         _ = try await coordinator.beginAuthorization()
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: URL(string: "gitduo://oauth/callback?error=access_denied&error_description=The+user+denied")!
         )
 
         #expect(outcome == .cancelled, "取消不是错误——文案上不该吓唬用户")
-        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(harness.requests.isEmpty)
         #expect(try loadStored() == nil)
     }
 
@@ -351,8 +358,8 @@ struct AuthCoordinatorTests {
     func completeAuthorizationReportsServiceError() async throws {
         let coordinator = makeCoordinator()
         _ = try await coordinator.beginAuthorization()
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: URL(string: "gitduo://oauth/callback?error=bad_verification_code&error_description=Code+expired")!
@@ -370,8 +377,8 @@ struct AuthCoordinatorTests {
     @Test("没有等待中的授权就收到回调：按 state 不匹配拒绝（不会凭空登录）")
     func completeAuthorizationWithoutPendingContext() async throws {
         let coordinator = makeCoordinator()
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: callbackURL(code: "the-code", state: "any-state")
@@ -385,11 +392,11 @@ struct AuthCoordinatorTests {
         let coordinator = makeCoordinator()
         let authorizeURL = try await coordinator.beginAuthorization()
         let expectedState = try state(of: authorizeURL)
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.successJSON),
             .response("GET", "/user", #"{"login":"jiangjiang"}"#)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let callback = callbackURL(code: "the-code", state: expectedState)
         let first = await coordinator.completeAuthorization(callbackURL: callback)
@@ -404,13 +411,13 @@ struct AuthCoordinatorTests {
         let coordinator = makeCoordinator()
         let authorizeURL = try await coordinator.beginAuthorization()
         let expectedState = try state(of: authorizeURL)
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response(
                 "POST", Self.tokenEndpointPath,
                 #"{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired."}"#
             )
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: callbackURL(code: "the-code", state: expectedState)
@@ -428,11 +435,11 @@ struct AuthCoordinatorTests {
         let coordinator = makeCoordinator()
         let authorizeURL = try await coordinator.beginAuthorization()
         let expectedState = try state(of: authorizeURL)
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.successJSON),
             .response("GET", "/user", "", status: 401)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let outcome = await coordinator.completeAuthorization(
             callbackURL: callbackURL(code: "the-code", state: expectedState)
@@ -446,8 +453,8 @@ struct AuthCoordinatorTests {
 
     @Test("未登录时索取令牌：抛 GitHubError.unauthorized（不静默返回空串）")
     func validAccessTokenRequiresSession() async throws {
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         // ⚠️ 出口错误是**归一化后**的 GitHubError，不是内部的 AuthError ——
         //    数据层不认识 AuthError，它只需要"凭据不可用 ⇒ 回登录页"这一个结论。
@@ -458,8 +465,8 @@ struct AuthCoordinatorTests {
 
     @Test("编排层内部仍拿到细分的 AuthError（归一化不污染本包自己的语义）")
     func loadValidAccessTokenKeepsAuthError() async throws {
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         await #expect(throws: AuthError.notAuthenticated) {
             _ = try await makeCoordinator().loadValidAccessToken()
@@ -469,10 +476,10 @@ struct AuthCoordinatorTests {
     @Test("刷新时收到 401：数据层出口抛 unauthorized（refresh token 真的没了）")
     func refreshUnauthorizedMapsToUnauthorized() async throws {
         try store.save(storedToken(accessExpiresIn: 30))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, "", status: 401)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let provider: any AccessTokenProviding = makeCoordinator()
         await #expect(throws: GitHubError.unauthorized) {
@@ -483,10 +490,10 @@ struct AuthCoordinatorTests {
     @Test("刷新时收到 500：抛 serverError，**绝不算凭据失效**（§3.2 第 3 条：5xx 不登出）")
     func refreshServerErrorDoesNotInvalidateCredentials() async throws {
         try store.save(storedToken(accessExpiresIn: 30))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, "", status: 500)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let provider: any AccessTokenProviding = makeCoordinator()
         await #expect(throws: GitHubError.serverError(status: 500)) {
@@ -498,10 +505,10 @@ struct AuthCoordinatorTests {
     @Test("令牌端点以 200 回传 error：也算凭据失效（状态码通过 ≠ 成功）")
     func tokenEndpointErrorMapsToUnauthorized() async throws {
         try store.save(storedToken(accessExpiresIn: 30))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, #"{"error":"bad_refresh_token"}"#)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let provider: any AccessTokenProviding = makeCoordinator()
         await #expect(throws: GitHubError.unauthorized) {
@@ -513,8 +520,8 @@ struct AuthCoordinatorTests {
     func refreshTransportFailureIsNotUnauthorized() async throws {
         try store.save(storedToken(accessExpiresIn: 30))
         // 空路由表 ⇒ 桩件以 `URLError` 失败，即"拿不到响应"
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let provider: any AccessTokenProviding = makeCoordinator()
         var sawTransport = false
@@ -535,27 +542,27 @@ struct AuthCoordinatorTests {
     @Test("令牌新鲜：直接返回，不刷新（省一次往返，也省配额）")
     func validAccessTokenReturnsFreshToken() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let token = try await makeCoordinator().validAccessToken()
 
         #expect(token == "ghu_old")
-        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(harness.requests.isEmpty)
     }
 
     @Test("令牌进入预刷新窗口：先刷新再返回新令牌")
     func validAccessTokenRefreshesWhenNeeded() async throws {
         try store.save(storedToken(accessExpiresIn: 30))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.refreshedJSON)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let token = try await makeCoordinator().validAccessToken()
 
         #expect(token == "ghu_new")
-        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+        #expect(harness.count(method: "POST", path: Self.tokenEndpointPath) == 1)
     }
 
     // MARK: - single-flight
@@ -563,10 +570,10 @@ struct AuthCoordinatorTests {
     @Test("并发 5 次强制刷新：令牌端点只收到 1 个请求（并发刷新会互相作废）")
     func refreshIsSingleFlight() async throws {
         try store.save(storedToken(accessExpiresIn: 60))
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("POST", Self.tokenEndpointPath, Self.refreshedJSON, delay: 0.3)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let coordinator = makeCoordinator()
         let results = await withTaskGroup(of: Result<String, any Error>.self) { group in
@@ -586,7 +593,7 @@ struct AuthCoordinatorTests {
             #expect(try result.get() == "ghu_new", "所有调用者都应拿到同一次刷新的结果")
         }
         #expect(
-            StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1,
+            harness.count(method: "POST", path: Self.tokenEndpointPath) == 1,
             "并发刷新必须共享同一个请求，否则 refresh_token 轮换会互相作废"
         )
     }
@@ -603,7 +610,7 @@ struct AuthCoordinatorTests {
         return HTTPTransport(
             credentials: Self.credentials,
             tokenProvider: provider,
-            session: StubURLProtocol.makeSession(),
+            session: harness.makeSession(),
             cache: HTTPResponseCache(configuration: .memoryOnly()),
             retryPolicy: .none,
             clock: { clock },
@@ -614,11 +621,11 @@ struct AuthCoordinatorTests {
     @Test("接线：数据端点 401 → 强制刷新一次 → 重放一次，且重放带的是**新令牌**")
     func transportRefreshesAndReplaysThroughCoordinator() async throws {
         try store.save(storedToken())  // 8 小时，不在预刷新窗口
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("GET", "/user", "", status: 401),
             .response("POST", Self.tokenEndpointPath, Self.refreshedJSON)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let transport = makeTransport(provider: makeCoordinator())
 
@@ -628,12 +635,12 @@ struct AuthCoordinatorTests {
         }
 
         #expect(
-            StubURLProtocol.count(method: "GET", path: "/user") == 2,
+            harness.count(method: "GET", path: "/user") == 2,
             "原请求 + 重放，**只重放一次**（§3.2 第 2 条）"
         )
-        #expect(StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+        #expect(harness.count(method: "POST", path: Self.tokenEndpointPath) == 1)
 
-        let authorizations = StubURLProtocol.requests
+        let authorizations = harness.requests
             .filter { $0.httpMethod == "GET" && $0.url?.path == "/user" }
             .map { $0.value(forHTTPHeaderField: "Authorization") }
         #expect(
@@ -645,12 +652,12 @@ struct AuthCoordinatorTests {
     @Test("接线：并发 5 个 401 只触发**一次**刷新（否则 refresh_token 轮换会互相作废）")
     func concurrent401sShareOneRefresh() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("GET", "/user", "", status: 401),
             // 延迟制造"刷新还没回来"的窗口 —— 没有它，5 次刷新会一个接一个地跑完，测不出共享
             .response("POST", Self.tokenEndpointPath, Self.refreshedJSON, delay: 0.3)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let transport = makeTransport(provider: makeCoordinator())
         let url = URL(string: "https://api.github.com/user")!
@@ -662,7 +669,7 @@ struct AuthCoordinatorTests {
         }
 
         #expect(
-            StubURLProtocol.count(method: "POST", path: Self.tokenEndpointPath) == 1,
+            harness.count(method: "POST", path: Self.tokenEndpointPath) == 1,
             "并发 401 必须共享同一次刷新（single-flight 由 AuthCoordinator 保证）"
         )
     }
@@ -672,17 +679,17 @@ struct AuthCoordinatorTests {
     @Test("登出：先撤销 GitHub 侧授权（DELETE grant，Basic Auth），再清本地凭据")
     func signOutRevokesThenClears() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("DELETE", Self.revokePath, status: 204)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let outcome = await makeCoordinator().signOut()
 
         #expect(outcome == .revoked)
         #expect(try loadStored() == nil)
 
-        let revoke = try #require(StubURLProtocol.requests.first)
+        let revoke = try #require(harness.requests.first)
         #expect(revoke.httpMethod == "DELETE")
         #expect(revoke.url?.path == Self.revokePath)
         let expectedAuth = "Basic " + Data("Iv23liTESTclientid:s3cr3t-soft".utf8).base64EncodedString()
@@ -696,10 +703,10 @@ struct AuthCoordinatorTests {
     @Test("撤销失败（422）：**仍清空本地凭据**，只把结局降级")
     func signOutClearsLocallyWhenRevokeFails() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("DELETE", Self.revokePath, status: 422)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         let outcome = await makeCoordinator().signOut()
 
@@ -710,8 +717,8 @@ struct AuthCoordinatorTests {
     @Test("离线撤销（网络错误）：同样本地登出成功")
     func signOutClearsLocallyWhenOffline() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([])   // 无路由 ⇒ 请求失败
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])   // 无路由 ⇒ 请求失败
+        defer { harness.reset() }
 
         let outcome = await makeCoordinator().signOut()
 
@@ -721,13 +728,13 @@ struct AuthCoordinatorTests {
 
     @Test("无凭据时登出：视为已登出，不发请求")
     func signOutWithoutCredentials() async throws {
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         let outcome = await makeCoordinator().signOut()
 
         #expect(outcome == .revoked)
-        #expect(StubURLProtocol.requests.isEmpty)
+        #expect(harness.requests.isEmpty)
     }
 
     // MARK: - 登出 · 接口缓存
@@ -735,10 +742,10 @@ struct AuthCoordinatorTests {
     @Test("登出必须清掉接口缓存 —— 改写入路径清不掉**已经落盘**的副本")
     func signOutPurgesHTTPCache() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([
+        harness.setStubs([
             .response("DELETE", Self.revokePath, status: 204)
         ])
-        defer { StubURLProtocol.reset() }
+        defer { harness.reset() }
 
         _ = await makeCoordinator().signOut()
 
@@ -751,8 +758,8 @@ struct AuthCoordinatorTests {
     @Test("撤销失败（降级登出）也必须清缓存 —— 本地清干净才算登出")
     func signOutPurgesHTTPCacheEvenWhenRevokeFails() async throws {
         try store.save(storedToken())
-        StubURLProtocol.setStubs([])   // 离线 ⇒ 撤销必然失败
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])   // 离线 ⇒ 撤销必然失败
+        defer { harness.reset() }
 
         let outcome = await makeCoordinator().signOut()
 
@@ -762,8 +769,8 @@ struct AuthCoordinatorTests {
 
     @Test("无凭据时登出：不发请求，但缓存照清")
     func signOutWithoutCredentialsStillPurges() async throws {
-        StubURLProtocol.setStubs([])
-        defer { StubURLProtocol.reset() }
+        harness.setStubs([])
+        defer { harness.reset() }
 
         _ = await makeCoordinator().signOut()
 

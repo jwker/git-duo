@@ -6,7 +6,7 @@
 ## 0. 当前阶段
 
 **切片 1（Auth）已完成并验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 全部落地，四包单测全绿。**
-`make verify` = **四包单测 263 项 + 模拟器构建**，一条命令。
+`make verify` = **四包单测 269 项 + 模拟器构建**，一条命令。
 
 | # | 内容 | 状态 |
 |---|---|---|
@@ -18,7 +18,8 @@
 | 1.6 | 登录段原型断言转 Swift 测试（权限 6 项 + 三项产品承诺） | ✅ |
 | 1.7 | 门禁接线：`RootView` 二分 + `LoginFlowView` + `WebAuthenticationSession` | ✅ |
 
-**四包单测 263 项全过**（GitHubAPI 189 · GitDuoAuth 53 · GitDuoCore 14 · GitDuoDesign 7）。
+**四包单测 269 项全过**（GitHubAPI 191 · GitDuoAuth 57 · GitDuoCore 14 · GitDuoDesign 7）。
+⚠️ 网络桩件状态**按命名空间隔离**（每套件自持 `Harness`）⇒ 网络测试可自由并行，**不要加 `.serialized`**；忘了用 harness 会当场失败，那是**有意**的。
 
 **切片 2（GitHubAPI 客户端骨架）—— 2.1–2.6 全部落地**（2026-10-06）：
 

@@ -15,11 +15,14 @@ import Foundation
 /// A 拿到的请求数变成 0、或解出 `invalidResponse`。**症状像代码坏了，其实是测试互相踩**。
 /// 解法：**每个套件自持一个 `Harness`**（下方），状态按命名空间隔离，天然可并行。
 ///
-/// 两种用法：
-/// - **新代码（推荐）**：`private let harness = StubURLProtocol.makeHarness()`，
-///   之后 `harness.makeSession()` / `harness.stub(_:)` / `harness.requestCount` …
-/// - **旧用法（兼容保留）**：直接用静态方法 —— 它们全部转发到**默认 harness**，
-///   因此"一个包里只有一个套件用桩件"时照旧能跑；一旦有第二个套件接入，请改用 harness。
+/// **只有一种用法**：`private let harness = StubURLProtocol.makeHarness()`，
+/// 之后 `harness.makeSession()` / `harness.stub(_:)` / `harness.requestCount` …
+///
+/// ⚠️ 2026-10-06 之前本类型还留着一套**进程级静态入口**（转发到"默认 harness"），
+/// 理由是"一个包里只有一个套件用它时照旧能跑"。那是**半个补丁**：只要再有第二个套件
+/// 图省事用了它，上面的事故就原封不动回来。所以整套删掉 —— 连"写得出"都不允许。
+/// 现在会话若不带命名空间头，请求一律失败（见 `startLoading`），
+/// 把"忘了用 harness"立刻变成一个红测试，而不是一个靠猜的偶发。
 final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     /// 命名空间标记 —— 挂在会话的附加请求头上，`startLoading` 据此找回所属桩状态。
@@ -123,44 +126,16 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     private static let registryLock = NSLock()
     nonisolated(unsafe) private static var harnesses: [String: Harness] = [:]
 
-    /// 默认 harness：承接下方向旧的静态用法。
-    private static let defaultHarness = Harness(namespace: "default")
-
-    /// 新建一套独立桩状态（推荐用法）。
+    /// 新建一套独立桩状态 —— **唯一**的入口。
     static func makeHarness() -> Harness {
         let harness = Harness(namespace: UUID().uuidString)
         registryLock.withLock { harnesses[harness.namespace] = harness }
         return harness
     }
 
-    private static func harness(for request: URLRequest) -> Harness {
-        guard let namespace = request.value(forHTTPHeaderField: namespaceHeader) else {
-            return defaultHarness
-        }
-        return registryLock.withLock { harnesses[namespace] } ?? defaultHarness
-    }
-
-    // MARK: - 旧用法（转发到默认 harness；勿与 harness 混用）
-
-    static func stub(_ response: Response) { defaultHarness.stub(response) }
-
-    static func stub(_ sequence: [Response]) { defaultHarness.stub(sequence) }
-
-    static func reset() { defaultHarness.reset() }
-
-    static var requests: [URLRequest] { defaultHarness.requests }
-
-    static var requestCount: Int { defaultHarness.requestCount }
-
-    static var lastRequest: URLRequest? { defaultHarness.lastRequest }
-
-    static var lastBody: Data? { defaultHarness.lastBody }
-
-    /// 装配一个走**默认 harness** 的 session（不带命名空间头）。
-    static func makeSession() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubURLProtocol.self]
-        return URLSession(configuration: configuration)
+    private static func harness(for request: URLRequest) -> Harness? {
+        guard let namespace = request.value(forHTTPHeaderField: namespaceHeader) else { return nil }
+        return registryLock.withLock { harnesses[namespace] }
     }
 
     /// 把请求体读出来 —— `httpBody` 常为 `nil`，真实数据在 `httpBodyStream` 上。
@@ -189,7 +164,10 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         let body = StubURLProtocol.bodyData(of: request)
-        let stubbed = StubURLProtocol.harness(for: request).record(request, body: body)
+
+        // 没有命名空间（= 会话不是 harness 装的）或响应没设 ⇒ **让请求失败**。
+        // 绝不静默放行：那会把"忘了用 harness"伪装成"拿到了一个意外的响应"。
+        let stubbed = StubURLProtocol.harness(for: request)?.record(request, body: body)
 
         guard let stubbed, let url = request.url else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))

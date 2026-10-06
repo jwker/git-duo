@@ -1,26 +1,36 @@
 import Foundation
 
-/// `URLSession` 桩件 —— 支持**按端点路由**与**延迟响应**。
+/// `URLSession` 桩件 —— 支持**按端点路由**与**延迟响应**，且状态**按命名空间隔离**。
 ///
 /// 依据：TECH_SPEC §12.2（网络层测试用 `URLProtocol` 桩件断言请求头 / 请求体）。
 ///
-/// 与 `GitHubAPITests` 里那份（一个响应应答所有请求）的区别，正是编排测试的需要：
+/// 与 `GitHubAPITests` 里那份的区别，正是编排测试的需要：
 /// 1. **路由**：一次授权要连着打三个不同端点（换令牌 → `GET /user` → 撤销），
-///    单一响应无法表达；
+///    单一响应无法表达 ⇒ 本版是"命中即用"的**路由表**（自上而下取第一条命中，
+///    且该规则会被后续请求**重复使用**，不是一次性的序列）；
 /// 2. **延迟**：验证 single-flight 必须制造"请求还没回来"的窗口，
 ///    否则并发调用会各自等到结果，测不出共享。
 ///
-/// ⚠️ 两个坑同前：
-/// - `URLProtocol` 拿到的 `request.httpBody` 通常是 `nil`，真实数据在 `httpBodyStream`
-///   （见 `bodyData(of:)`）。
-/// - 静态状态在 Swift 6 严格并发下必须显式保护 ⇒ 用到本桩件的套件**必须 `.serialized`**。
+/// ## ⚠️ 为什么这里**没有**任何进程级状态
 ///
-/// ⚠️⚠️ **`.serialized` 只管套件内部**（2026-10-06 在 `GitHubAPITests` 真吃过）：Swift Testing
-/// 默认让**不同套件并行**，两个都用桩件的套件会互相覆盖响应 —— 症状是"单跑全绿、全量跑挂"
-/// （请求数变 0、或解出 `invalidResponse`），看着像代码坏了。
-/// 本包目前**只有一个套件**用它，故尚未触发；**一旦出现第二个，请照 `GitHubAPITests/StubURLProtocol.swift`
-/// 的 `Harness` 做法**改成"每套一份命名空间"，而不是靠 `.serialized` 硬扛。
+/// 早期版本把路由表放在**进程级静态变量**里，靠套件 `.serialized` 硬扛。那是错的：
+/// Swift Testing **默认让不同套件并行**，而 `.serialized` 只保证**套件内部**串行 ——
+/// 于是两个用桩件的套件会互相覆盖（A 刚设好路由，B 一句 `setStubs` 就把它清掉），
+/// 症状是"**单跑全绿、全量跑挂**"，看着像实现坏了，其实是测试互相踩。
+/// （2026-10-06 在 `GitHubAPITests` 真吃过一次。）
+///
+/// 现在每个 `Harness` 是一个独立命名空间：会话把命名空间挂在**附加请求头**上，
+/// `startLoading` 据此找回属于自己那一份状态 ⇒ 天然可并行，**不需要 `.serialized`**。
+/// 本类型**不提供任何进程级入口**（没有默认 harness、没有静态 `setStubs`），
+/// 所以那次事故在结构上不可能重演 —— 不是靠纪律避免，是写不出来。
+///
+/// ⚠️ 还有一个必须处理的坑：`URLProtocol` 拿到的 `request.httpBody` 通常是 `nil`，
+/// 真实数据在 `httpBodyStream` 上（见 `bodyData(of:)`）。
 final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+
+    /// 命名空间标记 —— 挂在桩会话的附加请求头上，`startLoading` 据此找回所属桩状态。
+    /// 桩会话的 `protocolClasses` 只含本类，请求不会真的出网，所以这个头不会外泄。
+    fileprivate static let namespaceHeader = "X-Stub-Harness"
 
     /// 一条路由规则。`method` / `path` 为 `nil` 表示"任意"。
     struct Stub: Sendable {
@@ -41,59 +51,92 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         }
     }
 
-    private struct State {
-        var stubs: [Stub] = []
-        var requests: [URLRequest] = []
-        var bodies: [Data?] = []
+    // MARK: - Harness：一套彼此独立的桩状态
+
+    /// 一个测试套件（或一个用例）自持一套，彼此不干扰。
+    final class Harness: @unchecked Sendable {
+
+        fileprivate let namespace: String
+        private let lock = NSLock()
+        private var stubs: [Stub] = []
+        private var recordedRequests: [URLRequest] = []
+        private var recordedBodies: [Data?] = []
+
+        fileprivate init(namespace: String) {
+            self.namespace = namespace
+        }
+
+        /// 用**本套**桩件装配 session（每个用例建一个，避免共享状态）。
+        func makeSession() -> URLSession {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [StubURLProtocol.self]
+            configuration.httpAdditionalHeaders = [StubURLProtocol.namespaceHeader: namespace]
+            return URLSession(configuration: configuration)
+        }
+
+        /// 安装路由表并清空已记录的请求。匹配**自上而下取第一条命中**，因此把特殊规则放前面。
+        func setStubs(_ stubs: [Stub]) {
+            lock.withLock {
+                self.stubs = stubs
+                recordedRequests = []
+                recordedBodies = []
+            }
+        }
+
+        func reset() {
+            lock.withLock {
+                stubs = []
+                recordedRequests = []
+                recordedBodies = []
+            }
+        }
+
+        var requests: [URLRequest] { lock.withLock { recordedRequests } }
+
+        var bodies: [Data?] { lock.withLock { recordedBodies } }
+
+        /// 命中了多少次「某方法 + 某路径」——single-flight 的关键断言就靠它。
+        func count(method: String, path: String) -> Int {
+            lock.withLock {
+                recordedRequests.filter {
+                    $0.httpMethod == method && $0.url?.path == path
+                }.count
+            }
+        }
+
+        /// 记录一次请求，并返回命中的规则（`nil` = 无规则命中 ⇒ 让请求失败）。
+        fileprivate func record(_ request: URLRequest, body: Data?) -> Stub? {
+            lock.withLock {
+                recordedRequests.append(request)
+                recordedBodies.append(body)
+                return stubs.first { stub in
+                    (stub.method == nil || stub.method == request.httpMethod)
+                        && (stub.path == nil || stub.path == request.url?.path)
+                }
+            }
+        }
     }
 
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var state = State()
+    // MARK: - 注册表（命名空间 → harness）
 
-    // MARK: - 测试侧控制
+    private static let registryLock = NSLock()
+    nonisolated(unsafe) private static var harnesses: [String: Harness] = [:]
 
-    /// 安装路由表并清空已记录的请求。匹配**自上而下取第一条命中**，因此把特殊规则放前面。
-    static func setStubs(_ stubs: [Stub]) {
-        lock.lock()
-        defer { lock.unlock() }
-        state = State()
-        state.stubs = stubs
+    /// 新建一套独立桩状态 —— **唯一**的入口。
+    static func makeHarness() -> Harness {
+        let harness = Harness(namespace: UUID().uuidString)
+        registryLock.withLock { harnesses[harness.namespace] = harness }
+        return harness
     }
 
-    static func reset() {
-        lock.lock()
-        defer { lock.unlock() }
-        state = State()
-    }
-
-    static var requests: [URLRequest] {
-        lock.lock()
-        defer { lock.unlock() }
-        return state.requests
-    }
-
-    static var bodies: [Data?] {
-        lock.lock()
-        defer { lock.unlock() }
-        return state.bodies
-    }
-
-    /// 命中了多少次「某方法 + 某路径」——single-flight 的关键断言就靠它。
-    static func count(method: String, path: String) -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return state.requests.filter {
-            $0.httpMethod == method && $0.url?.path == path
-        }.count
-    }
-
-    static func makeSession() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubURLProtocol.self]
-        return URLSession(configuration: configuration)
+    private static func harness(for request: URLRequest) -> Harness? {
+        guard let namespace = request.value(forHTTPHeaderField: namespaceHeader) else { return nil }
+        return registryLock.withLock { harnesses[namespace] }
     }
 
     /// 把请求体读出来 —— `httpBody` 常为 `nil`，真实数据在 `httpBodyStream` 上。
+    ///
+    /// 无状态的纯工具，故留在类型上（不必先有 harness 才能用）。
     static func bodyData(of request: URLRequest) -> Data? {
         if let body = request.httpBody { return body }
         guard let stream = request.httpBodyStream else { return nil }
@@ -120,16 +163,11 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let body = StubURLProtocol.bodyData(of: request)
 
-        StubURLProtocol.lock.lock()
-        StubURLProtocol.state.requests.append(request)
-        StubURLProtocol.state.bodies.append(body)
-        let matched = StubURLProtocol.state.stubs.first { stub in
-            (stub.method == nil || stub.method == request.httpMethod)
-                && (stub.path == nil || stub.path == request.url?.path)
-        }
-        StubURLProtocol.lock.unlock()
-
-        guard let matched else {
+        // 没有命名空间（= 会话不是 harness 装的）或规则没命中 ⇒ **让请求失败**。
+        // 绝不静默放行：静默放行会把"忘了用 harness"伪装成"拿到了一个意外的响应"，
+        // 而那种缺陷要靠猜才能定位。
+        guard let matched = StubURLProtocol.harness(for: request)?.record(request, body: body)
+        else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
             return
         }
