@@ -14,6 +14,14 @@ import Testing
 @Suite("分支名校验 · 八条规则与提示文案")
 struct BranchNameTests {
 
+    /// 禁字符的 `Character` 形态（去掉空格）。
+    ///
+    /// 实现里的正本是 `BranchName.forbiddenScalars`（`Unicode.Scalar` 的有序数组 —— 判据必须按标量），
+    /// 而这里的断言要**拼名字**、要跟 `Issue` 里带的那个 `Character` 比，所以现还原一次。
+    private static var forbiddenChars: [Character] {
+        BranchName.forbiddenScalars.map { Character($0) }.filter { $0 != " " }
+    }
+
     // MARK: - 合法
 
     @Test("常见分支名一律放行（别把正常的名字拦掉）")
@@ -48,12 +56,51 @@ struct BranchNameTests {
 
     @Test("③ 不能含 ~ ^ : ? * [ \\ 这七个字符")
     func rejectsForbiddenCharacters() {
-        for character in BranchName.forbiddenCharacters.subtracting([" "]) {
+        for character in Self.forbiddenChars {
             let name = "a\(character)b"
             #expect(
                 BranchName.validate(name) == .containsForbiddenCharacter(character),
                 "「\(character)」应当被拒"
             )
+        }
+    }
+
+    @Test("③b ⚠️ 禁用字符**后面粘一个组合记号**照样要拦（判据必须按 Unicode 标量，不能按字素簇）")
+    func rejectsForbiddenCharacterFollowedByCombiningMark() {
+        // `"~\u{0301}"` 在 Swift 里是**一个**字素簇（`count == 1`），但 URL 编码出来是 `~%CC%81`
+        // —— ASCII `~` **原封不动**进了请求 ⇒ `git check-ref-format` 拒、服务端 422。
+        // 这正是本函数文档里写明它存在的那条理由（"某个名字在客户端放行、到服务端吃 422"）：
+        // 按 `Character`（字素簇）比会整族漏掉，按 `Unicode.Scalar` 比才拦得住。
+        // ⚠️ 用户看不出差别 —— `~\u{0301}` 与 `~` 在屏幕上几乎一样（组合记号无声地依附在前一个字符上）。
+        for character in Self.forbiddenChars + [" "] {
+            #expect(
+                BranchName.validate("a\(character)\u{0301}b") == .containsForbiddenCharacter(character),
+                "「\(character)」后面粘一个组合记号后应当仍被拒（否则会到服务端吃 422）"
+            )
+        }
+
+        // 反向：组合记号在**前面**时原本就能拦下（那时是两个独立字素簇）。
+        // 这条守的是"换个写法也得拦住" —— 拦不拦不该取决于组合记号写在哪一侧。
+        #expect(BranchName.validate("a\u{0301}~b") == .containsForbiddenCharacter("~"))
+    }
+
+    @Test("③c 全角同形字 / 中文 / emoji 一律放行（本片**不新增规则**，git 也收）")
+    func stillAcceptsFullWidthLookalikes() {
+        // 判据从"字素簇"换成"标量"**只堵漏、不加规则** ⇒ 下面是"没有误伤"的反证。
+        // ⚠️ 中文输入法下打 `~` / `?` 默认出全角（U+FF5E / U+FF1F），而 git 禁的是**半角**
+        //    （实测：半角八个全拒、全角同形字全收）⇒ 这条对中文用户是**默认手感**，不是边角案例。
+        // ⚠️ 想要"分支名只许英文"是**另一个产品口径**，做法是反过来只放行 ASCII（白名单），
+        //    不是拉黑同形字 —— 同形码位有几十个，永远拉不完。
+        let accepted = [
+            "～", "〜", "？", "＊", "：", "＾", "［", "＼", "｜",  // 全角同形字（U+FF5E / U+301C …）
+            "～\u{0301}",          // 全角 + 组合记号（`git check-ref-format` 实测接受）
+            "a\u{00A0}b",          // 不间断空格
+            "a\u{3000}b",          // 全角空格
+            "e\u{0301}",           // 分解形式的 é（合法字符的分解，不该被误伤）
+            "功能/修复", "修复-🚀", "中文分支",
+        ]
+        for name in accepted {
+            #expect(BranchName.validate(name) == nil, "「\(name)」应当放行")
         }
     }
 
@@ -138,5 +185,30 @@ struct BranchNameTests {
         #expect(BranchNameCopy.message(for: .containsForbiddenCharacter("~")).contains("~"))
         // 反斜杠在提示里要能显示出来（誊写时最容易漏的就是它）。
         #expect(BranchNameCopy.message(for: .containsForbiddenCharacter("\\")).contains("\\"))
+    }
+
+    @Test("⚠️ 提示语里那个字符**只印一遍**，且八条禁字符一个都不能少")
+    func forbiddenCharacterMessageIsCompleteAndDeduplicated() {
+        // 病根：句子是"不能包含 \(character)、空格，以及 ~ ^ : ? * [ \ 这些字符" ——
+        // `~` 那一次会印成「不能包含 ~、空格，以及 ~ ^ : ? * [ \ 这些字符」。
+        // ⚠️ 用**不变量**断言（"出现次数 == 1"），不是逐条对期望值：这样以后加禁字符也不用改测试。
+        for character in Self.forbiddenChars {
+            let message = BranchNameCopy.message(for: .containsForbiddenCharacter(character))
+            let occurrences = message.components(separatedBy: String(character)).count - 1
+            #expect(occurrences == 1, "「\(character)」在「\(message)」里应只出现一次（实际 \(occurrences) 次）")
+        }
+
+        // 完整性：不管报的是哪一个，其余禁字符都得在提示里露脸 —— 提示是用户一次看全规则的地方。
+        // （空格走"分支名不能包含空格"那一句，只有五个字，不列字符表。）
+        for character in Self.forbiddenChars {
+            let message = BranchNameCopy.message(for: .containsForbiddenCharacter(character))
+            for other in Self.forbiddenChars {
+                #expect(
+                    message.contains(String(other)),
+                    "「\(other)」应当出现在「\(message)」里"
+                )
+            }
+        }
+        #expect(BranchNameCopy.message(for: .containsForbiddenCharacter(" ")) == "分支名不能包含空格")
     }
 }

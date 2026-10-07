@@ -53,8 +53,10 @@ public enum BranchName {
         if name.contains("//") { return .containsDoubleSlash }
         if name.contains("..") { return .containsDoubleDot }
 
-        if let forbidden = name.first(where: { forbiddenCharacters.contains($0) }) {
-            return .containsForbiddenCharacter(forbidden)
+        // ⚠️ 遍历 `unicodeScalars`（不是 `Character`）—— 见 `forbiddenScalars` 那一段：
+        //    按字素簇比会漏掉「禁用字符 + 组合记号」，用户看不出差别、到服务端才吃 422。
+        if let scalar = name.unicodeScalars.first(where: { forbiddenScalarSet.contains($0) }) {
+            return .containsForbiddenCharacter(Character(scalar))
         }
 
         // `.lock` 是 git 的索引锁文件后缀：叫 `x.lock` 的分支会让 git 自己撞车。
@@ -67,11 +69,39 @@ public enum BranchName {
         return nil
     }
 
-    /// 禁止出现的字符（git `check_refname_format` 的字符集 + 空格）。
+    /// 禁止出现的字符（git `check_refname_format` 的字符集 + 空格）—— **有序**。
     ///
-    /// `\` 是最后一个 —— 它在 Swift 字面量里要写成 `"\\"`，
-    /// 在 git 的文档里写作 `\`，容易在誊写时丢掉。
-    public static let forbiddenCharacters: Set<Character> = [" ", "~", "^", ":", "?", "*", "[", "\\"]
+    /// 有序是有用的：提示语要按固定次序把它们列出来，而集合拼出来的顺序**每次都不一样**
+    /// （那样同一句提示在两次失败里长得不同，看起来像另一条规则）。
+    ///
+    /// `\` 排在最后 —— 它在 Swift 字面量里要写成 `"\\"`，
+    /// 在 git 的文档里写作 `\`，是誊写时最容易丢掉的一个。
+    ///
+    /// ## ⚠️ 为什么元素类型是 `Unicode.Scalar` 而不是 `Character`
+    ///
+    /// 判据必须**按标量**比。按 `Character`（= 字素簇）比会漏掉**一整族**写法：
+    /// `"~\u{0301}"` 在 Swift 里是**一个**字素簇（`.count == 1`），于是
+    /// `name.first(where: { 表.contains($0) })` 那种"逐个 `Character` 查表"拿到的是那一整个簇、
+    /// 与表里的 `"~"` 不相等 ⇒ **放行**；可 URL 编码出来是 `~%CC%81`
+    /// —— ASCII `~` **原封不动**进了请求 ⇒ git 拒、服务端 **422**。
+    /// 而那正是本类型开头写明它存在的那条理由（"某个名字在客户端放行、到服务端吃 422"）。
+    ///
+    /// - 漏的是**一类**而不是孤例：任何「禁用字符 + 组合记号」都一样（`^` `?` `[` `空格` …）。
+    /// - 反证：`"\u{0301}~"`（组合记号在**前**）是两个字素簇、原本就拦得住
+    ///   ⇒ 拦不拦只看组合记号写在哪一侧，**而屏幕上两者几乎一样**
+    ///   （组合记号无声地依附在前一个字符上）。
+    /// - 反向也要防：判据换成标量**不得误伤**。`"～"`（全角 U+FF5E）是**一个**标量 U+FF5E，
+    ///   标量序列里**不会**出现 ASCII `~`（全角同形字是独立码位，不是 `~` 的规范分解）
+    ///   ⇒ 全角照旧放行（`git check-ref-format` 实测也接受）。
+    /// - 想要"分支名只许英文"是**另一个产品口径**，做法是反过来**只放行 ASCII**（白名单），
+    ///   不是拉黑同形字 —— 同形码位有几十个，永远拉不完。
+    public static let forbiddenScalars: [Unicode.Scalar] = [" ", "~", "^", ":", "?", "*", "[", "\\"]
+
+    /// 判定用的集合视图（`contains` 是 O(1)）。
+    ///
+    /// 与 `forbiddenScalars` 是**同一份数据的两种形态**（数组保序、集合保快），不是两份清单
+    /// —— 这里由它现算，避免"加了禁字符只改一处"的分叉。
+    private static let forbiddenScalarSet = Set(forbiddenScalars)
 
     /// 不合法的原因 —— 每条都对应 `BranchNameCopy` 里一句可显示的话。
     public enum Issue: Equatable, Sendable {
@@ -82,6 +112,10 @@ public enum BranchName {
         /// 它可能就是不可见的，塞进提示里会让那句话看起来"什么都没说"。
         case containsControlCharacter
 
+        /// 含禁止字符 —— 带上**那一个字符本身**（提示里要指名道姓，见 `BranchNameCopy`）。
+        ///
+        /// ⚠️ 它由命中的 `Unicode.Scalar` 还原而来（**判据按标量、显示按字符**）：
+        /// 集合里只有 ASCII，还原出的 `Character` 恒等于那个字符本身。
         case containsForbiddenCharacter(Character)
 
         case beginsOrEndsWithSlash
@@ -119,7 +153,7 @@ public enum BranchNameCopy {
             // 空格单说一句：否则会拼出"不能包含  与空格…"（那个字符本身是空白，看不见）。
             character == " "
                 ? "分支名不能包含空格"
-                : "分支名不能包含 \(character)、空格，以及 ~ ^ : ? * [ \\ 这些字符"
+                : "分支名不能包含 \(character)，空格与 \(remaining(BranchName.forbiddenScalars, excluding: character)) 也不允许"
         case .beginsOrEndsWithSlash:
             "分支名不能以 / 开头或结尾"
         case .beginsOrEndsWithDot:
@@ -133,5 +167,24 @@ public enum BranchNameCopy {
         case .reservedName:
             "HEAD 是保留名，不能用作分支名"
         }
+    }
+
+    /// 把禁字符列成提示里可读的一串，**排掉已经点名过的那个**。
+    ///
+    /// ⚠️ 原先这里是一段写死的字符表，命中 `~` 时会印成
+    /// 「不能包含 ~、空格，以及 ~ ^ : ? * [ \ 这些字符」—— **`~` 印了两遍**。
+    /// 现在改为从 `BranchName.forbiddenScalars` **排掉命中项现算**，
+    /// 顺带把"清单存两处"消掉（加禁字符只改一处）。
+    ///
+    /// ⚠️ 顺序取那个**有序数组**，不能用集合 —— 集合的顺序每次不同，
+    /// 同一句提示在两次失败里会长得不一样，看起来像两条不同的规则。
+    /// ⚠️ 空格也排掉：它另有自己那一句（"分支名不能包含空格"），
+    /// 混进这串里会拼出"空格与  空格"这种说不出话的句子。
+    private static func remaining(_ scalars: [Unicode.Scalar], excluding character: Character) -> String {
+        scalars
+            .map { Character($0) }
+            .filter { $0 != character && $0 != " " }
+            .map { String($0) }
+            .joined(separator: " ")
     }
 }
