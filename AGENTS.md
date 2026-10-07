@@ -5,8 +5,21 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地。**
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）进行中 —— 5.0 文档已先行。**
 `make verify` = **五包单测 642 项 + 模拟器构建**，一条命令，**零编译警告**。
+
+> **切片 5 施工图（2026-10-07 起）**：搜索（PRD §4.2 + §5.10）—— 四范围 · 防抖与取消 · Search 配额纪律。
+> 三个入口（首页 / 仓库 / 探索右上角）**已存在**，`RouteView` 的 `.search` 仍是骨架屏。
+
+| # | 内容 | 状态 |
+|---|---|---|
+| 5.0 | 文档先行：决策 #44–#46（分页口径 / 热门词来源 / 用户弹层按钮）+ §9.2 改写 + PRD §4.2 与 §5.10 补口径 | ✅ |
+| 5.1 | 领域层（`GitDuoKit/Search/`）：`SearchScope` · `SearchQuery`（只拼不发 + "够不够格发"判定）· `SearchHistory`（≤8 去重）· `SearchDebounce`（300ms / 代码 500ms，**新输入即取消上一条**）· `SearchRow` · `LoadSearch` | ⬜ |
+| 5.2 | 数据层：`search/users` / `search/code` / `search/issues` 三端点 + DTO。**仓库范围直接复用** `GitHubSearchRepositoriesEndpoint`（它的注释早写着这个用途）⚠️ 每个都显式声明 `rateLimitResource`（`.search` / 代码 `.codeSearch`），漏了不报错、只会打爆 30/min | ⬜ |
+| 5.3 | 设计系统：复用 4.3 的 `StateIcon` / `RepoAvatar` / `FilterChip` / `SkeletonBar`；仅可能补代码结果行的**等宽预览行** | ⬜ |
+| 5.4 | 表现层（`GitDuo/Features/Search/`）：`SearchView`（输入框 + 清除 + 四范围分段 + 空闲态/结果/空态）+ 四张结果行卡片 + `UserProfileSheet`（§5.10）⚠️ 易漏点：**刷新结果区时保住输入焦点与光标** | ⬜ |
+| 5.5 | 装配与路由：`AppEnvironment` 接 `search` 用例 + 历史存储（**登出要清**，与 `recentVisits` 同规矩）；`RouteView` 的 `.search` 换真实视图 | ⬜ |
+| 5.6 | 文档收尾 + `make verify` | ⬜ |
 
 > **切片 4 交付（2026-10-07）**：4.0 文档（决策 #38–#41）· 4.1 领域层纯逻辑 · 4.2 数据层（GraphQL 置顶 / Search 双榜 / 仓库洞察 / Star 写）
 > · 4.3 设计系统（决策 #42/#43）· 4.4 表现层（5 个页面）· 4.5 装配与路由 · 4.6 收尾。
