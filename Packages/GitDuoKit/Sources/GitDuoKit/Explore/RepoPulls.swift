@@ -32,6 +32,35 @@ public enum PullRequestState: String, Sendable, Hashable {
         case .closed: "已关闭"
         }
     }
+
+    /// 状态**胶囊**上的可见状态词（切片 5.4 新增）。
+    ///
+    /// ## ⚠️ 它是英文的，而 `label` 是中文的 —— 这不是笔误
+    ///
+    /// 原型 `scripts/02-icons.js` 的 `pillOf` 逐字如此：
+    /// ```js
+    /// const pillOf = s => ({
+    ///   'open':'<span class="pill open">● Open</span>',
+    ///   'closed-i':'<span class="pill closed-i">● Closed</span>',
+    ///   'closed-p':'<span class="pill closed-p">● Closed</span>',
+    ///   'merged':'<span class="pill merged">⇿ Merged</span>',
+    /// }[s] || '');
+    /// ```
+    /// 按 `AGENTS.md §1`（原型是文案的最终裁决者）照抄，**不自行译成中文**。
+    /// 两处用不同的词是有分工的：`label` 给读屏（中文、与页脚文案一套词），
+    /// 这一句是**画在屏幕上的字**。
+    ///
+    /// ⚠️ 原型那串里还有一个前置字形（`●` / `⇿`）。**有意不带**：
+    /// 它是一个"状态点"，而颜色信息已经由胶囊的前景 / 底 / 边三处表达了
+    /// （见 `StatusPill`）；把它混进文案会让读屏念出一个多余的符号，
+    /// 也会让切片 7 的详情页复用时拿不到一个干净的状态词。已登记为已知偏差。
+    public var pillTitle: String {
+        switch self {
+        case .open: "Open"
+        case .merged: "Merged"
+        case .closed: "Closed"
+        }
+    }
 }
 
 extension PullRequestState {

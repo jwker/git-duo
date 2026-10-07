@@ -194,4 +194,12 @@ struct SearchCopyTests {
     func hotKeywordsMatchPrototype() {
         #expect(SearchHotKeywords.all == ["swiftui", "markdown", "设计令牌", "oauth", "折叠屏"])
     }
+
+    @Test("§5.10 与「加载更多」的文案（原型逐字 / PRD §4.2 逐字）")
+    func slice54Copy() {
+        #expect(SearchCopy.loadMoreAction == "加载更多")
+        #expect(SearchCopy.userSheetTitle == "用户")
+        #expect(SearchCopy.followAction == "关注")
+        #expect(SearchCopy.publicReposAction == "查看公开仓库")
+    }
 }

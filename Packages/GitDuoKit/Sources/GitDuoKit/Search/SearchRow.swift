@@ -219,6 +219,43 @@ public struct CodeHit: Sendable, Hashable, Identifiable {
     }
 }
 
+/// 会话状态所属的**族**（切片 5.4 新增）。
+///
+/// ## 为什么族要由领域层算，而不是让结果行自己 `switch`
+///
+/// 因为「`.closed` 该画紫还是画红」**取决于它是 Issue 还是 PR**：
+///
+/// | 情形 | 原型类名 | 族 |
+/// |---|---|---|
+/// | 开放的 Issue / PR | `.pill.open` | `open`（绿） |
+/// | 已合并的 PR | `.pill.merged` | `completed`（紫） |
+/// | **已关闭的 Issue** | `.pill.closed-i` | **`completed`（紫）** |
+/// | **已关闭且未合并的 PR** | `.pill.closed-p` | **`closed`（红）** |
+///
+/// 而 `PullRequestState` 把后两者**都收成了 `.closed`**（GitHub 只有 `state` 一个字段，
+/// "关闭"这件事对两类是同一个值）。也就是说：**光看 `state` 分不出这两族**，
+/// 必须连 `kind` 一起看。
+///
+/// 这条规则若写在结果行里，就落在 **App target —— 那里没有测试 target**，
+/// 而它错了的表现是"已关闭的 Issue 长着一颗红胶囊"，看起来完全正常。
+/// 所以判定留在这里（可单测），结果行只做一次显式翻译。
+///
+/// ⚠️ 取值名**有意不与设计包的 `StatusPill.Tone` 同名**（那边叫 open / merged / closed）：
+/// 领域层不认识 SwiftUI，两边各自命名、由视图显式翻译
+/// —— 同 `TrendingMetric.Role` 与 `TrendCard.Badge` 的先例。
+/// 用同一个名字会让将来任一侧增减取值时悄悄串味。
+public enum ConversationStatusTone: Sendable, Hashable, CaseIterable {
+
+    /// 绿族：进行中 / 正向。
+    case open
+
+    /// 紫族：「已完成」那一族 —— 已合并的 PR、已关闭的 Issue。
+    case completed
+
+    /// 红族：已终止 / 否定 —— 已关闭**且未合并**的 PR。
+    case closed
+}
+
 /// Issue / PR 结果行（原型 `convResultRow`）。
 public struct ConversationHit: Sendable, Hashable, Identifiable {
 
@@ -266,6 +303,20 @@ public struct ConversationHit: Sendable, Hashable, Identifiable {
 
     /// 读屏用的状态词（图标不能只靠形状传达状态）。
     public var stateLabel: String { state.label }
+
+    /// 状态胶囊上的可见状态词（原型 `pillOf` 逐字，见 `PullRequestState.pillTitle`）。
+    public var statePillTitle: String { state.pillTitle }
+
+    /// 这一行属于哪一族（判定规则与那处"为什么必须连 `kind` 一起看"见 `ConversationStatusTone`）。
+    public var statusTone: ConversationStatusTone {
+        switch state {
+        case .open: .open
+        case .merged: .completed
+        // ⚠️ 全部重点在这一行：`.closed` 分两种。
+        //    Issue 关了是紫族（原型 `.pill.closed-i`），PR 关了没合并才是红族（`.pill.closed-p`）。
+        case .closed: kind == .issue ? .completed : .closed
+        }
+    }
 
     /// 卡片副标题：`my-git/gitduo #42 · 2 小时前`（原型 `convResultRow` 逐字）。
     ///

@@ -172,6 +172,20 @@ struct RepoPullsTests {
         #expect(PullRequestState.closed.label == "已关闭")
     }
 
+    @Test("⚠️ 胶囊上的状态词是**英文**（原型 `pillOf` 逐字），且不带前置字形")
+    func pillTitlesMatchPrototype() {
+        #expect(PullRequestState.open.pillTitle == "Open")
+        #expect(PullRequestState.merged.pillTitle == "Merged")
+        #expect(PullRequestState.closed.pillTitle == "Closed")
+
+        // 原型那串里还有一个 `●` / `⇿` 前缀 —— 有意不带（它已由胶囊的三处配色表达，
+        // 混进文案会让读屏念出一个多余符号）。这条断言就是那个决定的守卫。
+        for state in [PullRequestState.open, .merged, .closed] {
+            #expect(!state.pillTitle.contains("●"))
+            #expect(!state.pillTitle.contains("⇿"))
+        }
+    }
+
     @Test("`id` 用 PR 编号 —— 它同时是跳详情页的键")
     func idIsTheNumber() {
         #expect(PullRow(number: 57, title: "t", state: .open,

@@ -68,6 +68,13 @@ final class AppEnvironment {
     /// Star 的领域用例（先确认基准，再幂等切换 —— 决策 #41）。
     let starToggle: ToggleStar
 
+    /// 搜索取数（四范围分发 + 累加去重 + 按「范围 · 关键词」LRU 缓存 —— 切片 5.5）。
+    ///
+    /// ⚠️ 它是 `actor`，`SearchViewModel` 直接持有它。**不要**在这里再包一层"每次新建"：
+    /// 缓存就活在这个实例里（§4.2 要求切范围"不清空已加载的页"，
+    /// 而搜索桶只有 30 次/分钟 —— 每次重进页面都重发一轮是不可接受的）。
+    let search: LoadSearch
+
     // MARK: - 本地存储
 
     /// 最近访问（落盘实现见 `UserDefaultsRecentVisitStore`）。
@@ -79,6 +86,12 @@ final class AppEnvironment {
     ///
     /// ⚠️ 同样是**账号数据** —— 留着它，换账号登录会拿着别人的基线算出凭空的增幅。
     let starSnapshots: any StarSnapshotStore
+
+    /// 最近搜索（落盘实现见 `UserDefaultsSearchHistoryStore`）。
+    ///
+    /// ⚠️ 同样是**账号数据**：`signOut()` 必须清掉（§3.6 第 ③ 步）——
+    /// 它记的是"这个人在搜什么"，换个人登录还留着就是别人的行为痕迹。
+    let searchHistory: any SearchHistoryStore
 
     // MARK: - 全局 UI 通道
 
@@ -128,8 +141,10 @@ final class AppEnvironment {
         // 本地存储先造：`trending` 的 Star 增幅依赖 `starSnapshots`。
         let visits = UserDefaultsRecentVisitStore()
         let snapshots = UserDefaultsStarSnapshotStore()
+        let searchHistory = UserDefaultsSearchHistoryStore()
         self.recentVisits = visits
         self.starSnapshots = snapshots
+        self.searchHistory = searchHistory
 
         self.repositories = LoadRepositoriesPage(
             source: GitHubRepositoryEndpoint(client: client)
@@ -152,6 +167,12 @@ final class AppEnvironment {
         )
         self.starToggle = ToggleStar(
             source: GitHubStarEndpoint(client: client)
+        )
+        // ⚠️ 搜索的四个端点**共存于一个适配器**（`GitHubSearchDataSource` 内部由
+        //    `GitHubSearchEndpoints` 用**同一个** `client` 生成四个端点）——
+        //    在这里 new 四个端点再各传一个，会让缓存分成几份、配额各算各的，而且不报错。
+        self.search = LoadSearch(
+            source: GitHubSearchDataSource(client: client)
         )
     }
 
@@ -244,11 +265,16 @@ final class AppEnvironment {
         // ③ 清空与该账号绑定的本地数据。已接入的：
         //    · 最近访问（含"当时是否可写"的归属）
         //    · Star 基线快照（留着它会拿旧账号的基线算出凭空的增幅）
+        //    · 最近搜索（切片的 5 —— 它记的是"这个人在搜什么"）
         //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
         //    尚未接入（落地时补在这一处）：收藏夹与归属映射（切片 9）、
-        //    搜索历史（切片 5）、按仓库的分支记忆（切片 6）。
+        //    按仓库的分支记忆（切片 6）。
         await recentVisits.clear()
         await starSnapshots.clear()
+        await searchHistory.clear()
+        // ⚠️ `LoadSearch` 也是 actor，它缓存的是**上一个账号搜出来的结果**（含私有仓库名）
+        //    ⇒ 与接口缓存同一条：不清就会在新账号的界面上露出来。
+        await search.invalidateAll()
         // ⚠️ `HTTPResponseCache` 是 actor（它的内存 LRU 要被多个请求并发读写）⇒ 必须 await。
         _ = await responseCache.removeAll()
 
@@ -288,10 +314,11 @@ enum AuthNotice: Equatable {
 ///
 /// 已消解：`TokenStore` 的 Keychain 实现（切片 1 → `KeychainTokenStore`，前置条件 P4）。
 /// 已消解：`GitHubGraphQLClient` 的"尚无调用方"（切片 4 → 首页置顶经 `pinnedRepositories` 调用）。
+/// 已消解：`RouteView` 的 `.search`（切片 5 → `SearchView` + `search` / `searchHistory` 装配）。
 enum SkeletonPlaceholders {
     static let registry: [String] = [
         "「我的」Tab 根页（`ProfileView` 仍是骨架屏，切片 9）",
-        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：搜索（5）· "
+        "`RouteView` 里仍走 `SkeletonScreen` 的推入页："
             + "仓库详情 / 文件查看 / 提交详情 / 分支（6）· Issue 与 PR 详情 / 新建（7）· "
             + "编辑器（8）· 我的 Star / 我的收藏 / 设置（9）"
     ]

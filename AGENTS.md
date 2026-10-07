@@ -5,11 +5,14 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）进行中 —— 5.0 文档、5.1 领域层、5.2 数据层、5.3 设计系统已落地。**
-`make verify` = **五包单测 762 项 + 模拟器构建**，一条命令，**零编译警告**。
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地。**
+`make verify` = **五包单测 768 项 + 模拟器构建**，一条命令，**零编译警告**。
+⚠️ **切片 5 与切片 4 共享同一笔欠账**：完成定义第 3 条「与原型逐屏对照」**到目前一次都没做过**
+（四个页面 + 搜索页都要登录才可达，至今只有代码级证据）。它是 4 条里**唯一**能发现"页面缺失 / 做错"的一条。
+**动手切片 6 之前建议先跑一次真机 / 模拟器目视**（`make device`，或模拟器直接运行）。
 
 > **切片 5 施工图（2026-10-07 起）**：搜索（PRD §4.2 + §5.10）—— 四范围 · 防抖与取消 · Search 配额纪律。
-> 三个入口（首页 / 仓库 / 探索右上角）**已存在**，`RouteView` 的 `.search` 仍是骨架屏。
+> 三个入口（首页 / 仓库 / 探索右上角）**都已存在且已接到真实页面**（`RouteView.search` 换成了 `SearchView`）。
 
 | # | 内容 | 状态 |
 |---|---|---|
@@ -17,9 +20,9 @@
 | 5.1 | 领域层（`GitDuoKit/Search/`）：`SearchScope` · `SearchDebounce` · `SearchRequestToken` · `SearchQuery`（拼 + 门槛判定）· `SearchHistoryStore` · `SearchRow`（四行）· `SearchCopy` · `SearchHotKeywords` · `LoadSearch`（分发 / 合并 / LRU 缓存） | ✅ |
 | 5.2 | 数据层（已落地）：`SearchResult` 泛型信封（四端点唯一解码入口）+ `search/users` · `search/code`（带 text-match Accept）· `search/issues` 三端点与 DTO + `SearchRowMapper`（行级映射）· `SearchEndpoints` 接缝 · `GitHubSearchDataSource` 适配器。⚠️ 配额桶逐个显式声明（已各配单测守卫）；`/search/users` 的 `name`/`bio`/`public_repos`/`followers` 按可选处理（官方示例不含）—— 拿不到 ⇒ 副标题整段不渲染，**一处已报用户待裁定的取数缺口**（要不要逐条补 `GET /users/{login}`） | ✅ |
 | 5.3 | 设计系统（已落地）：**三件** —— `StatusPill`（状态胶囊，`.pill`）· `CodePreviewLine`（等宽预览行，`.sr-code`）· `UserAvatar`（单个用户头像，`.avatar`，并把首字母 / djb2 兜底色算法从 `AvatarStack` 提上来、那边改为委派）+ 令牌（`codeSurface` · 状态胶囊三族的底 / 边 6 个 · `Font.tag` · `Font.monospacedPreview`）。⚠️ **施工图原估"仅可能补等宽预览行"，实查后是两件**：PRD §4.2 第 370 行明写会话行要有**状态胶囊**，而它在设计包里根本不存在（4.4 的卡片只用状态图标）；用户行 / §5.10 弹层的头像也没有单件（`AvatarStack` 只有堆叠版）| ✅ |
-| 5.4 | 表现层（`GitDuo/Features/Search/`）：`SearchView`（输入框 + 清除 + 四范围分段 + 空闲态/结果/空态）+ 四张结果行卡片 + `UserProfileSheet`（§5.10）⚠️ 易漏点：**刷新结果区时保住输入焦点与光标** | ⬜ |
-| 5.5 | 装配与路由：`AppEnvironment` 接 `search` 用例 + 历史存储（**登出要清**，与 `recentVisits` 同规矩）；`RouteView` 的 `.search` 换真实视图 | ⬜ |
-| 5.6 | 文档收尾 + `make verify` | ⬜ |
+| 5.4 | 表现层（已落地）：`GitDuo/Features/Search/` —— `SearchView`（输入框 + 清除 + 四范围分段 + 空闲态/结果/空态/失败）+ 六个 `Components/`（`SearchField` · `SearchRowBox` · `SearchResultRows`（四路分派 + 四个行视图）· `SearchIdleSection` · `SearchResultsSkeleton` · `UserProfileSheet`）+ `ViewModels/SearchViewModel`。⚠️ **顶部输入框与分段条有意钉在滚动区之外**（PRD §4.2「刷新结果区时保持输入焦点与光标」—— 原型放在 `.content` 里一起滚，那一处**按 PRD 有意偏离原型**，已在代码注明）。另补领域层两个口：`PullRequestState.pillTitle`（英文胶囊词，与中文读屏 `label` 分开）· `ConversationHit.statusTone`（`.closed` 的族**取决于 `kind`** —— 已关闭 Issue 走紫族、已关闭未合并 PR 走红族，这条规则要在领域层才有人守）| ✅ |
+| 5.5 | 装配与路由（已落地）：`AppEnvironment` 接 `search`（`LoadSearch`，**单实例** —— 缓存活在它里面）与 `searchHistory`（`UserDefaultsSearchHistoryStore`，键前缀 `GitDuo.searchHistory`）；`signOut()` ③ 步补 `searchHistory.clear()` + `search.invalidateAll()`（缓存里是**上一个账号搜出来的结果**，含私有仓库名）；`RouteView` 的 `.search` 换成 `SearchView` 并同步删掉 `SkeletonPlaceholders` 里那条登记 | ✅ |
+| 5.6 | 文档收尾 + `make verify`：`TECH_SPEC §3.6`（登出 ③ 已接入清单）· `§9.2`（界面落点两行 —— 焦点保全 / 不复用 `LinkRow`）· `§10.7`（`Radius.field`）· `AGENTS.md §0` · `REVIEW-CHECKLIST §6` | ✅ |
 
 > ⚠️ **切片 5 有一条被外部事实推翻的旧设计，已据实改正（决策 #47）**：
 > `TECH_SPEC §9.2` 原写「Issue·PR 范围：一次 `GET /search/issues`、按类型字段区分 PR 与 Issue」——

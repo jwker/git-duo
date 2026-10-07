@@ -345,6 +345,10 @@ GitHub App 的用户访问令牌（`ghu_`）的可见范围是**三重交集**�
   理由：它不属于任何 Feature，却是**唯一可能把凭据留在磁盘上的东西**。真机实测（2026-10-06）：换令牌响应一度被写进
   `Library/Caches/<bundle-id>/Cache.db`；而**改掉写入路径只能阻止将来再写，已落盘的副本只有显式清理才会消失**。
   其余各项（最近访问 / 收藏夹 / 搜索历史 / 分支记忆）仍按原计划随各 Feature 落地时接入 App 层的 ③。
+  - 已接入的进度（截至 2026-10-07）：**最近访问**（切片 4）· **Star 基线快照**（切片 4）· **搜索历史 + 搜索缓存**（切片 5.5）。
+    ⚠️ 搜索那两条要分开记：`searchHistory.clear()` 清的是历史；**`search.invalidateAll()` 清的是 `LoadSearch` 的结果缓存** ——
+    后者装的是**上一个账号搜出来的结果**（含私有仓库名），漏了它就会在新账号的界面上露出来。
+  - 尚未接入：收藏夹与归属映射（切片 9）· 按仓库的分支记忆（切片 6）。
 - **撤销端点**（决策 #30 解锁的能力）：`DELETE /applications/{client_id}/grant`
   —— **Basic Auth 用 `client_id` : `client_secret`**，body 传 `access_token`，成功返回 **204**。官方明确该组端点**同时适用于 OAuth App（`gho_`）与 GitHub App 用户令牌（`ghu_`）**：
   > Tokens for OAuth apps have the prefix `gho_`, while OAuth tokens for GitHub Apps… have the prefix `ghu_`. **You can use the following endpoints for both types of OAuth tokens.**
@@ -916,7 +920,9 @@ enum Route: Hashable {
 | 写入历史的时机 | **两处都写**（2026-10-07 校正）：**回车**（`commitSearch`）**与点开任一条结果**（原型 `openSearchRepo` / `openCodeFile` / `openConvRow` 三处都调 `recordTerm()`）。⚠️ PRD §4.2 原先只写了回车 ⇒ 已按**事实优先级（原型 > TECH_SPEC > PRD）**补进 PRD。理由：点开结果才是"这条搜索有用"的真实信号 |
 | 最近搜索 / 热门词 | 本地。历史 **≤8 条、去重、置顶**（`recordTerm` 逐字：`[q].concat(旧.filter(x => x !== q)).slice(0, 8)`）；热门词是**内置静态词表**（决策 #45，无服务端数据源） |
 | 清除历史 | 「清除」**不弹确认层**（原型 `clearSearchHistory` 直接清 + toast `已清除搜索记录`）—— 与「最近访问」`openClearRecent`（**会弹**确认层）**有意不同**：那是浏览足迹，这是显式输入，后者用户意图明确 |
-| 登出 | 搜索历史一并清空（与 `recentVisits` / `starSnapshots` 同规矩，§3.6 ③） |
+| 登出 | 搜索历史一并清空（与 `recentVisits` / `starSnapshots` 同规矩，§3.6 ③）；⚠️ **另清 `LoadSearch` 的结果缓存**（`invalidateAll()`）—— 里面是上一个账号搜出来的结果 |
+| 界面落点（5.4 实现期定） | **输入框与范围分段条钉在滚动区之外**，只有内容区滚动。原型把两者都放在 `.content`（`overflow-y:auto`）里整页一起滚 —— 这里是**按 PRD §4.2「刷新结果区时保持输入焦点与光标」有意偏离原型**（原型是静态演示，验不出焦点丢失）。输入框抽成独立视图 + `@FocusState.Binding`，`SearchViewModel` 的 `keyword` 只经一个显式 `Binding` 改（`set` 里"改值 + 调度"合一步，不给"只赋值没调度"留路径） |
+| 结果行容器 | **不复用 `LinkRow`**，另写 `.sr-item` 专用的 `SearchRowBox`。§9.10.5 的 `.file-row` 与它只差 1–2pt，但**语义不同**：`LinkRow` 是"可导航的链接行"（链接色 + 按下态），而搜索结果行里有一半（用户行、代码行的非文本部分）不是那个意思 —— 复用会让后续改 `LinkRow` 时意外改到搜索结果行。行内分派走 `SearchRowView`（四路），四个行视图各自成件 |
 
 **配额提示**：搜索是独立且**很紧**的配额（30/min，代码 10/min）。UI 上的"边输边搜"必须配合防抖与取消，否则用户连打几个字符就会触发 403。⚠️ 闸门必须**逐次尝试**都声明 `rateLimitResource`（`.search` / 代码 `.codeSearch`）—— 漏了不会报错，只会按"没有限额"放行，然后在一次连点里打爆。
 
@@ -1360,6 +1366,12 @@ GlassEffectContainer(spacing: 12) {
 | `Palette.stateClosedSurface` / `stateClosedBorder` | `#FFF1F2` / `#F1B8BF` | `.pill.closed-p`（已关闭**且未合并**的 PR）的底 / 边 |
 | `Font.tag` | `.caption2.weight(.semibold)` | 原型 `.pill{font-size:11px;font-weight:600}`。与 `caption`（11pt regular）只差字重，不能合并 |
 | `Font.monospacedPreview` | `.system(.caption2, design: .monospaced)` | 原型 `.sr-code{font-size:11.5px}`。比 `monospaced`（`.footnote`，13pt）小一号 —— 预览行嵌在结果行里，13pt 会与同行的标题撞在一起 |
+
+**切片 5.4 新增的令牌（2026-10-07）**
+
+| 令牌 | 值 | 出处与用途 |
+|---|---|---|
+| `Radius.field` | `11` | 原型 `styles/03-components.css` 的 `.searchfield` 与 `.iconbtn` **同为 11**。搜索输入框与「清除」圆钮共用一档；此前圆角令牌里没有 11 这一档 |
 
 | 组件 | 对应原型 | 为什么进设计包（决策 #43 判据） |
 |---|---|---|

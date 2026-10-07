@@ -22,7 +22,9 @@ struct RouteView: View {
     var body: some View {
         switch route {
         case .search:
-            SkeletonScreen(title: "搜索", slice: "切片 5 落地", reference: "PRD §4.2 / TECH_SPEC §9.2")
+            // 三个入口（首页 / 仓库 / 探索右上角的放大镜）都推到这一处（PRD §4.2、§6.3）。
+            // 本视图只负责把组合根的两件依赖传下去；页面自己不认识"是谁推的它"。
+            SearchView(loader: env.search, history: env.searchHistory)
         case let .repoDetail(fullName, section, _):
             // ⚠️ 这里原写「切片 4 落地」—— **错的**（PRD §4.4 与施工图 4.4「表现层」撞了名）。
             //    2026-10-07 裁定：PRD §4.4 归**切片 6**，与文件查看 / 提交详情 / 分支同片

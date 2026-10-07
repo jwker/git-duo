@@ -79,6 +79,62 @@ actor UserDefaultsRecentVisitStore: RecentVisitStore {
     }
 }
 
+/// 「最近搜索」的**落盘实现**（TECH_SPEC §7.1 存储表：`UserDefaults` + JSON）。
+///
+/// 与 `UserDefaultsRecentVisitStore` 完全同一分工：去重 / 置顶 / 裁到 8 条那三件事
+/// 在领域包（`InMemorySearchHistoryStore`，逐字移植原型 `recordTerm`），
+/// 编解码走 `SearchHistoryCoding`（有往返测试）。本类型只做"读出来 → 交给它 → 存回去"。
+///
+/// ## ⚠️ 键名前缀必须与「最近访问」不同
+///
+/// `GitDuo.searchHistory` vs `GitDuo.recentVisits`。两者是两份独立数据，
+/// 共用前缀只是在等一次"清 A 顺手清掉 B"的事故（`signOut()` 里那几行紧挨着）。
+///
+/// 除此之外它与 `UserDefaultsRecentVisitStore` 逐条同构 —— 包括 `clear()` 删键而不是
+/// 留一份 `[]`（读取端分辨不出这两者，能不落痕就不落痕）。
+actor UserDefaultsSearchHistoryStore: SearchHistoryStore {
+
+    static let keyPrefix = "GitDuo.searchHistory"
+
+    private let defaults: UserDefaults
+    private let key: String
+    private let backing: InMemorySearchHistoryStore
+
+    /// - Parameter namespace: 账号命名空间（多账号预留，同 `UserDefaultsRecentVisitStore`）。
+    init(defaults: UserDefaults = .standard, namespace: String = "default") {
+        self.defaults = defaults
+        self.key = "\(Self.keyPrefix).\(namespace)"
+        self.backing = InMemorySearchHistoryStore(seed: Self.load(from: defaults, key: key))
+    }
+
+    func record(term: String) async {
+        await backing.record(term: term)
+        // ⚠️ 与最近访问同一理由：存的是**对方归一化之后**的顺序，不是"我刚传进去的那一条"。
+        persist(await backing.terms())
+    }
+
+    func terms() async -> [String] {
+        await backing.terms()
+    }
+
+    func clear() async {
+        await backing.clear()
+        // 与 `UserDefaultsRecentVisitStore.clear()` 一样删键：留一份 `[]` 与"从没搜过"
+        // 在读取端没有区别，能不落痕就不落痕。
+        defaults.removeObject(forKey: key)
+    }
+
+    private func persist(_ terms: [String]) {
+        guard let data = SearchHistoryCoding.encode(terms) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    private static func load(from defaults: UserDefaults, key: String) -> [String] {
+        guard let data = defaults.data(forKey: key) else { return [] }
+        return SearchHistoryCoding.decode(from: data)
+    }
+}
+
 /// Star 基线的**落盘实现**（TECH_SPEC §7.1 / §9.10.2）。
 ///
 /// 与 `UserDefaultsRecentVisitStore` 同一分工：语义在领域包（`InMemoryStarSnapshotStore`），

@@ -173,6 +173,14 @@ public enum Theme {
         public static let segment: CGFloat = 8
         public static let card: CGFloat  = 10
         public static let sheet: CGFloat = 14
+        /// **输入框 / 图标按钮**那一档（切片 5 新增）。
+        ///
+        /// 原型 `styles/03-components.css` 里 `.searchfield{border-radius:11px}` 与
+        /// `.iconbtn{border-radius:11px}` —— 两处**同为 11**，是原型里确实存在的一档
+        /// （比 `.card`(10) 方一点、比 `.container`(12) 收一点）。
+        /// 不给它名字，搜索页的输入框就只能写 `cornerRadius: 11`，而那正是"魔法值"。
+        /// 沿 `Radius.segment`(8) / `Radius.hero`(16) 的先例。
+        public static let field: CGFloat = 11
         /// **仓库头部大卡**（原型 `styles/04-screens.css` 的 `.repo-hero{border-radius:16px}`）。
         ///
         /// 与 `sheet`(14) 只差 2pt，但**不能合并**：那是两处独立取色
