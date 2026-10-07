@@ -173,18 +173,14 @@ public struct CommitDetail: Sendable, Hashable, Identifiable {
     /// ⚠️ 空白信息（少见的空 message）回落到完整 SHA —— 与 `RecentCommit.summary` 同规矩：
     /// 空白标题与"还没加载出来"在界面上是同一种样子。
     public var headline: String {
-        let first = message.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
-            .first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
-        return first.isEmpty ? sha : first
+        // 与 `RecentCommit.summary` / 提交列表行共用同一个实现，见 `CommitMessage`
+        CommitMessage.firstLine(message, fallback: sha)
     }
 
     /// 提交信息的**正文**（首行之后的全部内容）。没有正文时为 `nil`。
     ///
     /// 详情页在标题下面显示它；为 `nil` 时那一块整个不渲染（不画一片空白）。
     public var body: String? {
-        let parts = message.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
-        guard parts.count == 2 else { return nil }
-        let rest = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-        return rest.isEmpty ? nil : rest
+        CommitMessage.body(message)
     }
 }

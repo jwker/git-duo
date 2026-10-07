@@ -136,10 +136,8 @@ public struct RecentCommit: Sendable, Hashable {
     /// 而空白与"还没加载出来"（`nil`）在界面上是同一种样子，
     /// 会让用户以为这条一直没加载完。
     public var summary: String {
-        let firstLine = message.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first
-            .map(String.init)?
-            .trimmingCharacters(in: .whitespaces) ?? ""
-        if firstLine.isEmpty { return String(sha.prefix(7)) }
-        return firstLine
+        // 规则本体在 `CommitMessage.firstLine` —— 这一处、提交列表行、详情页标题
+        // 三处共用同一个实现（各写一遍迟早会分叉成三个不同的标题）。
+        CommitMessage.firstLine(message, fallback: String(sha.prefix(7)))
     }
 }

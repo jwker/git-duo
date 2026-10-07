@@ -375,6 +375,17 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
         修法三件：`isIdentifierBody` 改为 `isIdentifierStart || isNumber`（两集合的关系由断言 `identifierStartImpliesBody` 守住）；加 `defer { if index == iterationStart { index += 1 } }` 作**结构性兜底**（以后再加分支忘推下标，最坏是"少染一个字符"而不是"跑不动"）；新增守卫测试。
         **判据（已进 `MEMORY.md`）**：**词法扫描器的"起始字符集合"必须 ⊆ "后续字符集合"**；**`swift test` 无输出地被杀，先查死循环，不要先怀疑沙箱。**
       - ▶ **下一步**：**6.2 数据层**（11 个端点 + 配额桶逐个声明并配守卫）。
+    - ✅ **6.2 数据层已交付**（2026-10-07）：`GitHubAPI/REST/` 新增 **8 个源文件**（4 组 DTO + 4 个端点类）+ **5 个测试文件**（**+51 项**，GitHubAPI 286 → **337**）；`GitDuoKit` 补 3 个 Mapper + `CommitMessage`（**+27 项**，462 → **489**）。**14 条路由**全落 `Repos/` 四个端点类：
+      - `GitHubRepoDetailEndpoint` —— 仓库详情头部（`RepositoryDetailDTO`）。⚠️ 与探索页 `GitHubRepoInsightsEndpoint.repository` **打同一条路由、解同一个 DTO**，不合并的理由是**语义**（可写详情 vs 只读探索）。
+      - `GitHubRepoContentEndpoint` —— `contents`（目录回**数组** / 文件回**对象**，两种形状同一路由）· `rawFile`（`Accept: application/vnd.github.raw`）· `readme`（**只吞 404** ⇒ `nil`；5xx / 断网必抛；非 UTF-8 **抛错不返回空串**）。
+      - `GitHubRepoCommitEndpoint` —— 列表（`pageSize=30`）· 详情（`files[].patch` + `stats`）· `latestCommit`（`?path=&per_page=1` + **`sha=ref`**；⚠️ **404 不吞** —— 吞了副标题会静默留白而不触发 §9.4.1 的分支回落）。
+      - `GitHubRepoBranchEndpoint` —— 列表（`per_page=100`）· 单分支 · `compare`（路由里 `...` 是**字面语法，不能被百分号编码**）· `git/refs` 建 / 删 · `merges`。⚠️ **三个写操作一律不自动重试**（走 `.sending(…)` 路径，不进 401 刷新重放那套）：`POST /git/refs` 重放一次可能建两条同名分支。
+      - ⚠️ **三处是"按实测形状写"而不是按文档措辞写**（都会导致"不报错的错"）：① `RepoContentType` **不能是 `String` 枚举** —— GitHub 目录项的取值是 **`dir`**、不是 `directory`，靠自动合成的 `init(rawValue:)` 会让**每一个目录**掉进兜底档，症状是"整个文件树点不动"（已改手写 `switch` 且两种写法都认）② `CompareDTO` **根本不声明** `commits`/`files` —— 服务端会截断，判据只剩 `ahead_by`（"想数也没得数"，顺带省掉可能几十 KB 的无用解码）③ `MergeOutcome`（`.merged` / `.nothingToMerge`）而不是 `MergeResultDTO?` —— **204「没有东西可合」是确凿的正面答案**，折成 `nil` 会被调用方读成"出错了"。
+      - ⚠️ **配额桶逐条显式声明**：14 条路由全落 `.core`（间隔 0 = 不限速）。⚠️ **声明漏了不会有任何报错**，故新增 `RepoEndpointQuotaTests`：给限流器一份**"每个桶间隔都非 0"的探针策略**，于是可以**正面**断言"这条路由落了主桶 **且** 没误用 Search 桶"—— 比"断言它没被限速"强，后者对 `.core` 与"压根没声明"给出**同一个结果**。另覆盖 4 个端点的"默认会话不挂 `URLCache`"。
+    - ✅ **6.2 顺带修掉一条真缺陷（CRLF 提交信息）**：`CommitMessage` 原来直接 `split(separator: "\n")`，而 **Swift 把 `\r`、`\n`、`\r\n` 当作三个互不相同的 `Character`** ⇒ CRLF 提交信息**一刀都切不动**（`"fix: x\r\n\r\n正文"` 被当成一整段没有换行的信息）：文件树副标题把标题与正文挤成一段、提交详情页正文整块消失，**而单看任何一处都不报错**。
+      暴露它的是 6.1 留下的那条"三处显示必须一致"的断言（`firstLineRuleIsShared`）—— 它本意只钉一致性，结果钉出了真缺陷。已归一（与 `FileContent.lines(of:)` / `UnifiedDiffParser` 同规矩，且归一集中在一个 `normalized(_:)` 里好让 `grep` 查得出来）+ 补 `CommitMessageTests` **10 项**（**含"根因本身"那条断言**：`"\r\n".count == 1`，防止将来有人把归一当冗余删掉）。影响面已排查：另外两处"按行拆"（`FileContent.lines(of:)` / `UnifiedDiffParser`）本来就先归一，**不受影响**。
+      - ⚠️ **文档登记**：`TECH_SPEC §9.5`（contents 双形状 / `dir` 取值 / 提交信息拆分只有一份实现 + CRLF 归一）· `§9.4.1`（与回落相关的请求**都不许吞 404**；缓存失效是**粗粒度**且有意如此）· `§9.7.1`（建分支的**请求体形状 ≠ 响应形状**；写操作不重试）· `§4.6.2` 与 `§9.7.1`（merges 的 **204 不是失败**）；另修掉 `§0.2` 一处**陈旧计数**（"48 项"→ **55 项**）。
+      - ▶ **下一步**：**6.3 设计系统**（代码块 / 块级 Markdown / diff 卡片 / 分支行 / 面包屑条）。
 
-**验证闭环已就绪**：`make verify` = **五包单测（当前 900 项全过）** + 模拟器构建，一条命令，**零编译警告**。
-（GitHubAPI 286 · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 45 · **GitDuoKit 462**）
+**验证闭环已就绪**：`make verify` = **五包单测（当前 978 项全过）** + 模拟器构建，一条命令，**零编译警告**。
+（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 45 · **GitDuoKit 489**）
