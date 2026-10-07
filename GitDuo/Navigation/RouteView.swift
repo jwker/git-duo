@@ -13,6 +13,12 @@ struct RouteView: View {
 
     let route: Route
 
+    /// 推入页的依赖由本视图从组合根取（同 `MainTabView` 对根页的做法）。
+    ///
+    /// ⚠️ 只在**用得到的那几个分支**里访问它 —— `@Environment` 对未注入的对象
+    /// 是"访问才崩"，所以 `.settings` 这类骨架分支不会因为没装环境而炸掉预览。
+    @Environment(AppEnvironment.self) private var env
+
     var body: some View {
         switch route {
         case .search:
@@ -20,7 +26,13 @@ struct RouteView: View {
         case let .repoDetail(fullName, section, _):
             SkeletonScreen(title: "仓库详情 · \(fullName)", slice: "切片 4 落地", reference: "PRD §4.4 · 分区 \(section.rawValue)")
         case let .exploreRepoDetail(fullName, _):
-            SkeletonScreen(title: "探索仓库详情 · \(fullName)", slice: "切片 4 落地", reference: "PRD §4.13（他人仓库 · 只读）")
+            ExploreRepoDetailView(
+                fullName: fullName,
+                insights: env.repoInsights,
+                starToggle: env.starToggle,
+                visits: env.recentVisits,
+                toast: env.toast
+            )
         case let .fileView(fullName, path, readOnly):
             SkeletonScreen(title: "文件查看 · \(path)", slice: "切片 6 落地", reference: "PRD §4.5 · \(fullName) · 只读=\(readOnly)")
         case let .editor(fullName, path, mode):
@@ -36,9 +48,9 @@ struct RouteView: View {
         case let .prDetail(fullName, number, readOnly):
             SkeletonScreen(title: "PR #\(number)", slice: "切片 7 落地", reference: "PRD §4.11 · \(fullName) · 只读=\(readOnly)")
         case let .exploreIssueList(fullName):
-            SkeletonScreen(title: "探索 Issues", slice: "切片 4 落地", reference: "PRD §4.14 · \(fullName)")
+            ExploreIssueListView(fullName: fullName, issues: env.repoIssues)
         case let .explorePRList(fullName):
-            SkeletonScreen(title: "探索 Pull Requests", slice: "切片 4 落地", reference: "PRD §4.15 · \(fullName)")
+            ExplorePRListView(fullName: fullName, pulls: env.repoPulls)
         case .stars:
             SkeletonScreen(title: "我的 Star", slice: "切片 9 落地", reference: "PRD §4.18")
         case .folders:
@@ -53,4 +65,5 @@ struct RouteView: View {
     NavigationStack {
         RouteView(route: .settings)
     }
+    .environment(AppEnvironment())
 }

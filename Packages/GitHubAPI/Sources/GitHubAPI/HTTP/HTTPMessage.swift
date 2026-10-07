@@ -168,10 +168,14 @@ public struct HTTPResponse: Sendable {
 
     /// 解码响应体。
     ///
+    /// 走 `GitHubJSON.decoder()` 而不是裸 `JSONDecoder()`：**GitHub 的时间戳是 ISO 8601 字符串**，
+    /// 而默认日期策略要的是"距 2001 年的秒数"，形状毫无交集 —— 漏配的后果是
+    /// "凡带时间戳的那一页整页解不出"（见 `GitHubJSON` 的说明）。
+    ///
     /// - Throws: `GitHubError.decoding` —— 保持与其余错误同类，调用方不必处理两套错误类型。
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
         do {
-            return try JSONDecoder().decode(T.self, from: body)
+            return try GitHubJSON.decoder().decode(T.self, from: body)
         } catch {
             throw GitHubError.decoding(error)
         }

@@ -49,6 +49,7 @@ DEVICE_APP := build/DerivedData-dev/Build/Products/Debug-iphoneos/GitDuo.app
 help:
 	@echo "make gen      xcodegen 生成 GitDuo.xcodeproj（改 project.yml / 增删文件后必跑）"
 	@echo "make test     跑五个 Swift Package 的全部单测（Swift Testing）"
+	@echo "make test-<包名>  只跑某一个包（如 make test-GitDuoKit，名字照 PACKAGES 的拼写）"
 	@echo "make build    为 iOS 模拟器构建 App（无签名）"
 	@echo "make verify   以上全跑（提交前必跑）"
 	@echo "make device   真机全流程：构建(带签名) → 安装 → 启动（1.8 手测用）"
@@ -65,6 +66,16 @@ test:
 		echo "── swift test · $$pkg"; \
 		( cd Packages/$$pkg && swift test $(SWIFT_FLAGS) ) || exit 1; \
 	done
+
+# 只跑一个包 —— `make test-GitDuoKit`（名字照 `PACKAGES` 里的拼写，**大小写敏感**）。
+#
+# ⚠️ 这条规则是 2026-10-07 补上的：此前 `.PHONY` 声明了 `test-%`、`help` 里也写了它，
+#    但**规则本体一直不存在** ⇒ `make test-GitDuoKit` 直接报 "No rule to make target"。
+#    声明与实现分家两天没人发现 —— 因为谁也没在切片中途只跑过一个包。
+test-%:
+	@test -d Packages/$* || { echo "⚠️  没有这个包：$*　可用的：$(PACKAGES)"; exit 1; }
+	@echo "── swift test · $*"
+	@( cd Packages/$* && swift test $(SWIFT_FLAGS) )
 
 # ── 模拟器构建（不签名；CI 与本地同一条命令）───────────────────────────────
 # `OTHER_SWIFT_FLAGS` 里带 `$(inherited)` 是有意的：不覆盖各包 Package.swift 的编译设置。

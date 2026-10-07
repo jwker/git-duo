@@ -125,7 +125,7 @@ public struct GitHubGraphQLClient: Sendable {
     /// 2. **慢路**：改用 `JSONSerialization` 把 `data` / `errors` 都按**原始 JSON** 取出来。
     ///    这一步必须在**不知道 `T` 形状**的前提下做，否则又会因为同一个字段失败而丢掉全部信息。
     static func decode<T: Decodable>(_ body: Data, as type: T.Type) throws -> T {
-        if let envelope = try? JSONDecoder().decode(Envelope<T>.self, from: body),
+        if let envelope = try? GitHubJSON.decoder().decode(Envelope<T>.self, from: body),
            (envelope.errors ?? []).isEmpty,
            let data = envelope.data {
             return data

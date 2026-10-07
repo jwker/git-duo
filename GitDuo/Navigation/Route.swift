@@ -1,8 +1,12 @@
 import Foundation
 
 /// 仓库详情的四个分区。
-/// 依据：PRD §4.16（代码 / Issues / Pull Requests / Commits）。
+/// 依据：PRD §4.4（代码 / Issues / Pull Requests / Commits）。
 /// 依据：TECH_SPEC §8.2（2026-10-05 已补入文档，与 `Route` 同节定义）。
+///
+/// ⚠️ 2026-10-06 校正：此处原写 **§4.16**，而 §4.16 是「通知（本期不做）」——
+///    评审时照着编号翻文档会翻到完全不相干的页面。`RouteView` 里那 9 条同类悬空引用
+///    已在同一天一次性校正过，这一条漏了。
 enum RepoSection: String, Hashable, Sendable, CaseIterable {
     case code
     case issues

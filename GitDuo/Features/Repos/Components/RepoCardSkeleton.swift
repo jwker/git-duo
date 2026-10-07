@@ -26,7 +26,14 @@ struct RepoCardSkeleton: View {
 
     private var card: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
-            SkeletonBar(height: 36, width: 36, cornerRadius: Theme.Radius.chip)
+            // ⚠️ 这两行尺寸**跟着 `RepoCard` 一起改**（2026-10-06：36/r6 浅底 → 34/r9 深底）。
+            //    §8.5 要求骨架"尺寸必须匹配真实布局"，否则数据到达时整屏会跳一下，
+            //    而"跳一下"这件事单测量不出来（没有布局引擎），只能靠两处一起改。
+            SkeletonBar(
+                height: RepoAvatar.standard.diameter,
+                width: RepoAvatar.standard.diameter,
+                cornerRadius: RepoAvatar.standard.cornerRadius
+            )
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 SkeletonBar(height: 14, width: 180)
                 SkeletonBar(height: 12)

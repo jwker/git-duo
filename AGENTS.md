@@ -5,8 +5,32 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地。**
-`make verify` = **五包单测 338 项 + 模拟器构建**，一条命令。
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地。**
+`make verify` = **五包单测 642 项 + 模拟器构建**，一条命令，**零编译警告**。
+
+> **切片 4 交付（2026-10-07）**：4.0 文档（决策 #38–#41）· 4.1 领域层纯逻辑 · 4.2 数据层（GraphQL 置顶 / Search 双榜 / 仓库洞察 / Star 写）
+> · 4.3 设计系统（决策 #42/#43）· 4.4 表现层（5 个页面）· 4.5 装配与路由 · 4.6 收尾。
+>
+> ⚠️ **验收口径要分清**：单测与构建全绿 ≠ 切片验收完成。`REVIEW-CHECKLIST §2` 的完成定义有 4 条，
+> 其中**第 3 条「与原型逐屏对照」到目前一次都没做过**（四个新页面都要登录才可达，只做过代码级检查）。
+
+| # | 内容 | 状态 |
+|---|---|---|
+| 4.0 | 文档先行：决策 #38–#41 + §9.10/§9.11 改写 | ✅ |
+| 4.1 | 领域层：探索筛选 / 榜单查询 / 星增幅与基线 / 趋势指标（`GitDuoKit/Explore/`） | ✅ |
+| 4.2 | 数据层：统一解码器 `GitHubJSON` · 置顶（GraphQL）· 搜索双榜 · 仓库洞察（语言/Release/贡献者）· Star 写 | ✅ |
+| 4.3 | 设计系统：`RepoAvatar` / `StatButton` / `AvatarStack` / `LanguageBar` + `GroupedNumber` / `LanguageComposition` + `RepoSummary` + 三个业务卡片 | ✅ |
+| 4.4 | 表现层：`HomeView` / `ExploreView` / `ExploreRepoDetailView` / `ExploreIssueListView` / `ExplorePRListView` | ✅ |
+| 4.5 | 装配与路由：`AppEnvironment` 接入（6 个用例 + 2 个落盘存储 + `ToastCenter`）+ `RouteView` 接三个新路由 | ✅ |
+| 4.6 | 文档收尾 + `make verify`（642 项全绿） | ✅ |
+
+⚠️ **4.4 挖出一条切片计划的空隙，待裁定**：`RouteView` 里 `.repoDetail`（**我的**仓库详情 · 可写侧）标着"切片 4 落地"，
+但施工图 4.4 那一行的内容是 `HomeView` / `ExploreView` / `ExploreRepoDetailView` / 探索 Issue·PR 列表 —— **不含它**；
+而切片表（`REVIEW-CHECKLIST §1`）里 §4.4「仓库详情」也**没有被任何一片显式覆盖**（切片 6 只领走了 §4.5/§4.7/§4.8）。
+它现在仍走 `SkeletonScreen`，`SkeletonPlaceholders.registry` 里记作「仓库详情（4 的写侧）」。**归哪一片请你定。**
+
+> ✅ 已裁定并落地（2026-10-06）：切片 3 的 `RepoCard` 图标与原型不一致（原型走深底 `.repo-avatar`，实现走浅底 `book.closed`）。
+> 用户拍板「**两处都改回原型**」⇒ `RepoCard` 已改为复用 `RepoAvatar.standard`，同一 App 里不再有两种仓库图标。
 
 > **切片 3 交付（2026-10-06）**：新增**领域层包 `GitDuoKit`**（决策 #34）+ 仓库列表的取数 / 分页 / 分区 / 卡片全线打通。
 > 逐项见下表与 `REVIEW-CHECKLIST.md` §6。
@@ -21,7 +45,7 @@
 | 3.6 | 表现层：`ReposView` 重写 + `RepoCard` / `RepoCardSkeleton` / `RepoListViewModel` + `AppEnvironment` 装配 | ✅ |
 | 3.7 | 文档同步 + `make verify` 闭环 | ✅ |
 
-**五包单测 338 项全过**（GitHubAPI 200 · GitDuoAuth 57 · GitDuoCore 21 · GitDuoDesign 14 · GitDuoKit 46）。
+**五包单测 510 项全过**（GitHubAPI 264 · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 28 · GitDuoKit 111）。
 ⚠️ 网络桩件状态**按命名空间隔离**（每套件自持 `Harness`）⇒ 网络测试可自由并行，**不要加 `.serialized`**；忘了用 harness 会当场失败，那是**有意**的。
 
 ### 切片 1（Auth）—— 已验收
@@ -47,7 +71,7 @@
 | 2.5 | `AuthCoordinator` 实现 `AccessTokenProviding`（**错误在出口归一化**，决策 #33）+ 配额闸门接线 + `GitHubRESTClient` + `GitHubGraphQLClient`（部分成功**抛错但带数据**） | ✅ |
 | 2.6 | `GET /user` 迁到新通道（`explicitToken` 解决"令牌还没进 Keychain"的空窗）+ 文档同步 | ✅ |
 
-▶ **下一步候选**：切片 4（首页 + 探索 + 详情：置顶只读 / 双榜 / 只读态）。动手前先读 `REVIEW-CHECKLIST.md` §1 的正本。
+▶ **当前切片 = 切片 4**（首页 + 探索 + 详情：置顶只读 / 双榜 / 只读态）。**下一步 = 4.4 表现层**；动手前先读 `REVIEW-CHECKLIST.md` §1 的正本。
 
 ✅ **1.8 真机验收 10/10 全过 → 切片 1 验收完成**（2026-10-06，iPhone 17 Pro，自动签名已打通）：
 真授权（授权页权限 6 条＝P2）→ 令牌落 Keychain → **杀进程重启仍登录** →
@@ -70,7 +94,7 @@
 |---|---|---|
 | `redesign/prototype/` | **唯一可点验收依据**（入口 `index.html`；`scripts/` 16 个 JS · `styles/` 5 个 CSS） | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
-| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**35 项全部【已定】**） |
+| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**43 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 | `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |

@@ -43,7 +43,17 @@ public struct RepositoryMapper: Sendable {
     /// 它不成立就说明响应的含义变了，此时必须响亮地失败 ——
     /// 猜一个 owner 出来（比如取第一段）会让路由指向一个不存在的仓库，
     /// 而用户看到的只是一个 404 页面。
-    private static func splitFullName(_ fullName: String) throws -> (owner: String, name: String) {
+    ///
+    /// ⚠️ **不是 `private`**：`RepoSummaryMapper` 用的是**同一条契约**
+    /// （置顶与搜索的 `nameWithOwner` / `full_name` 同样是 `owner/name`）。
+    /// 两处各写一遍拆分，迟早有一处把 `count == 2` 写成 `count >= 2` 而放行 `a/b/c`。
+    ///
+    /// 2026-10-06 由 `internal` 提升为 `public`：表现层的卡片（`RecentRow`）也要拆
+    /// `owner` / `name` 来弱化显示 owner，而它**不该**为此构造一个 `RepoSummary`
+    /// （那个类型还带 star / fork / 可写性等用不到的字段 —— 为拿两个字符串去填一堆假值，
+    /// 等于把"这一个实现"的约束换成"到处凑一个领域对象"）。
+    /// 提升可见性而不是复制一份实现，正是为了让口径仍然只有一处。
+    public static func splitFullName(_ fullName: String) throws -> (owner: String, name: String) {
         let parts = fullName.split(separator: "/", omittingEmptySubsequences: false)
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
             throw RepositoryMappingError.malformedFullName(fullName)

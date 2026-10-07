@@ -2,6 +2,7 @@ import Foundation
 import GitHubAPI
 import GitDuoAuth
 import GitDuoCore
+import GitDuoDesign
 import GitDuoKit
 
 /// 组合根 —— **唯一的依赖装配点**。
@@ -37,11 +38,61 @@ final class AppEnvironment {
     /// 同一个配额闸门、同一套重试策略（切片 2 的核心决定）。
     let restClient: GitHubRESTClient
 
+    /// GraphQL 通道（`GitHubAPI`）。与 REST **不是**同一条隧道：
+    /// 只有置顶仓库走它（§9.1），而 GitHub 的 GraphQL 配额是**独立的一个桶**
+    /// ⇒ 两边的限流器有意不共用（`HTTPTransport` 各带各的 `RateLimiter`）。
+    /// 缓存**共用同一份**：缓存键里有完整请求形态，两种协议不会撞键，
+    /// 而分成两份只会让同一份磁盘目录被两个 LRU 各写一遍。
+    let graphQLClient: GitHubGraphQLClient
+
+    // MARK: - 领域用例（切片 4 起）
+
     /// 仓库列表的取数动作（`GitDuoKit` 的领域层）。
     let repositories: LoadRepositoriesPage
 
+    /// 首页置顶仓库（`viewer.pinnedItems`，一次查询取回全部）。
+    let pinnedRepositories: LoadPinnedRepositories
+
+    /// 探索榜（Search 限定符 + 缓存 + Star 增幅）。
+    let trending: LoadTrendingBoard
+
+    /// 他人仓库详情（四路并发）。
+    let repoInsights: LoadRepoInsights
+
+    /// 探索 Issues 列表（切片 4）。
+    let repoIssues: LoadRepoIssues
+
+    /// 探索 PR 列表（切片 4）。
+    let repoPulls: LoadRepoPulls
+
+    /// Star 的领域用例（先确认基准，再幂等切换 —— 决策 #41）。
+    let starToggle: ToggleStar
+
+    // MARK: - 本地存储
+
+    /// 最近访问（落盘实现见 `UserDefaultsRecentVisitStore`）。
+    ///
+    /// ⚠️ 它是**账号数据**：`signOut()` 必须清掉（§3.6 第 ③ 步）。
+    let recentVisits: any RecentVisitStore
+
+    /// Star 基线快照（增幅要它才算得出来）。
+    ///
+    /// ⚠️ 同样是**账号数据** —— 留着它，换账号登录会拿着别人的基线算出凭空的增幅。
+    let starSnapshots: any StarSnapshotStore
+
+    // MARK: - 全局 UI 通道
+
+    /// 轻提示的唯一通道（TECH_SPEC §8.4）—— 挂在 `MainTabView` 上，四个 Tab 共用。
+    let toast = ToastCenter()
+
     /// 每个 Tab 各自的导航栈
     let router = Router()
+
+    /// 接口缓存（`HTTPResponseCache`，两个客户端共用同一份）。
+    ///
+    /// 留着这个引用**只为一件事**：登出时整盘清空（§3.6 第 ③ 步）。
+    /// 它没有观察价值（不驱动任何界面），所以标 `@ObservationIgnored`。
+    @ObservationIgnored private let responseCache: HTTPResponseCache
 
     /// 系统浏览器胶水（无逻辑，因此不注入、不可替身）
     @ObservationIgnored private let webAuth = WebAuthenticationSession()
@@ -57,14 +108,50 @@ final class AppEnvironment {
         let coordinator = AuthCoordinator(credentials: credentials, tokenStore: tokenStore)
         self.authCoordinator = coordinator
 
+        // 两个客户端共用这一份缓存（见 `graphQLClient` 的说明）。
+        let cache = Self.makeHTTPCache()
+        self.responseCache = cache
+
         let client = GitHubRESTClient(
             credentials: credentials,
             tokenProvider: coordinator,
-            cache: Self.makeHTTPCache()
+            cache: cache
+        )
+        let graphQL = GitHubGraphQLClient(
+            credentials: credentials,
+            tokenProvider: coordinator,
+            cache: cache
         )
         self.restClient = client
+        self.graphQLClient = graphQL
+
+        // 本地存储先造：`trending` 的 Star 增幅依赖 `starSnapshots`。
+        let visits = UserDefaultsRecentVisitStore()
+        let snapshots = UserDefaultsStarSnapshotStore()
+        self.recentVisits = visits
+        self.starSnapshots = snapshots
+
         self.repositories = LoadRepositoriesPage(
             source: GitHubRepositoryEndpoint(client: client)
+        )
+        self.pinnedRepositories = LoadPinnedRepositories(
+            source: GitHubPinnedItemsEndpoint(client: graphQL)
+        )
+        self.trending = LoadTrendingBoard(
+            source: GitHubSearchRepositoriesEndpoint(client: client),
+            snapshots: snapshots
+        )
+        self.repoInsights = LoadRepoInsights(
+            source: GitHubRepoInsightsEndpoint(client: client)
+        )
+        self.repoIssues = LoadRepoIssues(
+            source: GitHubRepoIssuesEndpoint(client: client)
+        )
+        self.repoPulls = LoadRepoPulls(
+            source: GitHubRepoPullsEndpoint(client: client)
+        )
+        self.starToggle = ToggleStar(
+            source: GitHubStarEndpoint(client: client)
         )
     }
 
@@ -154,9 +241,17 @@ final class AppEnvironment {
     func signOut() async {
         let outcome = await authCoordinator.signOut()
 
-        // ③ 清空与该账号绑定的本地数据（最近访问 / 收藏夹与归属映射 / 搜索历史 /
-        //    按仓库的分支记忆 / 接口与图片缓存）—— 这些存储属各 Feature，
-        //    在切片 3+ 逐个落地时**接入此处**。
+        // ③ 清空与该账号绑定的本地数据。已接入的：
+        //    · 最近访问（含"当时是否可写"的归属）
+        //    · Star 基线快照（留着它会拿旧账号的基线算出凭空的增幅）
+        //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
+        //    尚未接入（落地时补在这一处）：收藏夹与归属映射（切片 9）、
+        //    搜索历史（切片 5）、按仓库的分支记忆（切片 6）。
+        await recentVisits.clear()
+        await starSnapshots.clear()
+        // ⚠️ `HTTPResponseCache` 是 actor（它的内存 LRU 要被多个请求并发读写）⇒ 必须 await。
+        _ = await responseCache.removeAll()
+
         // ④ 重置全部导航栈与 Tab 选中项
         router.resetAll()
 
@@ -192,9 +287,12 @@ enum AuthNotice: Equatable {
 /// 真实实现落地时把对应条目**一并删除**——留着不删，登记册就退化成了装饰。
 ///
 /// 已消解：`TokenStore` 的 Keychain 实现（切片 1 → `KeychainTokenStore`，前置条件 P4）。
+/// 已消解：`GitHubGraphQLClient` 的"尚无调用方"（切片 4 → 首页置顶经 `pinnedRepositories` 调用）。
 enum SkeletonPlaceholders {
     static let registry: [String] = [
-        "其余 Tab 根页与推入页（`RouteView` 仍走 `SkeletonScreen`，切片 4+）",
-        "`GitHubGraphQLClient`：切片 2 已实现，但**尚无调用方**（首页置顶在切片 4 接入）"
+        "「我的」Tab 根页（`ProfileView` 仍是骨架屏，切片 9）",
+        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：搜索（5）· 仓库详情（4 的写侧）· "
+            + "文件查看 / 编辑器 / 提交详情 / 分支（6）· Issue 与 PR 详情 / 新建（7）· "
+            + "我的 Star / 我的收藏 / 设置（9）"
     ]
 }

@@ -45,32 +45,23 @@ struct ReposView: View {
     }
 
     // MARK: - 分段
+    //
+    // ⚠️ 2026-10-06 改回原型：此前这里是自制的"绿色胶囊"（`accentStrong` + `Capsule`），
+    //    而原型 `styles/03-components.css` 的 `.seg` 是**深底白字、8pt 圆角**
+    //    （`.seg.on{background:var(--text);color:#fff}`）。形状与配色两处都不同。
+    //    用户拍板「两处都改回原型」⇒ 收缩进 `GitDuoDesign.SegmentedBar`，
+    //    与探索页的榜单分段共用同一份实现。
 
     private var segmentBar: some View {
-        HStack(spacing: Theme.Spacing.s) {
-            ForEach(RepoListSegment.allCases) { segment in
-                let isSelected = segment == model.segment
-                Button {
-                    Task { await model.select(segment) }
-                } label: {
-                    Text(segment.title)
-                        .font(Theme.Font.footnote.weight(isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? Theme.Palette.surface : Theme.Palette.textSecondary)
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule().fill(isSelected ? Theme.Palette.accentStrong : Theme.Palette.surface)
-                        )
-                        .overlay(
-                            Capsule().stroke(Theme.Palette.borderSoft, lineWidth: isSelected ? 0 : 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-            }
-            Spacer(minLength: 0)
+        SegmentedBar(
+            segments: RepoListSegment.allCases.map {
+                SegmentedBar.Segment(id: $0.id, title: $0.title)
+            },
+            selectedID: model.segment.id
+        ) { picked in
+            guard let segment = RepoListSegment(rawValue: picked.id) else { return }
+            Task { await model.select(segment) }
         }
-        .padding(.horizontal, Theme.Spacing.page)
         .padding(.vertical, Theme.Spacing.s)
     }
 

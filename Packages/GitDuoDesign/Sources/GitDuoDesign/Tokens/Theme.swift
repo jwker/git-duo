@@ -44,6 +44,78 @@ public enum Theme {
         public static let diffDeletedSurface = Color(hex: 0xFFEBE9)
         public static let diffDeletedText    = Color(hex: 0xCF222E)
 
+        // MARK: 状态**图标**的配色（与上面那组"状态胶囊"的配色**不是**同一套值）
+
+        /// 开放状态的**图标**绿 —— 原型 `styles/03-components.css` 的
+        /// `.ic-open` / `.ic-pr{fill:#3fb950}`。
+        ///
+        /// ⚠️ 它与 `stateOpen`（`#1A7F37`，状态**胶囊**的绿；原型 `--open`）**不是同一个值**。
+        /// 原型里这两套颜色是分开的，对应 GitHub 自家的做法：octicon 的图标色比标签色亮一档。
+        /// 混用的后果不是"报错"，而是"图标与旁边那颗状态点颜色微妙地不一致"——
+        /// 看起来像渲染坏了，而排查时很难想到是取错了 token。
+        public static let stateOpenIcon     = Color(hex: 0x3FB950)
+
+        /// 「完成」紫的**图标**色 —— 原型 `.ic-closed-i` / `.ic-merge{fill:#a371f7}`。
+        ///
+        /// 一个值覆盖三种状态（**已合并的 PR · 已发布的版本 · 已关闭的 Issue**）：
+        /// 原型里这三处的图标色本来就相同，GitHub 也把它们归在同一族（"已完成"）。
+        /// 所以它按**族**命名，不按单个状态命名 —— 按状态命名会让下一次"另一张卡也要用它"
+        /// 时冒出一个同值不同名的新 token。
+        /// ⚠️ 同样与状态胶囊的紫 `stateMerged`（`#8250DF`）不是同一个值。
+        public static let stateCompletedIcon = Color(hex: 0xA371F7)
+
+        // MARK: 切片 4 新增（出处与理由见 TECH_SPEC §10.7）
+
+        /// **已 Star** 态的金色 —— 原型 `styles/04-screens.css` 的 `.stat-btn.starred svg{fill:#eac54f}`。
+        ///
+        /// ⚠️ 只用于**星形图标的填充 / 描边**，绝不用作文字色或背景色：
+        /// 金色在白底上的对比度不足 2:1，承载正文必然读不清。
+        /// 它与 `stateOpen`（开放 = 绿）毫无语义关系，别因为"都是好看的颜色"而合并。
+        public static let starActive     = Color(hex: 0xEAC54F)
+
+        /// 语言构成占比条里**「其他」段**的中性填充（原型 `scripts/10-explore-repo.js` 的 `#d1d5da`）。
+        ///
+        /// 它只表示"这里是若干语言的合计"，**不表示任何状态** ——
+        /// 所以既不复用状态色，也不走 `LanguageColor`（那个表的每一项都对应一个真实语言）。
+        public static let shareNeutral   = Color(hex: 0xD1D5DA)
+
+        /// 筛选 chip 的**已选**底色（原型 `styles/03-components.css` 的 `.fchip.on{background:#f0f6ff}`）。
+        ///
+        /// 原型这处写的是一个内联色值而非变量，所以它此前没有名字。
+        /// 它是"强调色的极浅底"——与 `accent`（`#0969DA`）成对使用：
+        /// chip 选中时**底 + 边框 + 文字**三处都是强调色的不同浓淡。
+        /// ⚠️ 不要拿 `surfaceSunken` 顶替：那是中性灰，会让"已选"看起来像"禁用"。
+        public static let accentSurface  = Color(hex: 0xF0F6FF)
+
+        // MARK: 轻提示（Toast）—— 原型 `styles/05-overlays.css` 的 `.toast`
+
+        /// Toast 的深色底（原型 `rgba(28,32,36,.92)`）。
+        ///
+        /// ⚠️ 它**不是** `repoAvatarSurface`（`#24292F`）——两个值很接近但来源不同：
+        /// 那个是图标块的实色底，这个是**带 8% 透明**的浮层底（要能透出一点下面的内容，
+        /// 才不至于像一块贴上去的不透明补丁）。混用会让 Toast 显得比原型"实"。
+        public static let toastSurface   = Color(hex: 0x1C2024).opacity(0.92)
+
+        /// Toast 上的文字色。**一个不透明纯白** —— 它压在 `toastSurface` 上，
+        /// 对比度约 15:1，远超 AA；但也正因如此它**只能**用在深底上（放白底上读不出来）。
+        public static let toastText      = Color(hex: 0xFFFFFF)
+
+        /// 仓库图标块的底色（原型 `.repo-avatar{background:#24292f}`，白色字形压在上面）。
+        ///
+        /// ⚠️ 它与 `textPrimary`（`#1F2328`）**接近但不是同一个值**，是两处独立取色：
+        /// 一个是"正文最深的字"，一个是"图标块的底"。混用会在将来补深色时
+        /// 把两者一起改掉，而它们并不该同步变化。
+        public static let repoAvatarSurface = Color(hex: 0x24292F)
+
+        /// 头像图片**取不到时**的兜底配色（原型 `scripts/10-explore-repo.js` 的 8 色）。
+        ///
+        /// 取色下标由登录名的稳定哈希决定 —— **不要用 `hashValue`**（Swift 的哈希每个进程随机化，
+        /// 同一账号会在每次启动后换色，甚至在一次会话里因列表重绘而换色）。
+        public static let avatarFallback: [Color] = [
+            Color(hex: 0x1F883D), Color(hex: 0x8250DF), Color(hex: 0xD73A4A), Color(hex: 0xE16F24),
+            Color(hex: 0x0075CA), Color(hex: 0xDB61A2), Color(hex: 0x5B3A8E), Color(hex: 0x0E8A16),
+        ]
+
         /// 玻璃着色值（浅色约 30% 混合 —— §10.4 #4）
         public static let glassTint       = Color(hex: 0xFFFFFF).opacity(0.30)
     }
@@ -66,8 +138,21 @@ public enum Theme {
 
     public enum Radius {
         public static let chip: CGFloat  = 6
+        /// 分段控件（`.seg`）那一档。原型 `styles/03-components.css` 的 `.seg{border-radius:8px}` ——
+        /// 它与 `chip`(6) / `card`(10) 都不同值：原型里这三个数确实是三处独立取色（分段控件比
+        /// 小标签更"方"一点、比卡片更紧凑）。不给它名字就只能写 `RoundedRectangle(cornerRadius: 8)`，
+        /// 那正是"魔法值"。
+        public static let segment: CGFloat = 8
         public static let card: CGFloat  = 10
         public static let sheet: CGFloat = 14
+        /// **仓库头部大卡**（原型 `styles/04-screens.css` 的 `.repo-hero{border-radius:16px}`）。
+        ///
+        /// 与 `sheet`(14) 只差 2pt，但**不能合并**：那是两处独立取色
+        /// （`.card` 一族是 14，`.repo-hero` 是 16），而头部大卡是**整屏最大的一块圆角**——
+        /// 差 2pt 在这里是看得出来的（它比卡片大一圈、圆角也该跟着大一点）。
+        /// 沿 `Radius.segment`(8) 的先例：原型里确实存在的一档，就必须有名字，
+        /// 否则只能写 `cornerRadius: 16`，而那正是"魔法值"。
+        public static let hero: CGFloat = 16
         /// 与容器同心（Liquid Glass 推荐，§10.3）
         public static let container: CGFloat = 12
     }
@@ -76,6 +161,26 @@ public enum Theme {
 
     public enum Font {
         public static let caption     = SwiftUI.Font.caption2
+        /// 控件标签（分段控件 / 筛选 chip / 统计按钮 /**Toast**）。
+        ///
+        /// 为什么需要它：系统 12pt 的语义层是 `.caption`，而 `caption` 这个令牌名在本文件里
+        /// 已经用给了 `.caption2`（11pt，原型 `t3` 那一档）。原型里 12px 的控件标签
+        /// （`.stat-btn` / `.fchip` / `.linkbtn`）此前没有对应令牌 ——
+        /// 不给它一个名字，各处就只能写 `.system(size: 12)`，而那正是"魔法值"。
+        public static let label       = SwiftUI.Font.caption.weight(.semibold)
+        /// **分区标题**（原型 `.section-label{font-size:12px;font-weight:700}`）。
+        ///
+        /// ⚠️ 它与 `label` 只差一档字重（`bold` 700 vs `semibold` 600），但**不能合并**：
+        /// 原型里这确实是两处独立取字重，而分区标题是**全屏最安静的一级文字**
+        /// （12pt 灰字 + 字距），字重掉一档就会显得"和旁边的按钮一样重"。
+        /// 所以 `.section-label` 从 `label` 的消费方名单里移到了这里。
+        public static let sectionLabel = SwiftUI.Font.caption.weight(.bold)
+        /// 行标题（原型 14.5px 那一档：`.file-row .fname` / `.sheet-row`）。
+        ///
+        /// 14.5px 落在系统 `.subheadline`(15) 与 `.callout`(16) 之间，取前者。
+        /// 与 `Font.label` 同一取向：**沿用语义层级、不自造点数**，
+        /// 这样它才随 Dynamic Type 一起放大。
+        public static let rowTitle    = SwiftUI.Font.subheadline
         public static let footnote    = SwiftUI.Font.footnote
         public static let body        = SwiftUI.Font.body
         public static let bodyStrong  = SwiftUI.Font.body.weight(.semibold)
