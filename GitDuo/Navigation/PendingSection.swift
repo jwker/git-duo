@@ -5,8 +5,10 @@ import GitDuoDesign
 ///
 /// ## 它为什么不是"什么都不画"
 ///
-/// 两个页面都有"本片不做"的分区：
-/// - 探索仓库详情（§4.13）8 个分区里有 3 个（我的收藏 / 文件浏览 / README）不属切片 4；
+/// 两个页面都有"本片不做"的分区，**且这份名单会随切片推进变短** ——
+/// 用它的地方必须跟着改，留着过期的一行就是"页面看着完整、其实少一块"：
+/// - 探索仓库详情（§4.13）8 个分区里，切片 4 只交了 5 个；6.4d 把「文件浏览」「README」
+///   两处换成了真件（与 §4.4 共用 `RepoTreeSection`），现在只剩 **1 个**（我的收藏，切片 9）；
 /// - 「我的仓库」详情（§4.4）4 个分区里有 2 个（Issues / Pull Requests）归切片 7（决策 #50）。
 ///
 /// 整块不渲染的后果是评审者**看不出还差什么** —— 页面看起来是完整的，
@@ -68,7 +70,7 @@ struct PendingSection: View {
 #Preview {
     VStack(alignment: .leading, spacing: 0) {
         PendingSection(title: "我的收藏（私人整理 · 仅自己可见）", note: "切片 9 落地 · 收藏属纯本地能力")
-        PendingSection(title: "文件浏览", note: "切片 6 落地 · 代码浏览")
+        PendingSection(title: "编辑器", note: "切片 8 落地 · 新建 / 编辑单文件（PRD §4.6）")
         PendingSection(title: "Issues", note: "切片 7 落地 · 开放 / 已关闭筛选与新建 Issue（PRD §4.4 分区二）")
     }
     .padding(.horizontal, Theme.Spacing.page)

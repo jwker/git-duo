@@ -379,11 +379,15 @@ enum AuthNotice: Equatable {
 /// 已消解：`TokenStore` 的 Keychain 实现（切片 1 → `KeychainTokenStore`，前置条件 P4）。
 /// 已消解：`GitHubGraphQLClient` 的"尚无调用方"（切片 4 → 首页置顶经 `pinnedRepositories` 调用）。
 /// 已消解：`RouteView` 的 `.search`（切片 5 → `SearchView` + `search` / `searchHistory` 装配）。
+/// 已消解：`RouteView` 的 `.repoDetail` / `.fileView` / `.commitDetail` / `.branches`
+///        （切片 6.5 → 四个真页面 + `repoDetail` / `repoTree` / `fileContent` /
+///        `repoCommits` / `branches` / `deleteBranch` / `createBranch` / `mergeBranch`
+///        八条用例与 `branchMemory` 的装配）。
 enum SkeletonPlaceholders {
     static let registry: [String] = [
         "「我的」Tab 根页（`ProfileView` 仍是骨架屏，切片 9）",
         "`RouteView` 里仍走 `SkeletonScreen` 的推入页："
-            + "仓库详情 / 文件查看 / 提交详情 / 分支（6）· Issue 与 PR 详情 / 新建（7）· "
-            + "编辑器（8）· 我的 Star / 我的收藏 / 设置（9）"
+            + "Issue 与 PR 详情 / 新建（7）· 编辑器（8）· "
+            + "我的 Star / 我的收藏 / 设置（9）"
     ]
 }
