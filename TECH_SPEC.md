@@ -789,18 +789,10 @@ RootView                             ← 按 authState 二分（§3.8）
 ### 8.2 路由与深链
 
 `Route` 枚举覆盖 PRD 的全部推入页（页面清单见 PRD §4；其中通知页本期不做，见 §3.5.3）。
-其关联值引用两个辅助类型 `RepoSection` 与 `EditorMode`，定义如下
+其关联值引用两个辅助类型 `RepoSection` 与 `EditorMode`。`EditorMode` 定义如下
 （**2026-10-05 补齐**：此前两者只在 `Route` 里被引用，本文档从未给出取值）：
 
 ```swift
-/// 仓库详情的四个分区（依据 PRD §4.4：代码 / Issues / Pull Requests / Commits）
-enum RepoSection: String, Hashable, Sendable, CaseIterable {
-    case code
-    case issues
-    case pullRequests
-    case commits
-}
-
 /// 编辑器的打开模式（依据 PRD §4.6）
 enum EditorMode: Hashable, Sendable {
     /// 新建文件（需输入路径）
@@ -827,6 +819,12 @@ enum Route: Hashable {
     case settings
 }
 ```
+
+⚠️ **`RepoSection` 的唯一来源是领域层 `GitDuoKit/Repo/RepoSection.swift`**（6.1 建、6.4 收编）。
+它比本节原来记的那份多出 `title`（分段条上的可见文字）与 `initial`（默认落在「代码」），并且有单测。
+**本节原先逐字记过一份同名同取值的定义**，6.4 已删 —— 两份在同一模块里共存时，
+**同模块的类型会遮蔽 `import` 进来的那个** ⇒ `Route.swift` 之外的代码拿到的都是本地那份（它没有 `title`），
+症状是"给分段条取标题"编译不过，而报错指向的是一行完全正常的代码。
 
 - **只读态通过参数显式传递**（`readOnly: Bool`），而不是让下层页面自行推断当前仓库归属——推断会造成权限判定散落、口径不一。
 - 深链（`gitduo://repo/owner/name`）本期不做，但路由为值类型天然支持，后续接 `onOpenURL` 即可。
@@ -998,6 +996,17 @@ enum Route: Hashable {
   | 其余二进制 / 超限图片 | 扩展名 → `.other`，或超上限 | 不下载，显示「不支持预览」+ 跳网页端 |
 - ⚠️ **不按"UTF-8 解码失败"判二进制**：那要求先把可能很大的字节读进内存再试解码，而扩展名在**发请求之前**就有。图片也一样 —— **先看 `size` 再决定下不下载**（解码成位图后内存约为字节数的数倍，手机上没有理由硬拉一张 20MB 的 PNG 只为把它画出来）。
 - 注意区分：**只读浏览大文件仍然支持**（上表第二行）；不做的是"**上传 / 编辑 / 提交**大文件"（§9.6，`git/blobs` 属 Git Data API，本期不引入）。这两件事常被混为一句"不支持大文件"。
+- ⚠️ **上表的判定要判两次，第二次在"拿到真实字节数之后"**（6.4e 修正的真缺陷，落点 `LoadFileContent.load`）：
+  调用方常常**只有文件名、没有大小**（从提交详情点进一个文件时就是这样），此时 `FilePreviewKind.decide(name:size: nil)` 按**名字**那一侧处理 ⇒ 图片一律判 `.image`。
+  于是"**先看 `size` 再决定下不下**"这条当场落空：一张 20MB 的 PNG 会被整张拉进内存，只为发现它太大然后丢掉。
+  修法**不是**把判定挪到发请求之后 —— 第一趟 `contents` 本身就是为了拿判据（它只回元数据，不拉字节流）；
+  **重判落在第二趟（raw）之前**，那一趟才是可能拉大字节流的那趟。文本侧不受影响（未知大小的文本走 `.text` 分支，到不了这里）。
+- ⚠️ **0 字节的文件与「内容没给」是两件事**（6.4e 修正的真缺陷）：空文件的 `size` 是 `0`、`content` 是**空串**，
+  而 `decodeBase64("")` 返回 `nil`（空串不是任何字节的 base64 表示 —— 这条约定是对的，`FileContentCodecTests` 正面钉着它）
+  ⇒ 照原样往下走会落进 `.undecodable`，**于是一个 0 字节的文件被说成「这个 App 不认识它的编码」（假话），用户连它都看不到**。
+  判据在 `LoadFileContent.loadInlineText`：`size == 0` 且 `content` 为空 ⇒ 它就是**零个字节**，走与其它文本完全相同的组装路径
+  （`text(from: Data())` 是合法的空串，不是失败）。⚠️ `isContentOmitted` 对空文件**放行**是对的（空文件走 raw 只会拿回同样一个空串）——
+  错的只是它后面那一步。`LoadFileContentTests` 有两条断言分别钉住"零请求"与"空文件不是解码失败"。
 - 路径合法性：进入目录前校验 path 拼接，避免 `..` 与双重斜杠。
 - ⚠️ **`contents` 是"一个路由、两种响应形状"**（6.2 已落地）：同一个 `GET …/contents/{path}`，目录回**数组**、文件回**对象** ⇒ 解码必须**先试数组、失败再试对象**（`ContentsPayload`），不能按 `path` 是否有后缀去猜。
 - ⚠️ **目录项的 `type` 取值是 `"dir"` 而不是 `"directory"`**（2026-10-07 实测）：**不能**把 `RepoContentType` 写成 `String` 枚举靠自动合成的 `init(rawValue:)` —— 那样**每一个目录**都会掉进兜底档 `.unknown`，症状是"整个文件树点不动"。已写成手写 `switch` 并同时认 `dir` / `directory` 两种写法（`RepoContentType.init(rawType:)`）。
@@ -1471,6 +1480,24 @@ GlassEffectContainer(spacing: 12) {
 ⚠️ **四处「规格未给，待评审」（6.3 登记）**：原型对这几处**一次都没渲染过**，逐条论证在代码注释里 —— ① `number` / `type` 两档不着色；② 单列行号取 `newNumber ?? oldNumber`（见 §11.2）；③ 引用块的 2pt 左侧竖条；④ h3–h6 / 分隔线 / 卡片说明的样式（分别取"正文同档加粗""1pt `borderSoft`""次级色 + 既有内边距"）。共同原则：**能不用新数字就不用、能用既有令牌就不新造颜色**。
 
 ⚠️ **一处渲染层固有限制**：行内代码的底在 `AttributedString` 里画出来是**紧贴字形的矩形** —— `backgroundColor` 不能圆角、不能加内边距（原型是 `border-radius:5px; padding:1.5px 5px`）。底色照原型，形状是方的、没有留白。
+
+**切片 6.4 新增的组件（2026-10-07）**
+
+四页（仓库详情 / 文件查看 / 提交详情 / 分支管理）落地时，四个零件从 Feature 层**外置**进设计包 —— 每一次外置的理由都不是"复用更优雅"，而是**同一个 UI 元素有两处定义 ⇒ 必然分叉**：
+
+| 组件 | 对应原型 | 为什么进设计包（决策 #43 判据） |
+|---|---|---|
+| `SHABadge` | `.sha`（PRD §4.4 目录行 / §4.7 提交头部） | 只收一个 `String` ⇒ 进设计包。它原先私有在 `RepoRows.shaBadge` 里，而 §4.7 的提交头部要画**同一枚**徽章 —— 两处各画一遍时，任何一处改错底色或字号都**不会报错**，只会让同一个短哈希在两个页面上长得不一样 |
+| `ActionButton` | `.btn`（PRD §4.5 / §4.7 的底部按钮） | 只收 `title` / `style` / 闭包。6.4 补了两个参数：`horizontalPadding`（原型 16，`SCR.fileView` 覆写 22）与 `fillsWidth`（默认 `true`；`false` 时按内容宽度、不撑满） |
+| `SectionTabs` | `.prtabs`（PRD §4.4 分段条） | 只收 `[String]` + 选中项 + 回调 ⇒ 与业务无关（**四段是哪四段**由 `RepoSection.allCases` 决定，不是由它）。⚠️ 它**不**判断"哪几段已交付" —— 那是施工进度，属路由/视图层（见 `RepoSection` 的说明） |
+| `SheetPrimitives` | 全部弹层的公共骨架（`SheetTitle` / `SheetRow` / `SheetHint` / 底部按钮区） | 只收基础类型与闭包。六个弹层（分支 §5.7 / 新建分支 / 删分支 / 合并 §5.3 / 添加文件 §5.8）的标题、行、说明若各写一遍，改一处内边距就要改六遍 |
+
+⚠️ **留 Feature 的三件**（`GitDuo/Features/Repo/Components/`）：`RepoTreeSection`（吃 `RepoTreeSession`，§4.4 与 §4.13 **共用**的"面包屑 + 文件行 + README"）· `RepoDetailHero` · `RepoRows`。前者的三处差异（标题 / 尾部控件 / 两个点击回调）由参数表达，**`symlink` / `submodule` 在它内部就被拦下**（`open(_:)` 里 `guard entry.kind.isNavigable`）⇒ 调用方只会收到"能进入的条目"。它同时是**本片最大的一处去重**：§4.4 代码分区与 §4.13 第 ⑤/⑥ 分区渲染的是同一件事，而状态迁移（两段式分支解析、记忆失效回落、副标题补填、分支列表 304）**逐条相同** —— 抄一份的代价是那几条规则将来只改到一份，"同一个仓库在两页里点同一行结果不一样"。
+
+⚠️ **`RepoWebLinks` 不是组件，但它同属"外置以免分叉"**：`blob(fullName:ref:path:)` / `commit(fullName:sha:)` 收拢了「跳网页端」的**三处**出口（文件查看页、`symlink` / `submodule` 条目、提交详情页的 Revert）。三处各自拼字符串的代价不是多几行 —— 而是**拼错了不会报错**：用户看到的是 GitHub 的 404 页，于是他会以为"这个文件被删了"。⚠️ 统一用 `blob` 而不是 `tree`（`blob` 指目录会自动跳，`tree` 指文件不会），且引用名**必传**（拿不到给字面 `HEAD`）。
+
+⚠️ **八处「规格未给，待评审」（6.4 登记）**：原型**一次都没渲染过**这些情形，逐条论证在各文件的注释里。共同原则同 6.3 —— **能不用新数字就不用、能用既有令牌就不新造颜色**：
+① `RepoCopy.unsupportedEntryToast`（点 `symlink` / `submodule` 时的提示）· ② `FileCopy` 四条不可点 hint（编辑 / 历史 / 更多 / Fork 后可编辑，**四条各不相同**）· ③ `BranchCopy.mergeNoSourceHint` · ④ `CommitCopy.shaAccessibilityLabel`（读屏怎么念一个短哈希）· ⑤ `ActionButton` 的 `horizontalPadding` / `fillsWidth` 两个新参数 · ⑥ `ExploreRepoViewModel` 的**块级**失败态 · ⑦ 提交信息**正文**的样式（原型只画了标题）· ⑧ `files.isEmpty` 用 `EmptyBox` 而不是自建空态。
 
 ---
 

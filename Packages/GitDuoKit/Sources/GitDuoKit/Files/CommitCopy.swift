@@ -49,6 +49,19 @@ public enum CommitCopy {
         isExpanded ? "收起 \(file) 的改动" : "展开 \(file) 的改动"
     }
 
+    // MARK: - 短哈希徽章
+
+    /// 短哈希徽章的读屏标签。
+    ///
+    /// ⚠️ 徽章上写的是 `a1b2c3d` 这七个字符 —— 读屏逐字念出来是一串无意义的字母，
+    /// 而"这是一次提交"这个信息**只存在于它的样式里**（等宽 + 蓝底）。
+    ///
+    /// 收在领域层的理由与其余文案同源：现在有**两处**画这个徽章
+    /// （提交列表行 §4.4 分区四、提交详情页 §4.7），而它们必须念同一句话。
+    public static func shaAccessibilityLabel(shortSHA: String) -> String {
+        "提交 \(shortSHA)"
+    }
+
     // MARK: - 空态
 
     /// 提交列表为空。

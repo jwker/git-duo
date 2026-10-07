@@ -65,6 +65,11 @@ struct DiffCard: View {
         // ⚠️ 解析**只在这里与 `toggle()` 两处**发生，`body` 里不做任何解析
         //    （在 `body` 里算就等于"每次重绘都扫一遍"，那正是 §11.2 要避免的）。
         .onAppear(perform: { self.parseIfNeeded() })
+        // ⚠️ `patch` 换了就重解析一次。提交详情里它不会变（提交 SHA 是不可变的），
+        //    但**切片 7 的 PR 详情会**（同名的文件在新一版 diff 里内容不同），
+        //    而卡片的位置没变 ⇒ `@State` 会留着上一版解析出来的行，
+        //    表现为"刷新之后看到的还是旧改动"（看起来完全正常）。
+        .onChange(of: file.patch) { _, _ in self.parseIfNeeded() }
     }
 
     // MARK: - 头部
@@ -137,11 +142,10 @@ struct DiffCard: View {
                     DiffRow(text: hunk.header, tone: .hunk)
 
                     ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
-                        DiffRow(
-                            number: line.displayNumber,
-                            text: line.text,
-                            tone: Self.tone(for: line.kind)
-                        )
+                        // ⚠️ 行档位与行号都取自 `DiffRendering.swift` 的两条派生属性，
+                        //    **不在这里再写一个 `switch`** —— 同一件事有两份实现时，
+                        //    领域层加一档只有其中一份会被告知（另一份静默少画一行）。
+                        DiffRow(number: line.rowNumber, text: line.text, tone: line.rowTone)
                     }
                 }
             }
@@ -179,27 +183,6 @@ struct DiffCard: View {
         // 只在真的变了才写 `@State`：无条件赋值会让"值相等"也触发一次重绘。
         let parsed = UnifiedDiffParser.hunks(from: patch)
         if parsed != hunks { hunks = parsed }
-    }
-
-    // MARK: - 领域层的 `DiffLine.Kind` → 设计包的 `DiffRow.Tone`
-
-    /// ⚠️ 与 `CodeHighlighting.tone` 同一个道理：两侧互不认识，翻译只能落在 App 层。
-    ///
-    /// 这里的 `switch` 是**穷尽的**（不带 `default`）⇒ 领域层将来给
-    /// `DiffLine.Kind` 加一档时**这里编译不过**。App target 没有测试 target，
-    /// 编译期报错是这类翻译函数唯一可用的守卫。
-    ///
-    /// ⚠️ `.noNewline` → `.note`、`.unknown` → `.content` 这两档原型里没有，
-    /// 但**必须有地方落**：丢掉它们会让用户看到的 diff 比真实改动**少几行**，
-    /// 而少的那几行没有任何迹象（见 `DiffRow` 的类型说明）。
-    private static func tone(for kind: DiffLine.Kind) -> DiffRow.Tone {
-        switch kind {
-        case .context: .context
-        case .addition: .added
-        case .deletion: .removed
-        case .noNewline: .note
-        case .unknown: .content
-        }
     }
 }
 

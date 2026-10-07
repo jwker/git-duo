@@ -38,6 +38,25 @@ public enum FileCopy {
     /// `更多`（重命名 / 删除，原型逐字）——属切片 8，画出但不可点。
     public static let moreAction = "更多"
 
+    // MARK: - 不可点按钮的读屏提示（决策 #51）
+
+    /// ⚠️ 这四条是**决策 #51 要求的那句 hint**，不是可选的装饰：
+    /// 一颗点不动的按钮若不解释，读屏用户只会反复点它 —— 而这条路上没有任何反馈。
+    ///
+    /// 每一条都必须说**为什么**点不了，且**四条各不相同** ——
+    /// 合成一句"暂不可用"会让"下一片就做"与"本期根本不做"看起来是同一件事，
+    /// 而这两者对用户该有的期待完全不同。
+    public static let editUnavailableHint = "编辑在切片 8 落地，当前版本暂不可用"
+
+    /// ⚠️ `Fork 后可编辑` 的障碍**不是**这个按钮本身没做，而是 Fork 没做
+    /// （原型点它只给一句演示 toast）。所以说的是"先 Fork"，而不是"编辑没做"。
+    public static let forkToEditUnavailableHint = "Fork 后才能编辑，而 Fork 功能待细化，当前版本不可用"
+
+    /// 历史指向"这个文件的提交历史"这一独立页面，PRD §4.5 标 ⏳ ⇒ 没有切片认领它。
+    public static let historyUnavailableHint = "这个文件的提交历史尚未落地，当前版本暂不可用"
+
+    public static let moreUnavailableHint = "重命名与删除在切片 8 落地，当前版本暂不可用"
+
     // MARK: - 底部说明（PRD §4.5 表）
 
     /// 自己的仓库的页脚（原型逐字）。
@@ -77,6 +96,14 @@ public enum FileCopy {
 
     /// 出口按钮（PRD §4.5「给一个跳网页端的出口」）。
     public static let openInBrowserAction = "在 GitHub 上打开"
+
+    /// **下载了、但解不出文本**（GBK / Big5，或扩展名与内容不符）。
+    ///
+    /// ⚠️ **规格未给，待评审**（自拟）。它与上面两条**必须分开**，
+    /// 因为上面那句 `unsupportedBinaryHint` 明说「App **不下载**它的内容」——
+    /// 而对这一档我们**刚刚下载了它**。照那句说就是**假话**，
+    /// 且用户会以为"再试一次也许能好"（其实每次都会得到同一堆字节）。
+    public static let undecodableTextHint = "这个文件的编码 App 不认识，无法显示为文本"
 
     /// 把字节数说成整数 MB（向上取整 —— 说"4.7MB"对用户没有意义，
     /// 而说"5MB"能让"我的图片是不是太大了"有一个可判断的答案）。

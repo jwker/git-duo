@@ -5,13 +5,14 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）进行中 —— 6.0 文档先行、6.1 领域层、6.2 数据层、6.3 设计系统已落地。**
-`make verify` = **五包单测 1001 项 + 模拟器构建**，一条命令，**零编译警告**。
-（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 497**）
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）进行中 —— 6.0 文档先行、6.1 领域层、6.2 数据层、6.3 设计系统、6.4 表现层已落地，只剩 6.5 装配与路由、6.6 文档收尾与提交。**
+`make verify` = **五包单测 1024 项 + 模拟器构建**，一条命令，**零编译警告**。
+（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 520**）
 ⚠️ **切片 5 / 4 共享的那笔欠账仍然挂着**：完成定义第 3 条「与原型逐屏对照」**到目前一次都没做过**
-（四个页面 + 搜索页都要登录才可达，至今只有代码级证据）。它是 4 条里**唯一**能发现"页面缺失 / 做错"的一条。
-**切片 6 会把待对照页面从 5 个加到 9 个**（再加仓库详情 / 文件查看 / 提交详情 / 分支管理），
-⇒ 每往后拖一片，这笔账就更贵。**建议尽快跑一次真机 / 模拟器目视**（`make device`，或模拟器直接运行）。
+（这些页面都要登录才可达，至今只有代码级证据）。它是 4 条里**唯一**能发现"页面缺失 / 做错"的一条。
+**切片 6.4 已把待对照页面从 9 个加到 13 个**（在"仓库详情 / 文件查看 / 提交详情 / 分支管理"四个之外，
+再加**探索仓库详情的第 ⑤/⑥ 分区**、以及 6.4 新画出来的**五个弹层**），
+⇒ 每往后拖一片，这笔账就更贵。**建议在动切片 7 之前先跑一次真机 / 模拟器目视**（`make device`，或模拟器直接运行）。
 
 > **切片 6 施工图（2026-10-07 起）**：文件查看 + 提交详情 + 分支管理 **+ 仓库详情外壳（PRD §4.4）**。
 > 对应 PRD **§4.4 / §4.5 / §4.7 / §4.8**（+ §5.7 切换分支弹层 / §5.8 添加文件弹层 / §3.10 分支）。
@@ -24,7 +25,7 @@
 | 6.1 | 领域层（`GitDuoKit/Branches/` · `Files/` · `Rendering/` · `Repo/`，16 个文件）：分支**两段式解析 + 回落 + 404 静默重发**（`BranchResolver`）· **分支名校验**（git ref 八条规则 + 逐条中文提示）· 删除分支判据（`canDelete` = 非默认 **且** 非受保护）与未合并判定（只读 `ahead_by`）· **文件预览三档降级**（`FilePreviewKind`）· contents 解码三条规则（base64 剥换行 / 空壳判定 / 行拆分保空行）· 路径拼接校验（`RepoPath`）· 文件树条目 / 提交列表行 / 提交详情 / 文件改动 · **§11.1 Markdown 块级解析** · **§11.2 unified diff 解析** · **§11.3 语法高亮词法** · 四页文案常量。⚠️ 两处**实现偏离已登记**（见下方提醒） | ✅ |
 | 6.2 | 数据层（已落地）：**14 条路由**，全落 `Repos/` 四个端点类 —— `repos/{o}/{r}`（详情头部，`RepositoryDetailDTO`）· `contents/{path}?ref=`（目录清单 + 单文件 base64 双形状）与 `readme`（raw，只吞 404）· `commits`（列表 + `?path=&per_page=1` 逐文件副标题，决策 #49）· `commits/{sha}`（`files[].patch` + `stats`）· `branches?per_page=100` · `branches/{branch}` · `compare/{base}...{head}`（决策 #53）· `git/refs` 建 / 删 · `merges`（201 合并 / **204 没有东西可合** / 409 冲突）。⚠️ 三条**按实测形状**加的：① `RepoContentType` **不能是 `String` 枚举**（目录取值是 **`dir`**，不是 `directory`）② `CompareDTO` **根本不声明** `commits`/`files`（会被截断 ⇒ 判据只剩 `ahead_by`）③ `MergeOutcome` 而不是 `MergeResultDTO?`（204 是确凿答案、不是失败）。⚠️ 14 条路由**配额桶逐个显式声明**（`.core`）+ `RepoEndpointQuotaTests` 用**"每个桶间隔都非 0"的探针策略**正面断言"落主桶且没误用搜索桶"（声明漏了本不会有任何报错） | ✅ |
 | 6.3 | 设计系统（已落地）：**设计包四件** —— `CodeSurface`（等宽 + 横向滚动 + 行距用一个 `Text` 装全部行）· `DiffRow`（**六档**：原型四档 + `.note`/`.content` 兜住"少一行"）· `BreadcrumbBar`（路径段走 `FlowLayout` **折行不截尾**、分隔符作**每段前缀**）· `BranchRow`（当前胶囊 + 删除；**不判断能不能删**，判据在 `BranchSummary.canDelete`）+ `GitHubIcon`；配套令牌：**语法四色** · `accentSubtle`（`.hunk` 与 `.sha` 同值合一）· `codeInlineSurface`（半透明）· `Radius.control`(9) / `branchChip`(7) · 五档字号（`monospacedCode` / `markdownH1` / `markdownH2` / `markdownBody` / `breadcrumb`）。**Feature 层三件**（`GitDuo/Features/Repo/Components/`，判据 **#43** —— 收领域模型 ⇒ 留 Feature）：`CodeHighlighting`（`SyntaxTokenKind` 七档 → `CodeTone` 五档的**穷尽翻译**，漏档编译不过）· `MarkdownBody`（吃 `[MarkdownBlock]`）· `DiffCard`（吃 `FileChange`，**展开才解析** patch）。⚠️ 四处「规格未给，待评审」已登记（见下方提醒） | ✅ |
-| 6.4 | 表现层（`GitDuo/Features/Repo/`）：`RepoDetailView`（头部 + 四分段；**Issues / PR 两段用 `PendingSection` 占位，决策 #50**）· `FileView` · `CommitDetailView` · `BranchesView` + `BranchSheet`(§5.7) / `AddFileSheet`(§5.8) / `MergeSheet`(**新弹层，决策 #52**)。并**把 `ExploreRepoDetailView` 那两处 `PendingSection`（⑤文件浏览 / ⑥README）换成真件** | ⬜ |
+| 6.4 | 表现层（`GitDuo/Features/Repo/`，已落地）：**四页** —— `Views/RepoDetailView`（头部 + 四分段；Issues / PR 两段用 `PendingSection` 占位，**决策 #50**）· `Views/FileView`（PRD §4.5）· `Views/CommitDetailView`（§4.7）· `Views/BranchesView`（§4.8）+ **五个弹层**（`Views/Sheets/`：`BranchSheet` §5.7 · `CreateBranchSheet` · `DeleteBranchSheet` · `MergeSheet` **新弹层，决策 #52** · `AddFileSheet` §5.8）。并**把 `ExploreRepoDetailView` 那两处 `PendingSection`（⑤文件浏览 / ⑥README）换成真件**。⚠️ **四处结构性外置**（不是顺手重构，是 6.4d 绕不开的前置）：`ViewModels/RepoTreeSession`（目录浏览会话：两段式分支解析 / 记忆失效回落 / 副标题补填 / 分支列表 304）· `Components/RepoTreeSection`（§4.4 与 §4.13 共用的"面包屑 + 文件行 + README"）· `GitDuoKit/Repo/RepoWebLinks`（三处"跳网页端"出口）· `GitDuoDesign/Components/SHABadge` —— 判据都是"**同一个 UI 元素有两处定义 ⇒ 必然分叉**"。⚠️ **决策 #51 不可点的按钮**：`编辑` / `历史` / `更多` / `Fork 后可编辑` / 「＋ 添加」一律 `allowsHitTesting(false)` + 去掉 `.isButton` trait + 一句各不相同读屏 hint（**不是** `.disabled`，后者变灰像"暂时不可用"）；**`Raw` 当真做**（复制原文、零请求）。⚠️ **6.4e 修掉两条真缺陷**：① `LoadFileContent` 在 `size` 未知时按名字判 ⇒ 20MB 的 PNG 会被整张拉进内存（现改为**拿到真实字节数后重判一次**，落在第二个请求之前）② **0 字节的文件被判成 `.undecodable`** ⇒ 显示"这个 App 不认识它的编码"（假话）且用户看不到它（`decodeBase64("")` 返回 `nil` 是对的，错的是它后面那一步）。见下方提醒 | ✅ |
 | 6.5 | 装配与路由：`AppEnvironment` 接仓库详情 / 文件 / 提交 / 分支四条用例 + **分支记忆存储**（账号绑定，`signOut()` ③ 步补 `clear()` —— 该挂账本就写在那个方法的注释里）；`RouteView` 把 `.repoDetail` / `.fileView` / `.commitDetail` / `.branches` 换成真实视图，并同步删掉 `SkeletonPlaceholders.registry` 里"切片 6"那几条 | ⬜ |
 | 6.6 | 文档收尾 + `make verify` + 提交 | ⬜ |
 
@@ -60,6 +61,39 @@
 > 这里**保留同一字形**、只让它跟状态转 90°（不换成 `chevron.down`）。
 > 以及一条**渲染层固有限制**：行内代码的底在 `AttributedString` 里是**紧贴字形的矩形**
 > （`backgroundColor` 不能圆角、不能加内边距）⇒ 底色照原型，形状是方的、没有留白。
+
+> ⚠️ **6.4 有八处「规格未给，待评审」**（原型**一次都没渲染过**这些情形，逐条论证在各文件注释里；
+> 共同原则同 6.3 —— **能不用新数字就不用、能用既有令牌就不新造颜色**）：
+> ① `RepoCopy.unsupportedEntryToast`（点 `symlink` / `submodule` 时的提示）·
+> ② `FileCopy` 四条不可点 hint（编辑 / 历史 / 更多 / Fork 后可编辑，**四条各不相同** ——
+> 同一句会让"历史"与"编辑"看起来是同一件做不了的事）· ③ `BranchCopy.mergeNoSourceHint` ·
+> ④ `CommitCopy.shaAccessibilityLabel`（读屏怎么念一个短哈希）·
+> ⑤ `ActionButton` 的 `horizontalPadding` / `fillsWidth` 两个新参数 ·
+> ⑥ `ExploreRepoViewModel` 的**块级**失败态（§8.5 的三档用在"分区"这一层，不是整页）·
+> ⑦ 提交信息**正文**的样式（原型只画了标题）· ⑧ `files.isEmpty` 用既有 `EmptyBox` 而不是自建空态。
+
+> ⚠️ **6.4e 修掉两条真缺陷，都是"单看哪一处都不报错"那一类** —— 且**都是被 6.4e 新写的单测钉出来的**：
+> ① **图片在 `size` 未知时会被整张拉进内存**：从提交详情点进一个文件时调用方只有文件名，
+>    `FilePreviewKind.decide(name:size: nil)` 按**名字**那一侧处理 ⇒ 图片一律判 `.image`，
+>    于是"**先看 `size` 再决定下不下**"这条当场落空（20MB 的 PNG 只为发现它太大然后丢掉）。
+>    修法**不是**把判定挪到发请求之后 —— 第一趟 `contents` 本身就是为了拿判据；
+>    **重判落在第二趟（raw）之前**，那一趟才是可能拉大字节流的那趟。
+> ② **0 字节的文件被判成 `.undecodable`**（显示"这个 App 不认识它的编码" —— **假话**，而且用户看不到它）。
+>    `isContentOmitted` 对空文件放行是对的（空文件走 raw 只会拿回同样一个空串），
+>    错的是它后面那一步：`decodeBase64("")` 返回 `nil`（这条约定**是对的**、被 `FileContentCodecTests` 钉着），
+>    于是 `content.flatMap(…)` 也是 `nil` ⇒ 落进"解不出来"那一档。
+>    **判据**：`.unsupported` 与 `.undecodable` 分成两档的意义就在于文案不许二选一 ——
+>    哪一边说错都是假话（见 `FileViewOutcome` 的说明）。两处均已在 `TECH_SPEC §9.5` 登记。
+
+> ⚠️ **两条"只在 `make verify` 里才炸"的教训（6.4e 实录），都是工具链事实、不是偏好**：
+> ① **`GitDuoDesign` 同时为 macOS 构建**（`swift test` 编的是 `arm64-apple-macos`）⇒
+>    `textInputAutocapitalization` 这类 **iOS 独有**的修饰符必须 `#if os(iOS)` 包起来。
+>    `make test-GitDuoKit` **不会**编到它（它只编自己那一个包），于是**它全绿**而 `make verify` 在这一行炸掉。
+> ② **`SheetRow(systemImage:title:) { 内容 }` 里的尾随闭包绑不到 `trailing:`** ——
+>    它会选中 `where Trailing == EmptyView` 的那个重载、绑到 **`action:`** 上，
+>    于是**右侧那块内容根本不画**，唯一的迹象是一条 `result of call to 'foregroundStyle' is unused` 警告；
+>    闭包体若只是 `{ source = name }` 这种赋值，**连那条警告都不会有**。
+>    **规矩：要传右侧内容时必须把 `action:` 标签写出来**（`SheetRow(systemImage:title:action:) { … }`）。
 
 > **切片 5 施工图（2026-10-07 起）**：搜索（PRD §4.2 + §5.10）—— 四范围 · 防抖与取消 · Search 配额纪律。
 > 三个入口（首页 / 仓库 / 探索右上角）**都已存在且已接到真实页面**（`RouteView.search` 换成了 `SearchView`）。

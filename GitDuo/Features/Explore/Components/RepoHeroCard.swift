@@ -145,24 +145,26 @@ struct RepoHeroCard: View {
     private var watchButton: some View {
         StatButton(
             systemImage: "eye",
-            title: "Watch · \(GroupedNumber.string(from: detail.watcherCount))",
+            title: RepoCopy.watchLabel(count: detail.watcherCount),
             action: {}
         )
         .allowsHitTesting(false)
         .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(Self.watchHint)
+        .accessibilityHint(RepoCopy.watchUnavailableHint)
     }
 
     /// Fork —— **纯展示**（见类型说明）。
     private var forkButton: some View {
         StatButton(
-            systemImage: "arrow.triangle.branch",
-            title: "Fork · \(GroupedNumber.string(from: detail.forkCount))",
+            // ⚠️ 走 `GitHubIcon.fork` 而不是字面量：`RepoDetailHero`（§4.4）画的是同一个按钮，
+            //    两处各写一串字面量时，"换一个图标"只会改到其中一处。
+            systemImage: GitHubIcon.fork,
+            title: RepoCopy.forkLabel(count: detail.forkCount),
             action: {}
         )
         .allowsHitTesting(false)
         .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(Self.forkHint)
+        .accessibilityHint(RepoCopy.forkUnavailableHint)
     }
 
     private var footer: some View {
@@ -176,10 +178,10 @@ struct RepoHeroCard: View {
 
     static let footerText = "他人仓库 · 只读浏览，Fork 后可编辑与提交"
 
-    /// ⚠️ 这两句**不是 PRD 原文** —— §4.13 只写了"纯展示"。它们是给读屏补的说明，
-    /// 因为一个点不动的按钮如果不解释，用户只会反复点它。
-    static let watchHint = "仅展示订阅计数，订阅动态依赖通知能力，本版本不做"
-    static let forkHint = "Fork 功能待细化，本版本不可用"
+    // ⚠️ Watch / Fork 的按钮标题与读屏提示**已收拢到领域层** `RepoCopy`
+    //    （`watchLabel(count:)` / `forkLabel(count:)` / `watchUnavailableHint` / `forkUnavailableHint`）：
+    //    §4.4 的头部是同一个控件、同一个数、同一句话，两处各写一份迟早分叉
+    //    —— 分叉的症状是同一个仓库在两页上显示成两个数，而两页单看都对。
 }
 
 #Preview {

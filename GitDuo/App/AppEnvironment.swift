@@ -75,6 +75,32 @@ final class AppEnvironment {
     /// 而搜索桶只有 30 次/分钟 —— 每次重进页面都重发一轮是不可接受的）。
     let search: LoadSearch
 
+    // MARK: - 领域用例（切片 6）
+
+    /// 仓库详情页进页取数（头部 + Star 基准，PRD §4.4）。
+    let repoDetail: LoadRepoDetail
+
+    /// 代码浏览的取数 —— 目录 + README + **两段式分支解析**（§9.4.1、决策 #55）。
+    let repoTree: LoadRepoTree
+
+    /// 文件查看的取数 —— 决策 #54 的三档降级。
+    let fileContent: LoadFileContent
+
+    /// 提交列表（分页）与提交详情（§4.4 分区四、§4.7）。
+    let repoCommits: LoadRepoCommits
+
+    /// 分支列表（§4.8）。
+    let branches: LoadBranches
+
+    /// 删除分支 —— **三重判定的唯一落点**（决策 #53）。
+    let deleteBranch: DeleteBranch
+
+    /// 新建分支（含名字校验 → 建 → 记住）。
+    let createBranch: CreateBranch
+
+    /// 合并分支（决策 #52）。
+    let mergeBranch: MergeBranch
+
     // MARK: - 本地存储
 
     /// 最近访问（落盘实现见 `UserDefaultsRecentVisitStore`）。
@@ -92,6 +118,12 @@ final class AppEnvironment {
     /// ⚠️ 同样是**账号数据**：`signOut()` 必须清掉（§3.6 第 ③ 步）——
     /// 它记的是"这个人在搜什么"，换个人登录还留着就是别人的行为痕迹。
     let searchHistory: any SearchHistoryStore
+
+    /// 当前分支的**按仓库记忆**（PRD §3.10、TECH_SPEC §9.4.1、决策 #55）。
+    ///
+    /// ⚠️ 它是**账号数据**：分支名会暴露私有仓库的结构
+    /// （`feature/客户XX-报价单改版` 这种名字本身就在泄密）⇒ `signOut()` 必须清掉。
+    let branchMemory: any BranchMemoryStore
 
     // MARK: - 全局 UI 通道
 
@@ -142,9 +174,11 @@ final class AppEnvironment {
         let visits = UserDefaultsRecentVisitStore()
         let snapshots = UserDefaultsStarSnapshotStore()
         let searchHistory = UserDefaultsSearchHistoryStore()
+        let branchMemory = UserDefaultsBranchMemoryStore()
         self.recentVisits = visits
         self.starSnapshots = snapshots
         self.searchHistory = searchHistory
+        self.branchMemory = branchMemory
 
         self.repositories = LoadRepositoriesPage(
             source: GitHubRepositoryEndpoint(client: client)
@@ -174,6 +208,35 @@ final class AppEnvironment {
         self.search = LoadSearch(
             source: GitHubSearchDataSource(client: client)
         )
+
+        // ── 切片 6 的四条链路。
+        //
+        // 四个端点都是同一个 `client` 的薄包装（它们不持有状态 ⇒ 分开 new 不花任何东西），
+        // 但**共用一个 client** 是硬要求：否则缓存会分成几份、配额各算各的，而且不报错。
+        let contentEndpoint = GitHubRepoContentEndpoint(client: client)
+        let commitEndpoint = GitHubRepoCommitEndpoint(client: client)
+        let branchEndpoint = GitHubRepoBranchEndpoint(client: client)
+
+        self.repoDetail = LoadRepoDetail(
+            detail: GitHubRepoDetailEndpoint(client: client),
+            // ⚠️ 复用上面那个 `starToggle`：Star 的「先确认基准、再 ±1」只有一处实现
+            //    （决策 #41），这里再 new 一个就把那份规则复制成了两份。
+            star: self.starToggle
+        )
+        self.repoTree = LoadRepoTree(
+            contents: contentEndpoint,
+            commits: commitEndpoint,
+            branches: branchEndpoint
+        )
+        self.fileContent = LoadFileContent(contents: contentEndpoint)
+        self.repoCommits = LoadRepoCommits(source: commitEndpoint)
+        self.branches = LoadBranches(source: branchEndpoint)
+
+        // 三条写操作都拿同一个 `branchMemory` —— 记忆的读写必须落在同一个实例上，
+        // 否则"建完分支"写下的是 A、"切分支"读的是 B，表现为记忆时有时无。
+        self.deleteBranch = DeleteBranch(source: branchEndpoint, memory: branchMemory)
+        self.createBranch = CreateBranch(source: branchEndpoint, memory: branchMemory)
+        self.mergeBranch = MergeBranch(source: branchEndpoint)
     }
 
     /// 接口缓存（§5.1 的 L2：内存 + 磁盘，**自建**，绝不启用系统 `URLCache` —— 决策 #32）。
@@ -266,12 +329,13 @@ final class AppEnvironment {
         //    · 最近访问（含"当时是否可写"的归属）
         //    · Star 基线快照（留着它会拿旧账号的基线算出凭空的增幅）
         //    · 最近搜索（切片的 5 —— 它记的是"这个人在搜什么"）
+        //    · 分支记忆（切片 6.4 —— 分支名会暴露私有仓库的结构）
         //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
-        //    尚未接入（落地时补在这一处）：收藏夹与归属映射（切片 9）、
-        //    按仓库的分支记忆（切片 6）。
+        //    尚未接入（落地时补在这一处）：收藏夹与归属映射（切片 9）。
         await recentVisits.clear()
         await starSnapshots.clear()
         await searchHistory.clear()
+        await branchMemory.clear()
         // ⚠️ `LoadSearch` 也是 actor，它缓存的是**上一个账号搜出来的结果**（含私有仓库名）
         //    ⇒ 与接口缓存同一条：不清就会在新账号的界面上露出来。
         await search.invalidateAll()

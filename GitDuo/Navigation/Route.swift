@@ -1,19 +1,17 @@
 import Foundation
+import GitDuoKit
 
-/// 仓库详情的四个分区。
-/// 依据：PRD §4.4（代码 / Issues / Pull Requests / Commits）。
-/// 依据：TECH_SPEC §8.2（2026-10-05 已补入文档，与 `Route` 同节定义）。
+/// ⚠️ **本文件原来还有一个本地 `RepoSection`，6.4 删掉了。**
 ///
-/// ⚠️ 2026-10-06 校正：此处原写 **§4.16**，而 §4.16 是「通知（本期不做）」——
-///    评审时照着编号翻文档会翻到完全不相干的页面。`RouteView` 里那 9 条同类悬空引用
-///    已在同一天一次性校正过，这一条漏了。
-enum RepoSection: String, Hashable, Sendable, CaseIterable {
-    case code
-    case issues
-    case pullRequests
-    case commits
-}
-
+/// 它曾是 `Route` 的唯一来源（`TECH_SPEC §8.2` 逐字记的就是那一段）。6.1 在领域层
+/// 建了**同名同取值**的 `GitDuoKit.RepoSection`（另带 `title` / `initial` 与单测）。
+/// 两份定义在同一模块里共存时，**同模块的类型会遮蔽 import 进来的那个** ⇒
+/// `Route.swift` 之外的代码拿到的都是本地那份（它没有 `title`），
+/// 症状是"给分段条取标题"编译不过，而报错指向的是一行完全正常的代码。
+///
+/// 现在**唯一来源 = `GitDuoKit.RepoSection`**（有单测，且 `allCases` 顺序即
+/// 分段条上从左到右的顺序）。§8.2 已同步改写。
+///
 /// 编辑器打开模式（新建 / 编辑既有文件）。
 /// 依据：TECH_SPEC §8.2（2026-10-05 已补入文档）。
 enum EditorMode: Hashable, Sendable {

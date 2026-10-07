@@ -415,9 +415,45 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
         展开后一片空白**看起来像加载失败**，且**不能**复用 `oversizedDiffNotice`，那会让用户跑去网页端找一个本就不存在的 diff）
         · `MarkdownCopy.checkboxLabel(checked:)`（任务列表勾选框的读屏标签 —— 抹掉它等于把"这是个可勾选的任务项"静默丢弃）。
         两者都配了"必须分开 / 必须随状态变"的断言（`CommitCopyTests`）—— 复用文案这种事 `grep` 查不出来。
-      - ▶ **下一步**：**6.4 表现层**（`RepoDetailView` / `FileView` / `CommitDetailView` / `BranchesView` + 三个弹层），
+      - ▶ **下一步**：**6.4 表现层**（`RepoDetailView` / `FileView` / `CommitDetailView` / `BranchesView` + 弹层），
         并把 `ExploreRepoDetailView` 那两处 `PendingSection` 换成真件。
         ⚠️ **建议 6.4 之前先跑一次目视**：完成定义第 3 条至今**零次**，待对照页面已 **9 个**（切片 4 四页 + 搜索 + 本片四页）。
+    - ✅ **6.4 表现层已交付**（2026-10-07）。**这是切片 6 里唯一直接接上主线路径的一片** ——
+      `ReposView.open()` 按可写性二分，点**自己有权改的仓库**此前进的是占位屏；现在通到真页面。
+      测试 **+23 项**（GitDuoKit 497 → **520**，全在 6.4e）：
+      - **四页**（`GitDuo/Features/Repo/Views/`）—— `RepoDetailView`（头部 + 四分段；**Issues / PR 两段用 `PendingSection` 明确占位**，决策 #50：分段条**照原型画满四项**，整块不渲染会让评审看不出还差什么）·
+        `FileView`（§4.5，**三档结局必须长得不一样**：文本走 `CodeSurface`、图片走 `Image(uiImage:)`、不支持 / 解不出各给各的文案 + 网页端出口）·
+        `CommitDetailView`（§4.7，头部元信息行走 `FlowLayout` **换行而不截掉**「1 个文件 · +12 −4」）·
+        `BranchesView`（§4.8）+ **五个弹层**（`BranchSheet` §5.7 · `CreateBranchSheet` · `DeleteBranchSheet` · `MergeSheet` **决策 #52** · `AddFileSheet` §5.8）。
+      - **探索页两处 `PendingSection` 换成真件**（§4.13 第 ⑤ 文件浏览 / ⑥ README），`PendingSection` 同时**从 `Explore/Components/` 移到 `Navigation/`** —— 它现在被两个 Feature 用，留在其中一个 Feature 里就是"另一个 Feature 依赖前者的内部零件"。
+      - ⚠️ **四处结构性外置** —— 都不是顺手重构，而是 6.4d 绕不开的前置。判据是同一条：**同一个 UI 元素有两处定义 ⇒ 必然分叉**。
+        ① `ViewModels/RepoTreeSession`（目录浏览会话：两段式分支解析 / 记忆失效回落 / 副标题两趟补填 / 分支列表 304）
+        —— §4.4 代码分区与 §4.13 第 ⑤/⑥ 分区渲染的是**同一件事**，而那几条状态迁移**逐条相同**；抄一份的代价是"同一个仓库在两页里点同一行结果不一样"。
+        ② `Components/RepoTreeSection`（面包屑 + 文件行 + README，三处差异由参数表达；`symlink` / `submodule` 在它内部就被拦下 ⇒ 调用方只会收到"能进入的条目"）。
+        ③ `GitDuoKit/Repo/RepoWebLinks`（`blob` / `commit`，收拢「跳网页端」的**三处**出口）—— 三处各自拼字符串的代价不是多几行，而是**拼错了不会报错**：用户看到 GitHub 的 404 页，于是以为"这个文件被删了"。
+        ⚠️ 统一用 `blob` 而不是 `tree`（`blob` 指目录会自动跳、`tree` 指文件不会），且引用名**必传**（拿不到给字面 `HEAD`）。
+        ④ `GitDuoDesign/Components/SHABadge` —— 它原先私有在 `RepoRows.shaBadge` 里，而 §4.7 的提交头部要画**同一枚**徽章；两处各画一遍时，任何一处改错底色或字号都不会报错。
+      - ⚠️ **决策 #51「不可点的按钮」按同一套落地**：`编辑` / `历史` / `更多` / `Fork 后可编辑` / 「＋ 添加」一律
+        `allowsHitTesting(false)` + 去掉 `.isButton` trait + 一句**各不相同**的读屏 hint（**不是** `.disabled` —— 后者变灰、看起来像"暂时不可用"）；
+        ⚠️ 闭包必须是**真的什么都不做**（`allowsHitTesting(false)` 挡的是触摸，读屏的激活动作**绕过**命中测试）。
+        唯一当真做的是 **`Raw`**：复制原文到剪贴板、**零请求**。
+      - ⚠️ **6.4e 修掉两条真缺陷**（都是"单看哪一处都不报错"那一类，都是被本片新写的单测钉出来的）：
+        ① **`size` 未知时图片会被整张拉进内存** —— 从提交详情点进一个文件时调用方只有文件名，`decide(name:size: nil)` 按**名字**判 ⇒ 图片一律 `.image`，
+        于是"**先看 `size` 再决定下不下**"当场落空。修法**不是**把判定挪到发请求之后（第一趟 `contents` 本身就是为了拿判据，它不拉字节流），
+        **重判落在第二趟（raw）之前**。② **0 字节的文件被判成 `.undecodable`**（显示"这个 App 不认识它的编码" —— **假话**，而且用户连那个空文件都看不到）：
+        `isContentOmitted` 对空文件放行是对的，错的是后面那一步 —— `decodeBase64("")` 返回 `nil` 这条约定**是对的**（被 `FileContentCodecTests` 正面钉着），
+        所以修法是在 `loadInlineText` 里把"零个字节"显式认出来，**不是**去改 `decodeBase64`。
+      - ⚠️ **两条"只在 `make verify` 里才炸"的教训**（工具链事实）：① `GitDuoDesign` **同时为 macOS 构建**（`swift test` 编的是 `arm64-apple-macos`）
+        ⇒ `textInputAutocapitalization` 这类 iOS 独有修饰符必须 `#if os(iOS)`；`make test-GitDuoKit` **不会**编到它 ⇒ **它全绿而 `make verify` 炸**。
+        ② `SheetRow(systemImage:title:) { 内容 }` 的尾随闭包**绑不到 `trailing:`**（会选中 `where Trailing == EmptyView` 那个重载、绑到 `action:`）
+        ⇒ **右侧那块内容根本不画**，唯一迹象是一条 `foregroundStyle is unused` 警告；闭包体若只是赋值则连警告都没有。**规矩：要传右侧内容时必须写出 `action:` 标签。**
+      - ⚠️ **八处「规格未给，待评审」**（原型**一次都没渲染过**这些情形；共同原则同 6.3）：`RepoCopy.unsupportedEntryToast` · `FileCopy` 四条不可点 hint · `BranchCopy.mergeNoSourceHint` ·
+        `CommitCopy.shaAccessibilityLabel` · `ActionButton` 的新参数 `horizontalPadding` / `fillsWidth` · `ExploreRepoViewModel` 的**块级**失败态 · 提交信息正文样式 · `files.isEmpty` 用 `EmptyBox`。
+      - ⚠️ **一处与原型的有意偏差（已登记 `PRD §5.8`）**：原型 `openAddSheet` 的底部说明写「大文件走 Git Data API（上限 100MB）」，
+        而 `TECH_SPEC §9.6`【已定】**不引入 Git Data API** ⇒ 照原型印就是让文案承诺一件实现做不到的事。实现取 PRD 那句，**原型保留不动**、差异记在 PRD。
+        另：该弹层在本片**打不开**（唯一入口「＋ 添加」按 #51 不可点），它是**为切片 8 预备的内容视图**。
+      - ▶ **下一步**：**6.5 装配与路由**（`AppEnvironment` 接四条用例 + 分支记忆存储并补 `signOut()` 的 `clear()`；`RouteView` 把 `.repoDetail` / `.fileView` / `.commitDetail` / `.branches` 换成真视图、删掉 `SkeletonPlaceholders.registry` 里"切片 6"那几条），然后 **6.6** 文档收尾 + 提交。
+        ⚠️ **动切片 7 之前强烈建议先跑一次目视**：完成定义第 3 条至今**零次**，待对照页面已 **13 个**。
 
-**验证闭环已就绪**：`make verify` = **五包单测（当前 1001 项全过）** + 模拟器构建，一条命令，**零编译警告**。
-（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 497**）
+**验证闭环已就绪**：`make verify` = **五包单测（当前 1024 项全过）** + 模拟器构建，一条命令，**零编译警告**。
+（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 520**）

@@ -5,16 +5,28 @@ import GitDuoKit
 
 /// 探索仓库详情 · 他人仓库（推入页）（PRD §4.13、TECH_SPEC §9.11）。
 ///
-/// ## 8 个分区分属三个切片（PRD §4.13 的分片表）
+/// ## 8 个分区分属两个切片（PRD §4.13 的分片表）
 ///
 /// | 分区 | 本切片 |
 /// |---|---|
-/// | ① 仓库头部 · ③ 语言构成 · ④ Latest Release · ⑦ 参与协作 · ⑧ 贡献者 | ✅ 本切片 |
+/// | ① 仓库头部 · ③ 语言构成 · ④ Latest Release · ⑤ 文件浏览 · ⑥ README.md · ⑦ 参与协作 · ⑧ 贡献者 | ✅ 本切片 |
 /// | ② 我的收藏（私人整理） | 切片 9 |
-/// | ⑤ 文件浏览 · ⑥ README.md | 切片 6 |
 ///
-/// 未落地的三个用 `PendingSection` 显式标注 —— 整块不渲染会让评审看不出还差什么
+/// 未落地的那个用 `PendingSection` 显式标注 —— 整块不渲染会让评审看不出还差什么
 /// （`AGENTS.md §0` 的"一眼可辨、不冒充成品"）。
+///
+/// ## ⚠️ ⑤ / ⑥ 两分区是**共享件**渲染的
+///
+/// 它们与 §4.4 的「代码」分区是同一件事：一条面包屑、一列目录条目、一份 README。
+/// 渲染在 `RepoTreeSection`、状态在 `RepoTreeSession`。本页与 §4.4 的两处差别：
+/// 面包屑右侧**没有**「＋ 添加」、点一行的落点是**只读**的那两条路由。
+///
+/// ## ⚠️ 分支可以切（只读的切）
+///
+/// 原型的 `exploreTree` 面包屑上那个胶囊是可点的（`openBranchSheet(false)`），
+/// 切分支会写进**按仓库的记忆** —— 与 §4.4 共用同一份。
+/// 而弹层是 `BranchSheet(isReadOnly: true)`：**不给**「管理分支…」入口
+/// （在他人仓库上给一个管理入口，点进去每一行都必然失败，而失败原因从那一屏看不出来）。
 ///
 /// ## ⚠️ 本页**不含任何写操作**（Star 除外）
 ///
@@ -25,10 +37,27 @@ struct ExploreRepoDetailView: View {
 
     let fullName: String
 
+    /// 当前目录 —— 由路由给（`.exploreRepoDetail(fullName:path:)`）。
+    /// 进子目录是**推入一层新页面**（原型 `push('exploreRepoDetail',{repo, sub})`）。
+    let path: RepoPath
+
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
 
     @State private var model: ExploreRepoViewModel
+
+    /// 本页的弹层路由。
+    ///
+    /// ⚠️ 用 `Identifiable` 枚举驱动 `.sheet(item:)`，**不用 `isPresented` 布尔量**
+    /// （同 `RepoDetailView`）：切片 9 的「收藏夹选择」落地后会多出第二张弹层，
+    /// 两个布尔量同时为真时"哪一张盖在上面"就变成了呈现顺序问题，
+    /// 而那种 bug 只在特定点击序列下出现。一个枚举天然只有一张。
+    @State private var sheet: ExploreSheet?
+
+    private enum ExploreSheet: String, Identifiable {
+        case branch
+        var id: String { rawValue }
+    }
 
     /// 「现在」只在**进页与刷新时**取一次，不在 `body` 里取。
     ///
@@ -38,15 +67,25 @@ struct ExploreRepoDetailView: View {
 
     init(
         fullName: String,
+        path: RepoPath,
         insights: LoadRepoInsights,
+        treeLoader: LoadRepoTree,
+        branches: LoadBranches,
         starToggle: ToggleStar,
+        memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
+        self.path = path
         _model = State(initialValue: ExploreRepoViewModel(
+            fullName: fullName,
+            path: path,
             loader: insights,
+            treeLoader: treeLoader,
+            branches: branches,
             starToggle: starToggle,
+            memory: memory,
             visits: visits,
             toast: toast
         ))
@@ -65,9 +104,30 @@ struct ExploreRepoDetailView: View {
         .refreshable { await model.refresh() }
         .task {
             now = Date()
-            await model.start(fullName: fullName)
+            await model.start()
             // 四路并发取完之后再对一次表：网速慢时"30 分钟前推送"可能已经变成"31 分钟前"。
             now = Date()
+        }
+        .sheet(item: $sheet) { route in
+            switch route {
+            case .branch:
+                // ⚠️ `isReadOnly: true` ⇒ 标题换成"浏览他人仓库"那一句、
+                //    底部**不给**「管理分支…」入口（见类型说明的"分支可以切"一节）。
+                BranchSheet(
+                    state: model.tree.branchList,
+                    currentBranch: model.tree.branch ?? "",
+                    isReadOnly: true,
+                    onSelect: { picked in
+                        sheet = nil
+                        Task { await model.switchBranch(to: picked) }
+                    },
+                    onManage: nil,
+                    onRetry: { Task { await model.loadBranches() } }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .task { await model.loadBranches() }
+            }
         }
     }
 
@@ -115,14 +175,7 @@ struct ExploreRepoDetailView: View {
 
             releaseSection(insights)
 
-            PendingSection(
-                title: ExploreRepoCopy.fileSection,
-                note: "切片 6 落地 · 只读文件树 + 分支切换（PRD §4.5 / §5.7）"
-            )
-            PendingSection(
-                title: ExploreRepoCopy.readmeSection,
-                note: "切片 6 落地 · 块级 Markdown 渲染（TECH_SPEC §11.1）"
-            )
+            fileSection
 
             collaborationSection
 
@@ -228,6 +281,53 @@ struct ExploreRepoDetailView: View {
                 .stroke(Theme.Palette.border, lineWidth: 1)
         )
         .buttonStyle(.plain)
+    }
+
+    // MARK: - ⑤ / ⑥ 文件浏览 · README
+
+    /// §4.13 的 ⑤ 与 ⑥ 两分区 —— 由共享件 `RepoTreeSection` 一并渲染
+    /// （按原型的顺序画出「文件浏览」小节标题、面包屑、目录卡片、
+    /// 以及 `README.md` 的小节标题与正文）。
+    ///
+    /// ⚠️ **子目录里推入的是一层新页面**（原型 `push('exploreRepoDetail',{repo, sub})`），
+    /// 不是"原地换掉目录" —— 所以返回时回到的是上一级，而不是根。
+    ///
+    /// ⚠️ README **只有根目录**会出现：`LoadRepoTree` 有意只在根目录问 `readme` 端点
+    /// （在任何子目录下问它都会拿到同一份仓库级 README，而那不是"这个目录的说明"）。
+    /// 原型在子目录里也照样印一份 —— 那是它的演示数据假象，不是规格。
+    private var fileSection: some View {
+        RepoTreeSection(
+            session: model.tree,
+            title: ExploreRepoCopy.fileSection(path: path),
+            onOpenDirectory: { target in
+                // ⚠️ 每一层都带 `fullName`：子目录页是**新的一页**，它不知道上一页是谁。
+                env.router.push(.exploreRepoDetail(
+                    fullName: fullName,
+                    path: target.isRoot ? nil : target.raw
+                ))
+            },
+            onOpenFile: { target in
+                // ⚠️ `readOnly: true` —— 走「他人仓库」那一组界面
+                //    （`编辑` 换成 `⑂ Fork 后可编辑`、页脚换成 `只读浏览 · 他人仓库文件`）。
+                env.router.push(.fileView(
+                    fullName: fullName, path: target.raw, readOnly: true
+                ))
+            },
+            onTapBranch: { sheet = .branch },
+            onSelectSegment: { index in navigate(toCrumb: index) }
+        )
+    }
+
+    /// 点面包屑的某一层 —— 与 §4.4 同规矩：**推入一层新页面**，不原地替换。
+    ///
+    /// - Parameter index: 面包屑上的下标，**第 0 段是仓库全名**。
+    private func navigate(toCrumb index: Int) {
+        // index 0 ⇒ 仓库根目录；index k ⇒ 仓库内的第 k-1 层（`RepoPath` 里根是空路径）。
+        let target = index == 0 ? RepoPath.root : model.tree.path(upTo: index - 1)
+        guard let target, target != model.tree.path else { return }
+        env.router.push(.exploreRepoDetail(
+            fullName: fullName, path: target.isRoot ? nil : target.raw
+        ))
     }
 
     // MARK: - ⑦ 参与协作
@@ -388,8 +488,12 @@ struct ExploreRepoDetailView: View {
     NavigationStack {
         ExploreRepoDetailView(
             fullName: "kuda/ui-craft",
+            path: .root,
             insights: environment.repoInsights,
+            treeLoader: environment.repoTree,
+            branches: environment.branches,
             starToggle: environment.starToggle,
+            memory: environment.branchMemory,
             visits: environment.recentVisits,
             toast: environment.toast
         )

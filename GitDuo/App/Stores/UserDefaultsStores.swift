@@ -135,6 +135,89 @@ actor UserDefaultsSearchHistoryStore: SearchHistoryStore {
     }
 }
 
+/// 分支记忆的**落盘实现**（TECH_SPEC §9.4.1、决策 #55、PRD §3.10）。
+///
+/// 与「最近访问」「最近搜索」两条同一分工：行为在领域包（`BranchMemoryStore`
+/// 的协议 + `InMemoryBranchMemoryStore` 的参照实现），本类型只管存取。
+///
+/// ## ⚠️ 与前两个 store 的一处**关键不同**
+///
+/// 前两个的行为是"去重 / 置顶 / 裁到 N 条"——那需要把整份列表交给领域实现再过一遍，
+/// 所以它们持有一个 `InMemory…` 的实例。**本类型不能那么做**：
+/// `BranchMemoryStore` 只有四个方法，**没有任何"读出全部"的入口**
+/// （协议的形状是"按仓库查一条"，那不是缺陷 —— 界面从不需要整份映射）。
+/// 于是这里直接持有 `[String: String]`，四个方法各自维护它。
+///
+/// 这也意味着 `InMemoryBranchMemoryStore` 在这里**用不上** —— 它只服务测试与预览，
+/// 而两者对同一份数据的两套实现必须保持行为一致（都只有"读一条 / 写一条 / 删一条 / 清空"，
+/// 分支记忆本身没有去重与排序可言）。
+///
+/// ## 存储形状：`[仓库全名: 分支名]`
+///
+/// 用 `UserDefaults` 的原生字典（plist 支持），不走 JSON —— 类型就是 `[String: String]`，
+/// 中间加一层编解码只会多一处能出错的地方（前两个 store 需要自定义编码是因为
+/// 它们的元素是**结构体**）。
+///
+/// ⚠️ **已知缺口，待评审**：本映射**没有容量上限**（另外两个 store 分别裁到 6 / 8 条）。
+/// 规格（PRD §3.10 / §9.4.1）没有给上限，所以这里**不擅自加**一个
+/// —— 加一个数字就是替用户拍板。代价是重度使用者会攒下几千个键
+/// （每条几十字节，实际影响很小）。
+///
+/// ⚠️ 它是**账号绑定数据**：分支名会暴露私有仓库的结构 ⇒ `signOut()` 的 ③ 步必须
+/// `clear()`（§3.6）。
+actor UserDefaultsBranchMemoryStore: BranchMemoryStore {
+
+    static let keyPrefix = "GitDuo.branchMemory"
+
+    private let defaults: UserDefaults
+    private let key: String
+    private var storage: [String: String]
+
+    /// - Parameter namespace: 账号命名空间（多账号预留，同 `UserDefaultsRecentVisitStore`）。
+    init(defaults: UserDefaults = .standard, namespace: String = "default") {
+        self.defaults = defaults
+        self.key = "\(Self.keyPrefix).\(namespace)"
+        self.storage = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
+    }
+
+    func branch(for fullName: String) async -> String? {
+        storage[fullName]
+    }
+
+    func remember(branch: String, for fullName: String) async {
+        storage[fullName] = branch
+        persist()
+    }
+
+    /// ⚠️ 与 `remember(branch:for:)` 分开是协议就定下的（见 `BranchMemoryStore`）：
+    /// "从没记过"与"记了一个空串"在读取侧走同一条路，但**存进去的东西不同** ——
+    /// 这里把键真的删掉，而不是写一个空串。
+    func forget(fullName: String) async {
+        storage[fullName] = nil
+        persist()
+    }
+
+    func clear() async {
+        storage = [:]
+        // 与另外两个 store 一样删键而不是留一份空字典：读取端分辨不出这两者，
+        // 能不落痕就不落痕。
+        defaults.removeObject(forKey: key)
+    }
+
+    /// 整份覆盖（同 `UserDefaultsRecentVisitStore.persist` 的取舍：增量更新要自己维护
+    /// "删哪条、插到哪"，而那是把语义重写一遍）。
+    ///
+    /// ⚠️ 同样是**同步写完再返回**：不放进 `Task {}` 的话，"方法返回了"与"真的落盘了"
+    /// 之间会有一个窗口，而用户完全可能在这之后立刻切分支 / 杀进程。
+    private func persist() {
+        if storage.isEmpty {
+            defaults.removeObject(forKey: key)
+            return
+        }
+        defaults.set(storage, forKey: key)
+    }
+}
+
 /// Star 基线的**落盘实现**（TECH_SPEC §7.1 / §9.10.2）。
 ///
 /// 与 `UserDefaultsRecentVisitStore` 同一分工：语义在领域包（`InMemoryStarSnapshotStore`），

@@ -1,0 +1,456 @@
+import GitHubAPI
+import GitDuoDesign
+import GitDuoKit
+import SwiftUI
+import UIKit
+
+/// 文件查看页（PRD §4.5、原型 `SCR.fileView`、TECH_SPEC §9.5）。
+///
+/// ## 它只有一件事必须做对：三档结局要**长得不一样**
+///
+/// | 结局 | 界面 |
+/// |---|---|
+/// | `.content(.text)` | `CodeSurface` 代码块（按扩展名着色，认不出语言 ⇒ 纯文本） |
+/// | `.content(.image)` | 图片（原始比例、限宽） |
+/// | `.unsupported(reason)` | 「无法预览」+ **跳网页端出口**（**没下载**） |
+/// | `.undecodable` | 「编码不认识」+ 跳网页端出口（**下载了**） |
+///
+/// 后两者合成一块的后果写在 `FileViewOutcome` 的类型说明里：文案总有一边是假话。
+/// 所以本视图里那两块虽然**共用同一套版式**（`noticeState`），
+/// 但**那一句说明必须从两个不同的常量来**，且不在这里用 `if` 互相顶替。
+///
+/// ## ⚠️ 分支由 `FileViewModel` 自己解析（路由不带它）
+///
+/// 见 `FileViewModel` 的类型说明。视图这里只把解析出来的分支画在面包屑上，
+/// **不参与**"该用哪条 ref"的判定。
+///
+/// ## ⚠️ 操作行里只有 `Raw` 是真做的（决策 #51）
+///
+/// `编辑` / `历史` / `更多` / `⑂ Fork 后可编辑` 全属后续切片 ⇒ 画出但不可点
+/// （`allowsHitTesting(false)` + 读屏 hint，**不是** `.disabled` —— 后者会变灰，
+/// 看起来像"暂时不可用"，而这一处是"这一版就不做"）。
+/// `Raw` 是两处例外之一：它复制原文到剪贴板，**零请求**（正文已经在手上）。
+///
+/// ## ⚠️ 两处「规格未给，待评审」（本片新增，已登记）
+///
+/// 1. **操作行与页脚只在"看得了"时出现**。PRD §4.5 的权限差异表是按"能看的文件"
+///    写的，没有覆盖"看不了"的两档；而 `编辑` 一个 App 根本显示不出来的文件是没有
+///    意义的。所以那两档只给网页端出口 —— 那正是 PRD §4.5 为它们规定的动作。
+/// 2. 图片字节解不成图片时（扩展名说 png、字节不是 png）落到 `.undecodable` 那块，
+///    而那句 `undecodableTextHint` 的措辞是"无法显示为**文本**"。这一档在服务端
+///    行为正常时到不了（`LoadFileContent` 只在扩展名说它是图片时才走图片通道）。
+struct FileView: View {
+
+    let fullName: String
+    let path: RepoPath
+    let readOnly: Bool
+
+    @Environment(\.openURL) private var openURL
+
+    @State private var model: FileViewModel
+
+    init(
+        fullName: String,
+        path: RepoPath,
+        readOnly: Bool,
+        loader: LoadFileContent,
+        detail: LoadRepoDetail,
+        memory: any BranchMemoryStore,
+        toast: ToastCenter
+    ) {
+        self.fullName = fullName
+        self.path = path
+        self.readOnly = readOnly
+        _model = State(initialValue: FileViewModel(
+            fullName: fullName,
+            path: path,
+            // ⚠️ 路由只带 `fullName` / `path` / `readOnly` 三个参数（§8.2 正本）
+            //    ⇒ 这两样这里**不知道**。代价如实说：`.largeText` / `.image`
+            //    会多一个 RTT（先问一次 `contents` 拿 `sha` 与 `size`，再走 raw）。
+            //    而 `LoadFileContent` 里那条"size 判小了就补一次 raw"的救援路
+            //    正好覆盖"判成 `.text` 其实是空壳"的情形 —— 两条路都在。
+            size: nil,
+            blobSHA: nil,
+            readOnly: readOnly,
+            loader: loader,
+            detail: detail,
+            memory: memory,
+            toast: toast
+        ))
+    }
+
+    var body: some View {
+        ScrollView {
+            content
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.top, Theme.Spacing.m)
+                .padding(.bottom, Theme.Spacing.xl)
+        }
+        .background(Theme.Palette.background)
+        // 标题就是文件名（原型这一屏的导航栏没有别的写法）。
+        .navigationTitle(path.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await model.refresh() }
+        .task { await model.start() }
+    }
+
+    // MARK: - 主区域
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.outcome.presentation {
+        case .skeleton:
+            skeleton
+
+        case .content:
+            // `branch` 与 `outcome` 同时有值：`FileViewModel.load()` 先定 ref、再取文件。
+            if let branch = model.branch, let outcome = model.outcome.value {
+                VStack(alignment: .leading, spacing: 0) {
+                    crumb(branch: branch)
+                        // 原型 `.crumb{margin-bottom:8px}`。
+                        .padding(.bottom, Theme.Spacing.s)
+
+                    outcomeBody(outcome)
+                }
+            }
+
+        case let .failure(error):
+            failureState(error)
+        }
+    }
+
+    /// 面包屑：`**{文件名}** · {分支}`（原型 `SCR.fileView` 逐字）。
+    ///
+    /// ⚠️ **与 `BreadcrumbBar` 不是同一个控件**，虽然类名都叫 `.crumb`：
+    ///
+    /// | | §4.4 代码分区 | §4.5 文件查看 |
+    /// |---|---|---|
+    /// | 首段 | 分支胶囊（可点、带 `▾`） | **文件名**（加粗、不可点） |
+    /// | 路径 | 仓库全名 / … / 当前层 | **无** |
+    /// | 右侧 | 「＋ 添加」 | **无** |
+    ///
+    /// 合成一个控件就必须再加三个开关，而每个开关两档里总有一档是错的 ——
+    /// 与 `SectionTabs` 不复用 `SegmentedBar` 是同一条理由。
+    ///
+    /// ⚠️ 分支名 `lineLimit(1)`：分支名可以很长（`feature/客户XX-报价单改版`），
+    /// 而文件名通常更长、更需要完整显示。
+    private func crumb(branch: String) -> some View {
+        HStack(spacing: 0) {
+            Text(path.displayName)
+                .font(Theme.Font.breadcrumb.weight(.semibold))
+                .foregroundStyle(Theme.Palette.accent)
+
+            Text(" · ")
+                .font(Theme.Font.breadcrumb)
+                .foregroundStyle(Theme.Palette.textSecondary)
+
+            Text(branch)
+                .font(Theme.Font.breadcrumb)
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .lineLimit(1)
+        }
+        // 8 / 12：原型原值（`padding:8px 12px`）。
+        .padding(.vertical, Theme.Spacing.s)
+        .padding(.horizontal, Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .fill(Theme.Palette.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
+        )
+        // 拼出来的那一串在读屏里是"文件名 空格 点 空格 分支"，粘在一起听不出层次。
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(path.displayName)，当前分支 \(branch)")
+    }
+
+    // MARK: - 三档结局
+
+    @ViewBuilder
+    private func outcomeBody(_ outcome: FileViewOutcome) -> some View {
+        switch outcome {
+        case let .content(file):
+            fileBody(file)
+
+        case let .unsupported(reason):
+            // ⚠️ `reason` 决定那一句说明 —— 图片太大与二进制对用户的下一步不一样
+            //    （前者"等网络好点或者去网页端"，后者"这里根本打不开它"）。
+            noticeState(hint: reason == .imageTooLarge
+                        ? FileCopy.unsupportedImageHint
+                        : FileCopy.unsupportedBinaryHint)
+
+        case .undecodable:
+            // ⚠️ 与 `.unsupported` **必须**给不同的那一句：上面那句明说"App 不下载它的
+            //    内容"，而这一档我们**刚刚下载了它**。照那句说就是假话。
+            noticeState(hint: FileCopy.undecodableTextHint)
+        }
+    }
+
+    // MARK: - 可以看的那一档
+
+    @ViewBuilder
+    private func fileBody(_ file: FileContent) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            contentSurface(file)
+
+            // 原型 `margin-top:14px`（14 不在 4pt 阶里 ⇒ 写原值并注明出处）。
+            actionRow.padding(.top, 14)
+
+            // 原型 `margin-top:10px`（同上）。
+            footer.padding(.top, 10)
+        }
+    }
+
+    /// 正文：代码块或图片。
+    @ViewBuilder
+    private func contentSurface(_ file: FileContent) -> some View {
+        switch file.body {
+        case let .text(text):
+            CodeSurface(lines: CodeHighlighting.lines(
+                // ⚠️ `FileContent.lines(of:)` 而不是 `split(separator:)`：
+                //    后者会吃掉空行 ⇒ **行号全错位**（领域层有单测钉住这条）。
+                FileContent.lines(of: text),
+                // 语言按**当前路径的扩展名**认。原型这一屏是硬编码的 Swift 演示数据，
+                // 认不出的语言由 `CodeSurface` 走纯文本降级（不去猜，见 `CodeLanguage.named`）。
+                language: CodeLanguage.named(FilePreviewKind.extensionOf(path.displayName))
+            ))
+            // 只读浏览里"把这一段复制走"是正常需求，而原型的 `<pre>` 本来就是可选的
+            // （浏览器默认行为）⇒ 取原型。`DiffCard` 里 PRD §4.7 有明写，这一页没有。
+            .textSelection(.enabled)
+
+        case let .image(data):
+            if let image = UIImage(data: data) {
+                imageSurface(image)
+            } else {
+                // 扩展名说它是图片，而字节不是 ⇒ 落到"下载了但解不出来"那一块。
+                // ⚠️ 见类型说明里的第 2 条「规格未给」。
+                noticeState(hint: FileCopy.undecodableTextHint)
+            }
+        }
+    }
+
+    /// 图片：**原始比例、限宽、不放大**。
+    ///
+    /// ⚠️ 有意不写 `scaledToFit()` 之外的任何缩放：一张 16×16 的 favicon 被拉满
+    /// 屏幕宽会变成一个巨大的马赛克，而用户点进来是想看"这个文件长什么样"。
+    private func imageSurface(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            // ⚠️ `.resizable()` + `scaledToFit()`：不 `resizable` 的话超出屏幕的图
+            //    会被裁掉（而没有任何滚动条提示右边还有内容）。
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: .infinity)
+            .padding(11)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                    .fill(Theme.Palette.codeSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                    .stroke(Theme.Palette.borderSoft, lineWidth: 1)
+            )
+    }
+
+    // MARK: - 操作行（原型 `justify-content:center;gap:10px`）
+
+    private var actionRow: some View {
+        HStack(spacing: 10) {
+            if readOnly {
+                // 原型的这两个按钮横向内边距是 22（`padding:9px 22px`，覆写了 `.btn` 的 16）。
+                stubAction(FileCopy.forkToEditAction,
+                           hint: FileCopy.forkToEditUnavailableHint,
+                           horizontalPadding: 22)
+            } else {
+                stubAction(FileCopy.editAction,
+                           style: .primary,
+                           hint: FileCopy.editUnavailableHint,
+                           horizontalPadding: 22)
+            }
+
+            stubAction(FileCopy.historyAction, hint: FileCopy.historyUnavailableHint)
+
+            // ⚠️ `Raw` **当真做**（决策 #51 的两处例外之一）——
+            //    它是这一行里唯一一个 `allowsHitTesting` 为真的按钮。
+            //    图片与不支持预览的文件没有"原文可复制" ⇒ 那个按钮**不出现**（§4.5）。
+            if model.canCopyRaw {
+                ActionButton(
+                    title: FileCopy.rawAction,
+                    style: .ghost,
+                    fillsWidth: false
+                ) {
+                    model.copyRaw()
+                }
+            }
+
+            if !readOnly {
+                stubAction(FileCopy.moreAction, hint: FileCopy.moreUnavailableHint)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// 「画出来但这一版不做」的按钮（决策 #51）。
+    ///
+    /// ⚠️ 逐字与真按钮一致（同一个 `ActionButton`），差别只在**按不动** ——
+    /// 这正是决策 #51 要的效果："形态与原型一致，但不冒充成品"。
+    ///
+    /// ⚠️ 闭包必须是**真的什么都不做**：`allowsHitTesting(false)` 挡的是触摸，
+    /// 而读屏的激活动作绕过命中测试 ⇒ 给一个会弹 toast 的闭包，
+    /// 读屏用户就真的点得动这个"不可点"的按钮（`UserProfileSheet` 的同一处置）。
+    private func stubAction(
+        _ title: String,
+        style: ActionButton.Style = .ghost,
+        hint: String,
+        horizontalPadding: CGFloat = 16
+    ) -> some View {
+        ActionButton(
+            title: title,
+            style: style,
+            horizontalPadding: horizontalPadding,
+            fillsWidth: false,
+            action: {}
+        )
+        .allowsHitTesting(false)
+        // 一颗按不动的按钮在读屏里就是个"按钮"，去掉那个 trait 才知道它其实是文字。
+        .accessibilityRemoveTraits(.isButton)
+        // hint 说清"为什么点不了"，而不是只说"不可用"。
+        .accessibilityHint(hint)
+    }
+
+    /// 页脚说明（原型 `.t3` 居中）。
+    private var footer: some View {
+        Text(readOnly ? FileCopy.readOnlyFooter : FileCopy.ownFooter)
+            .font(Theme.Font.caption)
+            .foregroundStyle(Theme.Palette.textTertiary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - 看不了的两档
+
+    /// 「看不了」的**共用版式**：一个图标 + 标题 + 那一句说明 + 网页端出口。
+    ///
+    /// ⚠️ 版式共用是**有意**的（两档的视觉行为一致），而那句话由调用方从**两个不同的
+    /// 常量**传进来 —— 共用版式不等于共用文案（`FileViewOutcome` 的类型说明）。
+    ///
+    /// ⚠️ 这一块**不给操作行**：见类型说明里的第 1 条「规格未给」。
+    private func noticeState(hint: String) -> some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: GitHubIcon.unsupportedFile)
+                .font(.system(size: 30))
+                .foregroundStyle(Theme.Palette.textTertiary)
+                // 装饰性图标，标签由下面两行文字给。
+                .accessibilityHidden(true)
+
+            Text(FileCopy.unsupportedTitle)
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.Palette.textSecondary)
+
+            Text(hint)
+                .font(Theme.Font.footnote)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .multilineTextAlignment(.center)
+
+            ActionButton(title: FileCopy.openInBrowserAction, style: .ghost) {
+                openInBrowser()
+            }
+            .padding(.top, Theme.Spacing.xs)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xxl)
+        .padding(.horizontal, Theme.Spacing.m)
+    }
+
+    // MARK: - 骨架 / 失败
+
+    private var skeleton: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            SkeletonBar(height: 32)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                ForEach(0..<8, id: \.self) { _ in
+                    SkeletonBar(height: 13, width: 210)
+                }
+            }
+            // 与 `CodeSurface` 的 11 / 13 同值：骨架的形状要与它替换的东西对得上，
+            // 否则内容到位那一刻整块会跳一下。
+            .padding(.vertical, 11)
+            .padding(.horizontal, 13)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                    .fill(Theme.Palette.codeSurface)
+            )
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。
+    private func failureState(_ error: GitHubError) -> some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 30))
+                .foregroundStyle(Theme.Palette.textTertiary)
+
+            Text("加载失败")
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.Palette.textSecondary)
+
+            Button("重试") {
+                Task { await model.refresh() }
+            }
+            .font(Theme.Font.bodyStrong)
+
+            // ⚠️ 取不到内容时网页端是这一页**唯一总是可用**的出路 ——
+            //    不留它，用户在一个 404 上就只剩"重试"可点（而同一次失败还会再来一遍）。
+            Button(FileCopy.openInBrowserAction) {
+                openInBrowser()
+            }
+            .font(Theme.Font.footnote)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xxl)
+        .accessibilityElement(children: .combine)
+        // 失败原因**只说确定的那一件事**：404 与无权限被 GitHub 混同（§4.3），
+        // 不得替用户断定是"文件不存在"还是"你没权限"。
+        .accessibilityHint(Self.failureHint(error))
+    }
+
+    // MARK: - 网页端出口
+
+    /// 打开这一页对应的 GitHub 网页端地址。
+    ///
+    /// ⚠️ 地址由 `FileViewModel.webURL` 拼（拿不到分支时用字面 `HEAD`
+    /// —— GitHub 的 `blob` 路由需要一段引用名，省掉它会 404）。
+    private func openInBrowser() {
+        guard let url = model.webURL else { return }
+        openURL(url)
+    }
+
+    private static func failureHint(_ error: GitHubError) -> String {
+        switch error {
+        case .transport: "网络不可用"
+        case .rateLimited: "请求过于频繁"
+        case .unauthorized: "登录状态已失效"
+        default: "服务暂时不可用"
+        }
+    }
+}
+
+#Preview {
+    @Previewable @State var environment = AppEnvironment()
+    NavigationStack {
+        FileView(
+            fullName: "my-git/gitduo",
+            path: RepoPath(path: "GitDuo/App/AppTabs.swift"),
+            readOnly: false,
+            loader: environment.fileContent,
+            detail: environment.repoDetail,
+            memory: environment.branchMemory,
+            toast: environment.toast
+        )
+    }
+    .environment(environment)
+}

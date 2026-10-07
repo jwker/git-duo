@@ -168,6 +168,16 @@ public enum BranchCopy {
     /// 目标分支只读说明 —— 目标恒为**当前分支**（`POST /merges` 的 `base`）。
     public static let mergeTargetHint = "当前分支，合并后提交到这里"
 
+    /// 一个可以合并进来的源分支都没有。
+    ///
+    /// ⚠️ **规格未给，待评审**（自拟）。它不是理论上不会发生：只有一条 `main`
+    /// 的仓库、或分支列表还没加载出来时，`mergeCandidates` 就是空的。
+    /// PRD §4.8 把「合并分支…」列为**固定结构项**（第 4 条）⇒ 按钮不隐藏，
+    /// 于是这条弹层必须能表达"没有东西可合"。
+    /// ⚠️ 它**不是** 204 那一句（`nothingToMergeToast`）：那一句说的是
+    /// "你选的那条已经合过了"，而这一句说的是"你没得选"。
+    public static let mergeNoSourceHint = "没有其他分支可以合并进来"
+
     /// 提交信息输入框的占位（可选项）。
     public static let mergeMessagePlaceholder = "合并提交信息（可选）"
 
@@ -180,5 +190,14 @@ public enum BranchCopy {
     /// 合并成功的提示。
     public static func mergedToast(source: String, target: String) -> String {
         "已把 \(source) 合并到 \(target)"
+    }
+
+    /// **204：没有东西可合**（`head` 已经合进 `base`）—— 决策 #52 的三种结局之一。
+    ///
+    /// ⚠️ **规格未给，待评审**（自拟）。它与 `mergedToast` **必须分开**：
+    /// 说"已把 X 合并到 Y"会让用户以为刚刚产生了一个合并提交，
+    /// 而 204 的含义恰恰是**服务端什么都没做**（那正是 `.nothingToMerge` 想表达的）。
+    public static func nothingToMergeToast(source: String) -> String {
+        "\(source) 已经合并过，没有新的改动"
     }
 }

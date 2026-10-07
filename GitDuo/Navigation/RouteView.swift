@@ -1,3 +1,4 @@
+import GitDuoKit
 import SwiftUI
 
 /// `Route` → 具体页面。
@@ -30,11 +31,18 @@ struct RouteView: View {
             //    2026-10-07 裁定：PRD §4.4 归**切片 6**，与文件查看 / 提交详情 / 分支同片
             //    （它的四个分区里「代码 / Commits / 分支」直接依赖那三件产物）。
             SkeletonScreen(title: "仓库详情 · \(fullName)", slice: "切片 6 落地", reference: "PRD §4.4 · 分区 \(section.rawValue)")
-        case let .exploreRepoDetail(fullName, _):
+        case let .exploreRepoDetail(fullName, path):
+            // ⚠️ `path` 是**子目录**（原型 `push('exploreRepoDetail',{repo, sub})`）——
+            //    它非空时这一页渲染的是同一套内容、只是目录停在那层。
+            //    `Route` 里它是 `String?`，`nil` = 根目录（`RepoPath` 拿空串表示根）。
             ExploreRepoDetailView(
                 fullName: fullName,
+                path: RepoPath(path: path ?? ""),
                 insights: env.repoInsights,
+                treeLoader: env.repoTree,
+                branches: env.branches,
                 starToggle: env.starToggle,
+                memory: env.branchMemory,
                 visits: env.recentVisits,
                 toast: env.toast
             )

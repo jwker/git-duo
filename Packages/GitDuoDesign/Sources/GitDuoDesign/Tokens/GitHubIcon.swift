@@ -27,4 +27,46 @@ public enum GitHubIcon {
     /// 与 `StateIcon.pullRequestOpen`（`arrow.triangle.pull`）**不是同一个符号**：
     /// 那是"提 PR"，这里是"分支"。
     public static let branch = "arrow.triangle.branch"
+
+    // MARK: - 文件树（切片 6.4）
+
+    /// 目录行 —— 原型 `I.dir`。
+    public static let folder = "folder"
+
+    /// 文件行 —— 原型 `I.file`。
+    public static let file = "doc.text"
+
+    /// 列表行右侧的指示符 —— 原型 `I.chev`。
+    public static let chevron = "chevron.right"
+
+    /// 面包屑右侧的「＋ 添加」（原型用 `I.plus` 配全角 `＋` 文案，两者都在）。
+    public static let plus = "plus"
+
+    // MARK: - Fork（§4.4 / §4.13 的统计按钮）
+
+    /// Fork —— 原型 `I.fork`（`05-repo.js` 的 `stat-btn` 与 `10-explore-repo.js` 各一处）。
+    ///
+    /// ⚠️ 与 `branch` 用的是**同一个**符号：原型这两处都画 `I.fork`。
+    /// 复用而不是另找一个 —— 找不到同形的，"语义接近"的另一个符号
+    /// 只会让这两处看起来是两件事。
+    ///
+    /// 原先两个头部卡里各自写了一串字面 `"arrow.triangle.branch"`，
+    /// 2026-10-07（6.4）收拢到本常量 —— 与 `RepoCopy.watchLabel` 收拢那三句文案同一处置。
+    public static let fork = "arrow.triangle.branch"
+
+    // MARK: - 文件查看页的空态（切片 6.4）
+
+    /// 「无法预览」空态。
+    ///
+    /// ⚠️ 原型没有这个状态（它没有服务端，也就没有二进制文件）。
+    /// 取 `doc.questionmark`：一个"这份文档有问题"的语义，
+    /// 比通用警告三角更贴（这既不是错误、也不是警告，只是**看不了**）。
+    public static let unsupportedFile = "doc.questionmark"
+
+    // ⚠️ **有意没有** `history` / `more` / `openInBrowser` 三个常量。
+    //    切片 6.4 起草时曾按"每个操作按钮配一个图标"补过它们，落地时发现
+    //    `SCR.fileView` 的 `历史` / `更多` 与那两处"跳网页端"的出口**都是纯文字**
+    //    （原型的 `<button>` 里没有任何 `svg(...)`）⇒ 补的三个名字一个都用不上。
+    //    留着的名字不是"以后可能用得上"，而是下一个读这份表的人要先判断
+    //    "它是不是还在用"（`GitHubIcon` 的类型说明点名的正是这件事）。
 }

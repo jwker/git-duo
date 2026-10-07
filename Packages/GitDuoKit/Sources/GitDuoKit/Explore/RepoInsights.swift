@@ -245,7 +245,10 @@ public struct LoadRepoInsights: Sendable {
         )
 
         return RepoInsights(
-            detail: Self.detail(from: detailDTO),
+            // ⚠️ 头部映射走 `RepositoryDetailMapper` —— 切片 6 的仓库详情页（§4.4）
+            //    用的是**同一份**。曾经这里是 `private static func detail(from:)`，
+            //    复制一份会让两个页面对同一个仓库显示不同的许可证 / 关注者数。
+            detail: RepositoryDetailMapper.detail(from: detailDTO),
             // 排序与百分比换算**都在领域层做**：`/languages` 是个 JSON 对象，
             // `Dictionary` 的迭代顺序不确定（§9.11）—— 就地换算会让同一份响应两次解析
             // 得到两根顺序不同的占比条。
@@ -262,24 +265,6 @@ public struct LoadRepoInsights: Sendable {
     }
 
     // MARK: - 内部
-
-    private static func detail(from dto: RepositoryDetailDTO) -> RepositoryDetail {
-        RepositoryDetail(
-            fullName: dto.fullName,
-            description: dto.description,
-            // 省略与空数组等价（DTO 的注释）；视图不需要为此区分。
-            topics: dto.topics ?? [],
-            // ⚠️ `spdx_id` 可能是哨兵值 `NOASSERTION`，要退到 `name`，见 `LicenseLabel`。
-            licenseLabel: LicenseLabel.text(spdxID: dto.license?.spdxID, name: dto.license?.name),
-            defaultBranch: dto.defaultBranch,
-            starCount: dto.starCount,
-            forkCount: dto.forkCount,
-            watcherCount: dto.watcherCount,
-            pushedAt: dto.pushedAt,
-            // `permissions` 缺失 ⇒ `.none`（**不是**"默认可写"），见 `Permissions.init(_:)`。
-            permissions: Permissions(dto.permissions)
-        )
-    }
 
     private static func release(from dto: RepoReleaseDTO) -> LatestRelease {
         LatestRelease(

@@ -5,23 +5,37 @@ import GitDuoKit
 
 /// 他人仓库详情的状态（PRD §4.13、TECH_SPEC §9.11）。
 ///
-/// ## 它管两件不同节奏的事
+/// ## 它管三件不同节奏的事
 ///
 /// | | 数据 | 何时取 |
 /// |---|---|---|
 /// | 页面四路数据 | `GET /repos` + `languages` + `releases/latest` + `contributors` | 进页一次（并发四路） |
 /// | Star 基准 | `GET /user/starred/{o}/{r}` | 详情回来之后 —— 它需要详情里的星数 |
+/// | 目录 + README | `GET /contents` 等 | 详情回来之后 —— 它要 `defaultBranch` |
+///
+/// 第三条走 **`RepoTreeSession`**（§4.4 的「代码」分区用的是同一个会话）：
+/// 分支两段式解析、记忆失效回落、副标题逐条补填那几条规则只有一个落点。
 ///
 /// ## ⚠️ 一路失败 ⇒ 整页失败（有意如此）
 ///
 /// 看起来"分别降级"更友好，但 §8.5 把加载 / 失败态**三档统一**了、
 /// 并明写"各页面不得自行发挥"。分区块各自失败要再定义一套"块级失败态"，
 /// 那是新的产品口径，不该由实现顺手定。`LoadRepoInsights` 里有完整理由。
+///
+/// ⚠️ 上面那条**不适用于目录**：它落在第 ⑤ / ⑥ 分区里、由 `RepoTreeSection`
+/// 自带块级失败态（那是 §8.5 三档在"分区"这一层上的正常用法，
+/// 与"整页失败"不是同一件事 —— §4.4 的代码分区也是这么处理的）。
 @MainActor
 @Observable
 final class ExploreRepoViewModel {
 
     private(set) var insights: LoadState<RepoInsights> = .idle
+
+    /// 目录浏览的会话（当前分支 + 目录页 + 分支列表 + 副标题补填）。
+    ///
+    /// ⚠️ 它是**只读浏览**的那一半：可切分支（记忆照写）、不可增删合并 ——
+    /// 后者由 `BranchSheet(isReadOnly: true)` 那一侧决定，与本类型无关。
+    let tree: RepoTreeSession
 
     /// Star 的当前状态。`nil` = 基准还没确认（详情没好，或那次查询失败了）。
     ///
@@ -40,18 +54,31 @@ final class ExploreRepoViewModel {
     private let visits: any RecentVisitStore
     private let toast: ToastCenter
 
-    private var fullName = ""
+    let fullName: String
 
     init(
+        fullName: String,
+        path: RepoPath,
         loader: LoadRepoInsights,
+        treeLoader: LoadRepoTree,
+        branches: LoadBranches,
         starToggle: ToggleStar,
+        memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
     ) {
+        self.fullName = fullName
         self.loader = loader
         self.starToggle = starToggle
         self.visits = visits
         self.toast = toast
+        self.tree = RepoTreeSession(
+            fullName: fullName,
+            path: path,
+            loader: treeLoader,
+            branches: branches,
+            memory: memory
+        )
     }
 
     // MARK: - 生命周期
@@ -60,9 +87,7 @@ final class ExploreRepoViewModel {
     ///
     /// 顺序不能反：万一取数失败，这次访问也确实发生了 —— 而"最近访问"记的是
     /// "用户打开过它"，不是"它成功显示了"。
-    func start(fullName: String) async {
-        self.fullName = fullName
-
+    func start() async {
         // ⚠️ `canWrite: false` **是事实、不是猜测**：能走到本页，只可能是因为路由
         //    在进入前就把它判成了他人仓库（`HomeView` / `ReposView` / `ExploreView` 三处入口）。
         //    这正是 `RecentVisitStore.record(fullName:canWrite:at:)` 要调用方显式传参的原因 ——
@@ -96,6 +121,21 @@ final class ExploreRepoViewModel {
         }
     }
 
+    // MARK: - 目录（转发给会话）
+
+    /// 打开切换弹层时取分支列表。
+    func loadBranches() async {
+        await tree.loadBranches()
+    }
+
+    /// 切到另一条分支 —— 只影响这一页的目录与 README（本页没有提交列表要清）。
+    func switchBranch(to name: String) async {
+        guard let defaultBranch = insights.value?.detail.defaultBranch else { return }
+        guard await tree.switchBranch(to: name, defaultBranch: defaultBranch) else { return }
+        // 只读浏览也能切分支 ⇒ 切成功要给一句（与 §4.4 同一句）。
+        toast.show(BranchCopy.switchedToast(branch: name))
+    }
+
     // MARK: - 内部
 
     private func load() async {
@@ -108,6 +148,8 @@ final class ExploreRepoViewModel {
             insights.succeed(value)
             // 详情到手才知道星数 ⇒ Star 基准必须在这之后问。
             star = await starToggle.initialState(fullName: fullName, starCount: value.detail.starCount)
+            // ⚠️ 目录也排在详情之后：它要 `defaultBranch`。
+            await tree.load(defaultBranch: value.detail.defaultBranch)
         } catch {
             if hadContent {
                 toast.show(ExploreRepoCopy.refreshFailed)
@@ -143,8 +185,22 @@ enum ExploreRepoCopy {
     static let myFoldersSection = "我的收藏（私人整理 · 仅自己可见）"
     static let languageSection = "语言构成"
     static let releaseSection = "Latest Release"
-    static let fileSection = "文件浏览"
-    static let readmeSection = "README.md"
+
+    /// 第 ⑤ 分区的小节标题 —— 根目录是 `文件浏览`，子目录里带 ` · {path}`（原型逐字）。
+    ///
+    /// - Parameter path: 当前目录。传 `nil` 或根路径即为根目录。
+    static func fileSection(path: RepoPath?) -> String {
+        guard let path, !path.isRoot else { return fileSectionBase }
+        return "\(fileSectionBase) · \(path.raw)"
+    }
+
+    private static let fileSectionBase = "文件浏览"
+
+    // ⚠️ 第 ⑥ 分区的小节标题（`README.md`）**已删** —— 它原先在这里有一个
+    //    `readmeSection`，值与 `RepoCopy.readmeSectionTitle` **完全相同**。
+    //    两处各存一份时，"把标题改成 `README`"只会改到其中一页。
+    //    现在两页共用 `RepoCopy.readmeSectionTitle`（由 `RepoTreeSection` 渲染）。
+
     static let collaborationSection = "参与协作"
     static let releaseAssetsHint = "资产与源码下载依赖仓库的 Release 页面"
 

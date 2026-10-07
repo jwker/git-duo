@@ -69,6 +69,23 @@ public struct TreeEntry: Sendable, Hashable, Identifiable {
     /// 请求回来后被替换成真内容 —— 30 行同时跳一次文字，比它晚一点出现更刺眼。
     public var subtitle: String? { recentCommit?.summary }
 
+    /// 填上/替换副标题 —— 决策 #49 的"随请求陆续填充"要用它。
+    ///
+    /// 本类型是值类型，视图持有的那份在 `@State` 里、不可变。
+    /// 把"重建一个只改 `recentCommit` 的副本"这件事留给调用方写，
+    /// 就等于让每个调用点都抄一遍那六个字段 —— 漏一个字段是**静默**的
+    /// （`size` / `sha` 丢了照常编译，只是文件页少了两样东西）。
+    public func withRecentCommit(_ commit: RecentCommit?) -> TreeEntry {
+        TreeEntry(
+            name: name,
+            path: path,
+            kind: kind,
+            size: size,
+            sha: sha,
+            recentCommit: commit
+        )
+    }
+
     public enum Kind: Sendable, Hashable {
 
         /// 目录 —— 点击进下一级。
