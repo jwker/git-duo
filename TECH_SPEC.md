@@ -1438,6 +1438,40 @@ GlassEffectContainer(spacing: 12) {
 
 ⚠️ 由此也定死一条用法：**`starActive` 只用于图标（填充 / 描边），绝不用作文字色或背景色** —— 1.48:1 承载任何正文都读不清。
 
+**切片 6 新增的令牌与组件（2026-10-07）**
+
+令牌同样全是"**原型里已经存在、但此前没有对应 token 的值**"（唯一例外是 `Radius.control`，但它也只是把原型里**三处同值**合成一档）。
+
+| 令牌 | 值 | 出处与用途 |
+|---|---|---|
+| `Palette.syntaxKeyword` | `#CF222E` | `styles/04-screens.css` 的 `.kw`。⚠️ **只有四档**，而领域层 `SyntaxTokenKind` 有七档 —— `number` / `type` **原型没有颜色** ⇒ 不着色（「规格未给，待评审」） |
+| `Palette.syntaxFunction` | `#8250DF` | `.fn`（函数 / 方法名） |
+| `Palette.syntaxString` | `#0A3069` | `.st`（字符串字面量，含引号） |
+| `Palette.syntaxComment` | `#6E7781` | `.cm`。⚠️ 与 `textTertiary`（`#8B949E`）**不是同一个值**，别互相顶替 |
+| `Palette.accentSubtle` | `#DDF4FF` | `.hunk{background:#ddf4ff}` **与** `.sha{background:#ddf4ff}` —— 两处**同值**故合成一档（沿 `stateMergedSurface` 先例）。⚠️ 与 `accentSurface`（`#F0F6FF`，筛选 chip 选中态）**不是同一个值**，混用会让 hunk 头与"已选 chip"看起来像同一族控件 |
+| `Palette.codeInlineSurface` | `#AFB8C1` @ 35% | `.markdown code{background:rgba(175,184,193,.35)}`。**半透明是刻意的** —— 行内代码嵌在正文里，底必须能透出卡片白，换不透明色会像贴上去的贴纸 |
+| `Radius.control` | `9` | `.btn` / `.crumb` / `.markdown pre` **三处同为 9**（都是"嵌在卡片里的矩形小块"）⇒ 合成一档，不立同值异名 |
+| `Radius.branchChip` | `7` | `.branch-chip{border-radius:7px}`。⚠️ 与 `chip`(6) **只差 1pt 但不合并**：原型里是两处独立取值，而这一颗是**可点的控件**（点开切换分支弹层） |
+| `Font.monospacedCode` | `.system(.caption, design: .monospaced)` | `pre code{font-size:12px}`。12pt 落在 `monospaced`(13) 与 `monospacedPreview`(11) **中间那一档**；代码块是**要读懂的内容**（不像预览行只是"瞄一眼"），且嵌在 README 正文里不能与正文抢主次 |
+| `Font.markdownH1` | `.title2.weight(.bold)` | `.markdown h1{font-size:22px;font-weight:750}` |
+| `Font.markdownH2` | `.body.weight(.bold)` | `.markdown h2{font-size:17px;font-weight:700}`。⚠️ 与 `bodyStrong`（semibold）只差一档字重，不合并（沿 `label` / `sectionLabel` 先例） |
+| `Font.markdownBody` | `.subheadline` | `.markdown{font-size:14px}`。⚠️ 与 `rowTitle` **今天同值但不同令牌**（原型是两处独立取值），沿 `codeSurface` 与 `background` 那条先例 |
+| `Font.breadcrumb` | `.caption`（系统 12pt） | `.crumb{font-size:12.5px}`。⚠️ **陷阱**：本文件里 `Font.caption` 这个**令牌名**指的是 `.caption2`（11pt）⇒ 这里**不能**复用 `Font.caption`。`Slice6ComponentTests` 用一条断言把这对关系钉住了 |
+| `GitHubIcon.branch` | `arrow.triangle.branch` | 面包屑的分支胶囊图标。**单独立文件**的理由：Issue / PR 的状态图标是业务相关标识（`StateIcon`），通用图标不是 —— 混在一起会让"再加一个图标"变成往业务文件里塞东西 |
+
+| 组件 | 对应原型 | 为什么进设计包（决策 #43 判据） |
+|---|---|---|
+| `CodeSurface` | `.markdown pre` / `pre code`（PRD §4.4 / §4.5） | 只收 `[[CodeSpan]]`（`text` + 五档 `CodeTone`）⇒ 与业务无关。**横向滚动不折行**（折行会让缩进层次看不出来，而缩进是读代码的第一信息）；**一个 `Text` 装全部行**（否则行距要靠 `VStack(spacing:)` 凑，而那个值同时管着行距与末行内边距） |
+| `DiffRow` | `.dline` / `.hunk`（PRD §4.7） | 只收 `number` / `text` / `tone` 三个基础类型 ⇒ 进设计包。**六档**：原型四档 + `.note`（`\ No newline`）与 `.content`（未知行）—— 这两档原型没有但**必须有地方落**，丢掉会让用户看到的 diff **少几行且没有任何迹象**。行号列宽 34（含右侧 8pt 内边距，故修饰符顺序不能反） |
+| `BreadcrumbBar` | `.crumb` + `.branch-chip`（PRD §4.4 / §4.13） | 只收 `branch: String` + `path: [String]` ⇒ 进设计包。"当前在哪一级"是领域层 `RepoPath` 的事。路径段走 `FlowLayout` **折行不截尾**（截尾会把"我在哪一级"这个唯一的信息压掉）；分隔符作**每段的前缀**（否则折行时行尾会留一根孤零零的斜杠） |
+| `BranchRow` | `.menu-item` 的分支行（PRD §4.8） | 只收 `name` / `badgeTitle` / `canDelete` / 两个闭包 ⇒ 进设计包。**不判断能不能删**（判据在 `BranchSummary.canDelete`）、**不写死任何文案**（从 `BranchCopy` 传） |
+
+⚠️ **`MarkdownBody`（吃 `[MarkdownBlock]`）与 `DiffCard`（吃 `FileChange`）因此**留 Feature**（`GitDuo/Features/Repo/Components/`）—— 它们收领域模型，按决策 #43 不进设计包。与之配套的 `CodeHighlighting`（`SyntaxTokenKind` → `CodeTone`）也留在 App 层：两侧互不认识（设计包不得 import 领域层、领域层不得 import SwiftUI），这次翻译**只能**落在 App 层；而 App target 没有测试 target ⇒ 两处翻译（`CodeHighlighting.tone` / `DiffCard.tone`）的 `switch` **一律去掉 `default` 写成穷尽**，领域层加一档时**编译不过**，那是唯一可用的守卫。
+
+⚠️ **四处「规格未给，待评审」（6.3 登记）**：原型对这几处**一次都没渲染过**，逐条论证在代码注释里 —— ① `number` / `type` 两档不着色；② 单列行号取 `newNumber ?? oldNumber`（见 §11.2）；③ 引用块的 2pt 左侧竖条；④ h3–h6 / 分隔线 / 卡片说明的样式（分别取"正文同档加粗""1pt `borderSoft`""次级色 + 既有内边距"）。共同原则：**能不用新数字就不用、能用既有令牌就不新造颜色**。
+
+⚠️ **一处渲染层固有限制**：行内代码的底在 `AttributedString` 里画出来是**紧贴字形的矩形** —— `backgroundColor` 不能圆角、不能加内边距（原型是 `border-radius:5px; padding:1.5px 5px`）。底色照原型，形状是方的、没有留白。
+
 ---
 
 ## 11. 自研渲染模块（零第三方依赖）
@@ -1470,6 +1504,12 @@ GlassEffectContainer(spacing: 12) {
 > ③ `AttributedString` 的断言要读 runs、逐段比 attribute，写出来极难维护；纯结构可以直接 `==` **逐块断言**（6.1 的 Markdown 测试正是这么写的）。
 > 三个解析器（`MarkdownParser` / `UnifiedDiffParser` / `SyntaxHighlighter`）**一律是纯函数**：只吃 `String`、只吐结构体，不碰任何 UI 类型。
 
+> **渲染落点（6.3 已交付）**：`MarkdownBody`（`GitDuo/Features/Repo/Components/`）吃 `[MarkdownBlock]` 逐块渲染 —— 按决策 **#43** 留 Feature（收领域模型）。
+> - 容器与标题照原型 `.markdown` 一族：底 `surface` + 1pt `borderSoft` + `Radius.container`(12) + 内边距 `Spacing.page`(16)；h1 / h2 各配一条 `borderSoft` 下边线（**画在内边距之内**，即先 `padding(.bottom)` 再 `overlay(alignment: .bottom)`）。
+> - **行内样式由视图层做**（领域层只出结构）：`.bold` / `.italic` 必须基于**本块的基准字号**派生（`base.weight(.bold)` / `base.italic()`）—— `AttributedString` 的 `.font` 是**整段替换**而不是叠一层，直接给 `.bold` 会让粗体那一小段退回系统默认字号。`.code` 用 `monospacedCode` + `codeInlineSurface`；`.link` 用 `accent` + **无下划线**（原型没有 `a` 规则，取本 App 既有链接语汇，与面包屑一致）。
+> - **代码块直接交给 `CodeSurface`**，语言由 `CodeLanguage.named(fence 的 info string)` 决定，**认不出来就是纯文本**（不去猜 —— 按错的规则着色比不着色更让人怀疑内容本身）。
+> - 列表项的缩进 = `18 × (depth + 1)`（原型 `ul{margin-left:18px}`）；**嵌套是「规格未给」**（原型没有嵌套列表），故只复用那一个 18、不引入第二个数值。任务列表勾选框只靠图形表达勾选态、**不加颜色区分**，且**必须给读屏标签**（`MarkdownCopy.checkboxLabel`）。
+
 ### 11.2 unified diff 解析
 
 | 项 | 方案 |
@@ -1479,6 +1519,19 @@ GlassEffectContainer(spacing: 12) {
 | 边界 | 无换行结尾标记 `\ No newline at end of file`、多文件分割（`diff --git`）、二进制文件（`Binary files … differ`）、`\r\n` |
 | 渲染 | 等宽字体 + 行号列（不可选中）+ 红/绿底色；hunk 头单独一行 |
 | 性能 | **按需解析**：折叠状态下不解析；展开时才解析该文件。大 PR（数百文件）必须惰性化 |
+
+> **单列行号取哪一个（6.3 登记为「规格未给，待评审」）**：`DiffLine` 同时带 `oldNumber` 与 `newNumber`（unified diff 的两侧），而原型 `.dline .ln`（`width:34px`）**只画一列** ⇒ 必须选一个。
+> 判据取 **`displayNumber = newNumber ?? oldNumber`（新号优先）**：新增行只有新号、删除行只有旧号，上下文行两侧都有时取新号 —— 理由是"读代码时人对齐的是**现在**这个文件"，
+> 且上下文行夹在增删行之间，取新号能让上下相邻的行号**连成一段**（取旧号会在每个新增块之后跳一下）。
+> ⚠️ **原型给不出这条规则**：它那段 diff 的上下文行两侧号**恰好相同**（`@@ -40,7 +40,9 @@` 之后是 `40/40`），PRD §4.7 只写"行号列不可选中"。
+> **不要**改成 `oldNumber ?? newNumber` 了事 —— 那会让"当前文件"的行号整体偏一段，而偏了不会报错、只会让用户对不上 GitHub 网页端（`UnifiedDiffTests` 有一条断言正面钉住）。
+> ⚠️ 另一条：`\ No newline at end of file`（`.noNewline`）**两个号都是 `nil`**（它不是文件里的一行、不消耗行号）⇒ `displayNumber` 为 `nil`、**不画行号列**。
+
+> **渲染落点（6.3 已交付）**：`DiffCard`（`GitDuo/Features/Repo/Components/`）吃 `FileChange` —— 按决策 **#43** 留 Feature（收领域模型）；行本身由设计包的 `DiffRow` 画。
+> - **"按需解析"兑现方式**：解析结果存在组件的 `@State` 里，**只在展开那一刻解析一次**（`toggle()` 与默认展开的 `onAppear` 两处），`body` 里**不做任何解析** —— 否则展开状态下每次重绘都会把整段 `patch` 重扫一遍。`UnifiedDiffParser` 是纯函数、无缓存，"按需"只能由调用方保证。
+> - 卡片默认**展开**（原型是 `class="diffcard open"`）。
+> - `patch == nil` 时**两种原因分开说**：`isBinary` 为真 ⇒ `CommitCopy.binaryDiffNotice`，否则 ⇒ `CommitCopy.oversizedDiffNotice`；`patch` 非空但解析出 **0 个 hunk**（纯改模式 / 纯重命名）⇒ `CommitCopy.noHunksNotice`。⚠️ **三句不许复用**（`CommitCopyTests` 断言两两不同）：同一句"看不了"会让一个 50 行的文本改动被说成"二进制文件"。
+> - `\ No newline` 与"认不出来的非标准行"照原文显示（分别走 `DiffRow.Tone.note` / `.content`）—— 丢掉它们会让用户看到的 diff **比真实改动少几行，而没有任何迹象**。
 
 ### 11.3 语法高亮
 

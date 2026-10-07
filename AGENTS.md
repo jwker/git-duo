@@ -5,9 +5,9 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）进行中 —— 6.0 文档先行、6.1 领域层、6.2 数据层已落地。**
-`make verify` = **五包单测 978 项 + 模拟器构建**，一条命令，**零编译警告**。
-（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 45 · **GitDuoKit 489**）
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）进行中 —— 6.0 文档先行、6.1 领域层、6.2 数据层、6.3 设计系统已落地。**
+`make verify` = **五包单测 1001 项 + 模拟器构建**，一条命令，**零编译警告**。
+（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 497**）
 ⚠️ **切片 5 / 4 共享的那笔欠账仍然挂着**：完成定义第 3 条「与原型逐屏对照」**到目前一次都没做过**
 （四个页面 + 搜索页都要登录才可达，至今只有代码级证据）。它是 4 条里**唯一**能发现"页面缺失 / 做错"的一条。
 **切片 6 会把待对照页面从 5 个加到 9 个**（再加仓库详情 / 文件查看 / 提交详情 / 分支管理），
@@ -23,7 +23,7 @@
 | 6.0 | 文档先行：决策 **#49–#55**（文件树副标题来源 / 切片边界 / 别片入口按钮 / 合并弹层 / 删除分支判据 / 大文件与二进制降级 / 分支记忆落点）+ §9.4 / §9.4.1 / §9.5 / §9.7.1 / §11 / §13.2 改写 + PRD §3.10 / §4.4 / §4.5 / §4.7 / §4.8 补口径 | ✅ |
 | 6.1 | 领域层（`GitDuoKit/Branches/` · `Files/` · `Rendering/` · `Repo/`，16 个文件）：分支**两段式解析 + 回落 + 404 静默重发**（`BranchResolver`）· **分支名校验**（git ref 八条规则 + 逐条中文提示）· 删除分支判据（`canDelete` = 非默认 **且** 非受保护）与未合并判定（只读 `ahead_by`）· **文件预览三档降级**（`FilePreviewKind`）· contents 解码三条规则（base64 剥换行 / 空壳判定 / 行拆分保空行）· 路径拼接校验（`RepoPath`）· 文件树条目 / 提交列表行 / 提交详情 / 文件改动 · **§11.1 Markdown 块级解析** · **§11.2 unified diff 解析** · **§11.3 语法高亮词法** · 四页文案常量。⚠️ 两处**实现偏离已登记**（见下方提醒） | ✅ |
 | 6.2 | 数据层（已落地）：**14 条路由**，全落 `Repos/` 四个端点类 —— `repos/{o}/{r}`（详情头部，`RepositoryDetailDTO`）· `contents/{path}?ref=`（目录清单 + 单文件 base64 双形状）与 `readme`（raw，只吞 404）· `commits`（列表 + `?path=&per_page=1` 逐文件副标题，决策 #49）· `commits/{sha}`（`files[].patch` + `stats`）· `branches?per_page=100` · `branches/{branch}` · `compare/{base}...{head}`（决策 #53）· `git/refs` 建 / 删 · `merges`（201 合并 / **204 没有东西可合** / 409 冲突）。⚠️ 三条**按实测形状**加的：① `RepoContentType` **不能是 `String` 枚举**（目录取值是 **`dir`**，不是 `directory`）② `CompareDTO` **根本不声明** `commits`/`files`（会被截断 ⇒ 判据只剩 `ahead_by`）③ `MergeOutcome` 而不是 `MergeResultDTO?`（204 是确凿答案、不是失败）。⚠️ 14 条路由**配额桶逐个显式声明**（`.core`）+ `RepoEndpointQuotaTests` 用**"每个桶间隔都非 0"的探针策略**正面断言"落主桶且没误用搜索桶"（声明漏了本不会有任何报错） | ✅ |
-| 6.3 | 设计系统：代码块视图（等宽 + 横向滚动）· 块级 Markdown 视图 · **diff 卡片**（可折叠 + 行号列 + 红/绿底）· 分支行（当前胶囊 + 删除）· 面包屑条。判据按**决策 #43**（参数用领域模型 ⇒ 留各自 Feature） | ⬜ |
+| 6.3 | 设计系统（已落地）：**设计包四件** —— `CodeSurface`（等宽 + 横向滚动 + 行距用一个 `Text` 装全部行）· `DiffRow`（**六档**：原型四档 + `.note`/`.content` 兜住"少一行"）· `BreadcrumbBar`（路径段走 `FlowLayout` **折行不截尾**、分隔符作**每段前缀**）· `BranchRow`（当前胶囊 + 删除；**不判断能不能删**，判据在 `BranchSummary.canDelete`）+ `GitHubIcon`；配套令牌：**语法四色** · `accentSubtle`（`.hunk` 与 `.sha` 同值合一）· `codeInlineSurface`（半透明）· `Radius.control`(9) / `branchChip`(7) · 五档字号（`monospacedCode` / `markdownH1` / `markdownH2` / `markdownBody` / `breadcrumb`）。**Feature 层三件**（`GitDuo/Features/Repo/Components/`，判据 **#43** —— 收领域模型 ⇒ 留 Feature）：`CodeHighlighting`（`SyntaxTokenKind` 七档 → `CodeTone` 五档的**穷尽翻译**，漏档编译不过）· `MarkdownBody`（吃 `[MarkdownBlock]`）· `DiffCard`（吃 `FileChange`，**展开才解析** patch）。⚠️ 四处「规格未给，待评审」已登记（见下方提醒） | ✅ |
 | 6.4 | 表现层（`GitDuo/Features/Repo/`）：`RepoDetailView`（头部 + 四分段；**Issues / PR 两段用 `PendingSection` 占位，决策 #50**）· `FileView` · `CommitDetailView` · `BranchesView` + `BranchSheet`(§5.7) / `AddFileSheet`(§5.8) / `MergeSheet`(**新弹层，决策 #52**)。并**把 `ExploreRepoDetailView` 那两处 `PendingSection`（⑤文件浏览 / ⑥README）换成真件** | ⬜ |
 | 6.5 | 装配与路由：`AppEnvironment` 接仓库详情 / 文件 / 提交 / 分支四条用例 + **分支记忆存储**（账号绑定，`signOut()` ③ 步补 `clear()` —— 该挂账本就写在那个方法的注释里）；`RouteView` 把 `.repoDetail` / `.fileView` / `.commitDetail` / `.branches` 换成真实视图，并同步删掉 `SkeletonPlaceholders.registry` 里"切片 6"那几条 | ⬜ |
 | 6.6 | 文档收尾 + `make verify` + 提交 | ⬜ |
@@ -45,6 +45,21 @@
 > ② **语法高亮是「逐行独立」的**（§11.3 明写"逐行着色"，这里是把它做到底）⇒
 >    跨行的块注释与多行字符串**只对首行着色**。代价是颜色不准（**内容仍然逐字正确**），
 >    换来"只对可见区域着色"成立 —— 长文件滚到中间时不必先扫完前面所有行。
+
+> ⚠️ **6.3 有四处「规格未给，待评审」**（原型 `.markdown` / `.diffcard` 只写了它演示到的那几样，
+> 这四处它**一次都没渲染过**；逐条论证在各文件的注释里）。共同原则：**能不用新数字就不用、
+> 能用既有令牌就不新造颜色** —— 原型是唯一可点验收依据，替它补一套它没写过的视觉
+> 等于把验收对象换成了我的偏好：
+> ① **`number` / `type` 两档不着色**（原型只给四色）· ② **`DiffLine.displayNumber` = 新号优先
+> `newNumber ?? oldNumber`**（原型那段 diff 上下文行两侧的号恰好相同，看不出规则）·
+> ③ **引用块加了 2pt 左侧竖条**（原型无 `blockquote` 规则，不加就与段落长得一样）·
+> ④ **h3–h6 / 分隔线 / 通知样式**（原型无规则）分别取"正文同档加粗""1pt `borderSoft`"
+> "次级色 + 既有内边距"。
+> 另有一条**从原型继承来的不一致、本片据实改正**：`.dhead` 的 `▾` 在原型的折叠前后**都不变**
+> （它只切 `.dbody` 的 `display`，而三个卡片全是 `open`，折叠态几乎没被看过）⇒
+> 这里**保留同一字形**、只让它跟状态转 90°（不换成 `chevron.down`）。
+> 以及一条**渲染层固有限制**：行内代码的底在 `AttributedString` 里是**紧贴字形的矩形**
+> （`backgroundColor` 不能圆角、不能加内边距）⇒ 底色照原型，形状是方的、没有留白。
 
 > **切片 5 施工图（2026-10-07 起）**：搜索（PRD §4.2 + §5.10）—— 四范围 · 防抖与取消 · Search 配额纪律。
 > 三个入口（首页 / 仓库 / 探索右上角）**都已存在且已接到真实页面**（`RouteView.search` 换成了 `SearchView`）。

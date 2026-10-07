@@ -386,6 +386,38 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
       暴露它的是 6.1 留下的那条"三处显示必须一致"的断言（`firstLineRuleIsShared`）—— 它本意只钉一致性，结果钉出了真缺陷。已归一（与 `FileContent.lines(of:)` / `UnifiedDiffParser` 同规矩，且归一集中在一个 `normalized(_:)` 里好让 `grep` 查得出来）+ 补 `CommitMessageTests` **10 项**（**含"根因本身"那条断言**：`"\r\n".count == 1`，防止将来有人把归一当冗余删掉）。影响面已排查：另外两处"按行拆"（`FileContent.lines(of:)` / `UnifiedDiffParser`）本来就先归一，**不受影响**。
       - ⚠️ **文档登记**：`TECH_SPEC §9.5`（contents 双形状 / `dir` 取值 / 提交信息拆分只有一份实现 + CRLF 归一）· `§9.4.1`（与回落相关的请求**都不许吞 404**；缓存失效是**粗粒度**且有意如此）· `§9.7.1`（建分支的**请求体形状 ≠ 响应形状**；写操作不重试）· `§4.6.2` 与 `§9.7.1`（merges 的 **204 不是失败**）；另修掉 `§0.2` 一处**陈旧计数**（"48 项"→ **55 项**）。
       - ▶ **下一步**：**6.3 设计系统**（代码块 / 块级 Markdown / diff 卡片 / 分支行 / 面包屑条）。
+    - ✅ **6.3 设计系统已交付**（2026-10-07）。本片是**唯一一片横跨三个包**的（令牌与组件在 `GitDuoDesign`、翻译与视图在 Feature、两处文案在 `GitDuoKit`），
+      测试 **+23 项**（GitDuoDesign 45 → **60** / GitDuoKit 489 → **497**）：
+      - **设计包（四件 + 一个图标常量）** —— `CodeSurface`（等宽 + **横向滚动不折行**；**一个 `Text` 装全部行**而不是一行一个 `Text`，否则行距要靠 `VStack(spacing:)` 凑）·
+        `DiffRow`（**六档**：原型四档 + `.note`（`\ No newline`）与 `.content`（未知行）—— 这两档原型没有但**必须有地方落**，丢掉会让用户看到的 diff **少几行且没有任何迹象**）·
+        `BreadcrumbBar`（路径段走既有 `FlowLayout` **折行不截尾**；分隔符 ` / ` 作**每段的前缀**，否则折行时行尾会留一根孤零零的斜杠）·
+        `BranchRow`（**不判断能不能删** —— 判据在 `BranchSummary.canDelete`；**不写死任何文案** —— 从 `BranchCopy` 传）+ `GitHubIcon.branch`。
+      - **配套令牌** —— 语法四色（`.kw/.fn/.st/.cm`）· `accentSubtle`（`.hunk` 底与 `.sha` 徽标底**同值合一**，沿 `stateMerged` 先例）· `codeInlineSurface`（**半透明是刻意的**，要能透出卡片白）·
+        `Radius.control`(9，`.btn`/`.crumb`/`.markdown pre` 三处同值合一) / `Radius.branchChip`(7，与 `chip`(6) 只差 1pt 但**不合并**) · 五档字号（`monospacedCode` / `markdownH1` / `markdownH2` / `markdownBody` / `breadcrumb`）。
+      - **Feature 层三件**（`GitDuo/Features/Repo/Components/`）—— 判据 **#43**「参数用领域模型 ⇒ 留各自 Feature」：`MarkdownBody`（吃 `[MarkdownBlock]`）与 `DiffCard`（吃 `FileChange`）都收领域模型 ⇒ 留 Feature；
+        配套 `CodeHighlighting` 做 `SyntaxTokenKind`(七档) → `CodeTone`(五档) 的**显式翻译**。
+        ⚠️ **两侧互不认识**（`GitDuoDesign` 不得 import 领域层、`GitDuoKit` 不得 import SwiftUI）⇒ 这次翻译**只能**落在 App 层；而 App target 没有测试 target，
+        故两处翻译（`CodeHighlighting.tone` 与 `DiffCard.tone`）的 `switch` **一律去掉 `default` 写成穷尽** —— 领域层将来加一档时**编译不过**，那是唯一可用的守卫。
+      - ⚠️ **`DiffCard` 兑现了 §11.2 的「按需解析」**：`patch` 存在 `@State` 里、**只在展开那一刻解析一次**（默认展开的那一种由 `onAppear` 补一次），
+        `body` 里**不做任何解析** —— 否则一个数百文件的 PR 会在每次重绘时把那几百段文本重扫一遍（§11.2 明写"折叠状态的文件不要调它"）。
+      - ⚠️ **四处「规格未给，待评审」**（原型这四处**一次都没渲染过**，逐条论证在各文件注释里）：
+        ① `number` / `type` 两档**不着色**（原型只给四色；从四色里挑一个塞给它们是自造视觉）·
+        ② `DiffLine.displayNumber` = **新号优先**（`newNumber ?? oldNumber`；原型那段 diff 上下文行两侧的号**恰好相同**，看不出规则；取旧号会让行号在每个新增块后跳一下）·
+        ③ **引用块加了 2pt 左侧竖条**（原型无 `blockquote` 规则 —— 不加就与普通段落看起来一样，而 §11.1 把引用列为支持范围）·
+        ④ **h3–h6 / 分隔线 / 卡片里的说明**分别取"正文同档加粗""1pt `borderSoft`""次级色 + 既有内边距"。
+        ⚠️ 共同原则：**能不用新数字就不用、能用既有令牌就不新造颜色** —— 原型是唯一可点验收依据，替它补一套它没写过的视觉等于把验收对象换成我的偏好。
+      - ⚠️ **一处「从原型继承来的不一致」本片据实改正**：`.dhead` 的 `▾` 在原型里折叠前后**都不变**（它只切 `.dbody` 的 `display`，
+        而三个卡片全是 `open`、折叠态几乎没被看过）⇒ 这里**保留同一字形**、只让它跟状态转 90°（不换成 `chevron.down` —— 字形本身是原型明写的细节）。
+      - ⚠️ **一处渲染层固有限制**（不是偷懒）：行内代码的底在 `AttributedString` 里画出来是**紧贴字形的矩形**，
+        `backgroundColor` **不能圆角、不能加内边距**（原型是 `border-radius:5px; padding:1.5px 5px`）⇒ 底色照原型，形状是方的、没有留白。
+        待**目视确认**一条：`Text` 会不会渲染 run 的背景色（若不渲染，行内代码只剩等宽字形）。
+      - ✅ **顺带补两处领域层文案**：`CommitCopy.noHunksNotice`（拿到 `patch` 却一个 hunk 都没有 —— 纯改模式 / 纯重命名；
+        展开后一片空白**看起来像加载失败**，且**不能**复用 `oversizedDiffNotice`，那会让用户跑去网页端找一个本就不存在的 diff）
+        · `MarkdownCopy.checkboxLabel(checked:)`（任务列表勾选框的读屏标签 —— 抹掉它等于把"这是个可勾选的任务项"静默丢弃）。
+        两者都配了"必须分开 / 必须随状态变"的断言（`CommitCopyTests`）—— 复用文案这种事 `grep` 查不出来。
+      - ▶ **下一步**：**6.4 表现层**（`RepoDetailView` / `FileView` / `CommitDetailView` / `BranchesView` + 三个弹层），
+        并把 `ExploreRepoDetailView` 那两处 `PendingSection` 换成真件。
+        ⚠️ **建议 6.4 之前先跑一次目视**：完成定义第 3 条至今**零次**，待对照页面已 **9 个**（切片 4 四页 + 搜索 + 本片四页）。
 
-**验证闭环已就绪**：`make verify` = **五包单测（当前 978 项全过）** + 模拟器构建，一条命令，**零编译警告**。
-（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 45 · **GitDuoKit 489**）
+**验证闭环已就绪**：`make verify` = **五包单测（当前 1001 项全过）** + 模拟器构建，一条命令，**零编译警告**。
+（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 497**）

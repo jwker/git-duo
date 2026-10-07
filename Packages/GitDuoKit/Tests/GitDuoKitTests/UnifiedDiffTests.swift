@@ -240,4 +240,75 @@ struct UnifiedDiffTests {
         #expect(lines[1].text.isEmpty)
         #expect(lines[1].oldNumber == 2)
     }
+
+    // MARK: - 单列行号该显示哪一个（`DiffLine.displayNumber`，切片 6.3 新增）
+
+    @Test("⚠️ 上下文行**取新号** —— 取旧号会让行号在每个新增块之后跳一下")
+    func displayNumberPrefersNew() {
+        // 原型的 `.dline .ln` 只画一列，而两侧的号可能不同（这里刻意造出不等的两端）。
+        let patch = """
+        @@ -7,1 +9,2 @@
+         unchanged
+        +added
+        """
+
+        let lines = UnifiedDiffParser.hunks(from: patch)[0].lines
+        #expect(lines[0].oldNumber == 7)
+        #expect(lines[0].newNumber == 9)
+        #expect(lines[0].displayNumber == 9)
+    }
+
+    @Test("新增行只有新号、删除行只有旧号 ⇒ 两端各自成立（两处都不做回落，靠 `??` 一侧即可）")
+    func displayNumberFallsBackToTheOnlySide() {
+        let patch = """
+        @@ -3,1 +3,1 @@
+        -removed
+        +added
+        """
+
+        let lines = UnifiedDiffParser.hunks(from: patch)[0].lines
+        #expect(lines[0].kind == .deletion)
+        #expect(lines[0].newNumber == nil)
+        #expect(lines[0].displayNumber == 3)
+
+        #expect(lines[1].kind == .addition)
+        #expect(lines[1].oldNumber == nil)
+        #expect(lines[1].displayNumber == 3)
+    }
+
+    @Test("⚠️ `\\ No newline at end of file` **不画行号**（它不是文件里的一行）")
+    func displayNumberIsNilForNoNewline() {
+        let patch = """
+        @@ -1,1 +1,1 @@
+        -old
+        \\ No newline at end of file
+        +new
+        \\ No newline at end of file
+        """
+
+        let lines = UnifiedDiffParser.hunks(from: patch)[0].lines
+        let notes = lines.filter { $0.kind == .noNewline }
+        #expect(notes.count == 2)
+        for note in notes {
+            #expect(note.oldNumber == nil)
+            #expect(note.newNumber == nil)
+            // 两个号都是 `nil` ⇒ 单列行号也是 `nil` ⇒ 视图不画行号列。
+            #expect(note.displayNumber == nil)
+        }
+    }
+
+    @Test("⚠️ `displayNumber` 的判据是**新号优先**，不是 `oldNumber ?? newNumber`")
+    func displayNumberIsNotOldFirst() {
+        // 这条守的是"改错了不会报错、只会让行号整体偏一段"的那种错误。
+        // 造一个两侧都存在的上下文行，两侧的号**故意不相等**：
+        // 新号优先 ⇒ 10；旧号优先 ⇒ 8。只有前者才是原型那段 diff 的口径。
+        let patch = """
+        @@ -8,1 +10,1 @@
+         context
+        """
+
+        let line = UnifiedDiffParser.hunks(from: patch)[0].lines[0]
+        #expect(line.displayNumber == 10)
+        #expect(line.displayNumber != line.oldNumber)
+    }
 }

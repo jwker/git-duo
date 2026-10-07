@@ -29,6 +29,21 @@ public enum CommitCopy {
     /// 被说成"二进制文件"，而用户明明能在网页端看到它的 diff。
     public static let oversizedDiffNotice = "diff 较大，请在 GitHub 网页端查看"
 
+    /// 拿到了 `patch`、但里面一个 hunk 都没有。
+    ///
+    /// ⚠️ **规格未给，待评审**（自拟）。它不是"理论上不会发生"：
+    /// 纯改文件模式（`old mode 100644 / new mode 100755`）、纯重命名
+    /// 这类改动在 `files[]` 里有 `additions: 0, deletions: 0`，
+    /// 而 `patch` 里**没有任何 `@@` 行** ⇒ 解析出 0 个 hunk。
+    ///
+    /// 为什么必须说一句：展开之后卡片里一片空白，看起来像**加载失败**；
+    /// 而它其实是一次成功、且内容本就如此的加载（"少一行而没有任何迹象"的反面 ——
+    /// 这里是"看起来什么都没有、其实什么都没有"）。
+    ///
+    /// ⚠️ 不能复用 `oversizedDiffNotice`：那句话会让用户跑去网页端找一个
+    /// 本来就不存在的 diff。
+    public static let noHunksNotice = "这个文件没有可显示的改动"
+
     /// 折叠状态下 diff 卡片的读屏提示（§11.2：可折叠）。
     public static func diffToggleAccessibilityLabel(file: String, isExpanded: Bool) -> String {
         isExpanded ? "收起 \(file) 的改动" : "展开 \(file) 的改动"

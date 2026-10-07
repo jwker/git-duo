@@ -24,6 +24,33 @@ public struct DiffLine: Sendable, Hashable {
         self.newNumber = newNumber
     }
 
+    /// **单列行号**该显示哪一个号 —— diff 卡片只有一列行号时的唯一判据。
+    ///
+    /// ## 为什么要问"哪一个"
+    ///
+    /// 本类型同时带 `oldNumber` 与 `newNumber`（unified diff 的两侧），
+    /// 而原型 `styles/04-screens.css` 的 `.dline` **只画一列**
+    /// （`.dline .ln{width:34px}`，没有第二列）。于是必须选一个显示。
+    ///
+    /// ## ⚠️ 判据：新号优先，没有新号才用旧号（`newNumber ?? oldNumber`）
+    ///
+    /// - 新增行：只有新号 ⇒ 显示新号；
+    /// - 删除行：只有旧号 ⇒ 显示旧号；
+    /// - 上下文行：两侧都有 ⇒ **显示新号**。理由是"读代码时人对齐的是现在这个文件"，
+    ///   而上下文行夹在增删行之间，取新号能让上下相邻的行号连成一段
+    ///   （取旧号会在每个新增块之后跳一下）。
+    ///
+    /// ## ⚠️ 这是「规格未给，待评审」的一条
+    ///
+    /// 原型那段 diff 里上下文行两侧的号**恰好相同**（`@@ -40,7 +40,9 @@` 之后是 `40/40`），
+    /// 看不出规则；PRD §4.7 只写"行号列不可选中"。这里的取法是**自拟**的，
+    /// 已登记待评审。**不要**改成 `oldNumber ?? newNumber` 了事 ——
+    /// 那会让"当前文件"的行号整体偏一段，而偏了不会报错，只会让用户对不上 GitHub 网页端。
+    ///
+    /// ⚠️ 顺带一条：`\ No newline at end of file`（`.noNewline`）**两个号都是 `nil`**，
+    /// 因为它不是文件里的一行（§11.2 明写"不消耗行号"）⇒ 返回 `nil`、不画行号列。
+    public var displayNumber: Int? { newNumber ?? oldNumber }
+
     public enum Kind: Sendable, Hashable {
 
         /// 上下文行（未改动）。

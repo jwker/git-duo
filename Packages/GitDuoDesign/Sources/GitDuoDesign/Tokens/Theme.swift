@@ -62,7 +62,7 @@ public enum Theme {
         public static let diffDeletedSurface = Color(hex: 0xFFEBE9)
         public static let diffDeletedText    = Color(hex: 0xCF222E)
 
-        /// **代码面**底色 —— 搜索结果「代码」范围的等宽预览行（原型
+        /// 代码面底色 —— 搜索结果「代码」范围的等宽预览行（原型
         /// `styles/01-base.css` 的 `--code-bg:#f6f8fa`，用于 `.sr-code`）。
         ///
         /// ⚠️ 它的值与 `background`（`#F6F8FA`）**今天完全相同**，但**不是同一个令牌**：
@@ -71,6 +71,47 @@ public enum Theme {
         /// （代码面通常要比页面底再深一档才分得出来），届时合并会逼着一起改。
         /// 沿 `repoAvatarSurface` 那条"接近但不是同一个值 ⇒ 两处独立取色"的先例。
         public static let codeSurface    = Color(hex: 0xF6F8FA)
+
+        // MARK: 切片 6 新增 —— 语法高亮四色 + 两处浅底（出处见 TECH_SPEC §10.7）
+
+        /// **语法着色**的四档前景色 —— 原型 `styles/04-screens.css` 第 27 行的
+        /// `.kw{color:#cf222e}.fn{color:#8250df}.st{color:#0a3069}.cm{color:#6e7781}`
+        /// （`.markdown pre code` 里那四个类）。
+        ///
+        /// ⚠️ **只有四档**，而领域层的 `SyntaxTokenKind` 有七档
+        /// （`plain` / `keyword` / `string` / `comment` / `number` / `function` / `type`）。
+        /// 原型只演示了一段含关键字·函数名·字符串·注释的 Swift 代码，
+        /// **没有给数字与类型名任何颜色** ⇒ 那两档**不着色**（落到 `textPrimary`），
+        /// 已登记为「规格未给，待评审」。**不要**为了"看起来更丰富"从这四色里挑一个塞给它们 ——
+        /// 那是自造视觉，而原型是唯一可点验收依据。
+        ///
+        /// ⚠️ 四色**互不相同、且都不等于 `textPrimary`**：
+        /// 取错一个（例如把 `syntaxString` 写成 `syntaxComment` 的灰）不会报错，
+        /// 只会让代码看起来"颜色怪怪的"。`Slice6ComponentTests` 把这两条都钉住了。
+        public static let syntaxKeyword  = Color(hex: 0xCF222E)
+        public static let syntaxFunction = Color(hex: 0x8250DF)
+        public static let syntaxString   = Color(hex: 0x0A3069)
+        public static let syntaxComment  = Color(hex: 0x6E7781)
+
+        /// **强调色的浅底** —— 原型 `styles/04-screens.css` 的
+        /// `.hunk{background:#ddf4ff}` **与** `.sha{background:#ddf4ff}`。
+        ///
+        /// ⚠️ 两处**同值**，故合成一档、不立同值异名（沿 `stateMerged` 同时管
+        /// `.pill.merged` 与 `.pill.closed-i` 的先例）。它管的两件事其实是同一件：
+        /// "**把一段信息标成参考性 / 元信息**"—— diff 的 hunk 头与提交的短 SHA 都是这类。
+        /// 文字色一律配 `accent`（原型的 `.hunk{color:#0969da}` 与 `.sha{color:var(--link)}` 同值）。
+        ///
+        /// ⚠️ 它与 `accentSurface`（`#F0F6FF`，筛选 chip 选中态）**不是**同一个值：
+        /// 这个偏青一档、那个偏灰一档。混用会让 hunk 头与"已选 chip"看起来像同一族控件。
+        public static let accentSubtle   = Color(hex: 0xDDF4FF)
+
+        /// **行内代码**的底 —— 原型 `styles/04-screens.css` 的
+        /// `.markdown code{background:rgba(175,184,193,.35)}`。
+        ///
+        /// ⚠️ 它是**半透明**的：行内代码嵌在正文段落里，底必须能透出下面的卡片白
+        /// （照 `toastSurface` 那条"带透明度是刻意的"先例）。换成不透明色会让这一小段
+        /// 看起来像贴上去的贴纸。
+        public static let codeInlineSurface = Color(hex: 0xAFB8C1).opacity(0.35)
 
         // MARK: 状态**图标**的配色（与上面那组"状态胶囊"的配色**不是**同一套值）
 
@@ -173,6 +214,21 @@ public enum Theme {
         public static let segment: CGFloat = 8
         public static let card: CGFloat  = 10
         public static let sheet: CGFloat = 14
+        /// **按钮 · 面包屑条 · 代码面**那一档（切片 6 新增）。
+        ///
+        /// 原型 `styles/03-components.css` 的 `.btn{border-radius:9px}`、
+        /// `styles/04-screens.css` 的 `.crumb{border-radius:9px}` 与
+        /// `.markdown pre{border-radius:9px}` —— **三处同为 9**。
+        /// 三件东西都是"嵌在卡片里的矩形小块"，原型给了同一个值，
+        /// 所以合成一档、不立同值异名（沿 `Radius.segment`(8) 的先例）。
+        public static let control: CGFloat = 9
+        /// **面包屑里的分支胶囊**（原型 `styles/05-overlays.css` 的 `.branch-chip{border-radius:7px}`）。
+        ///
+        /// ⚠️ 与 `chip`(6) 只差 1pt，但**不能合并**：原型里是两处独立取值
+        /// （`.sr-code` / `.ftag` 是 6，`.branch-chip` 是 7），而这一颗是**可点的控件**
+        /// （点开切换分支弹层）—— 圆角比纯展示的小标签大一档是有道理的。
+        /// 沿 `Radius.hero`(16) / `Radius.field`(11) 的先例：原型里确实存在的一档就必须有名字。
+        public static let branchChip: CGFloat = 7
         /// **输入框 / 图标按钮**那一档（切片 5 新增）。
         ///
         /// 原型 `styles/03-components.css` 里 `.searchfield{border-radius:11px}` 与
@@ -239,6 +295,44 @@ public enum Theme {
         /// 用 13pt 会与标题撞在一起，"这是代码片段"这件事就看不出来了。
         /// 11.5px 落到 `.caption2`（11pt）—— 与 `t3`（原型同为 11.5px）走的是同一档。
         public static let monospacedPreview = SwiftUI.Font.system(.caption2, design: .monospaced)
+
+        // MARK: 切片 6 新增 —— 代码块 / Markdown 三档（出处见 TECH_SPEC §10.7）
+
+        /// **代码块**的字号（原型 `styles/04-screens.css` 的
+        /// `.markdown pre code{font-size:12px}`）。
+        ///
+        /// ⚠️ 与 `monospaced`（`.footnote`，13pt）与 `monospacedPreview`（`.caption2`，11pt）
+        /// 都不同值：12px 正好落在中间那一档 `.caption`。代码块是**要读懂的内容**
+        /// （不像预览行那样只是"瞄一眼"），所以比预览行大一档；
+        /// 但它嵌在 README 正文里，又不能与相邻的正文（15pt）抢主次。
+        public static let monospacedCode = SwiftUI.Font.system(.caption, design: .monospaced)
+
+        /// Markdown **一级标题**（原型 `.markdown h1{font-size:22px;font-weight:750}`）
+        /// ⇒ `.title2`(22pt) + bold。
+        public static let markdownH1 = SwiftUI.Font.title2.weight(.bold)
+
+        /// Markdown **二级标题**（原型 `.markdown h2{font-size:17px;font-weight:700}`）
+        /// ⇒ `.body`(17pt) + bold。
+        ///
+        /// ⚠️ 与 `bodyStrong`（`.body.weight(.semibold)`）**只差一档字重**，但不能合并：
+        /// 原型里 h2 是 700（bold），而 `bodyStrong` 是别处的 semibold。
+        /// 沿 `label`(12 semibold) 与 `sectionLabel`(12 bold) 那条"同值不同字重不合并"的先例。
+        public static let markdownH2 = SwiftUI.Font.body.weight(.bold)
+
+        /// Markdown **正文**（原型 `.markdown{font-size:14px}`）⇒ `.subheadline`(15pt)。
+        ///
+        /// ⚠️ 与 `rowTitle` **同落在 `.subheadline`**，但不合并：原型里
+        /// `.markdown{font-size:14px}` 与 `.file-row .fname{font-size:14.5px}` 是两处独立取值
+        /// （沿 `codeSurface` 与 `background` 那条"同值不是同一个令牌"的判据）。
+        /// 而名字也要说真话：`rowTitle` 是"行标题"，这里是"正文"，将来补深色 / 调字号时须能分别动。
+        public static let markdownBody = SwiftUI.Font.subheadline
+
+        /// **面包屑条**的文字（原型 `.crumb{font-size:12.5px}`）⇒ 系统 `.caption`(12pt)。
+        ///
+        /// ⚠️ 注意本文件里 `caption` 这个**令牌名**指的是 `.caption2`(11pt，原型 `t3` 那一档)，
+        /// 所以这里不能复用 `Font.caption` —— 12.5px 落到的是系统 `.caption`(12pt)。
+        /// 当前层那一段用 `.fontWeight(.semibold)` 叠在这上面（原型 `.crumb b{font-weight:600}`）。
+        public static let breadcrumb = SwiftUI.Font.caption
     }
 }
 
