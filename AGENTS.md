@@ -5,7 +5,7 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.5 已落地，只剩 6.6 文档收尾与提交。**
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地。**
 `make verify` = **五包单测 1024 项 + 模拟器构建**，一条命令，**零编译警告**。
 （**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 520**）
 
@@ -37,7 +37,7 @@
 | 6.3 | 设计系统（已落地）：**设计包四件** —— `CodeSurface`（等宽 + 横向滚动 + 行距用一个 `Text` 装全部行）· `DiffRow`（**六档**：原型四档 + `.note`/`.content` 兜住"少一行"）· `BreadcrumbBar`（路径段走 `FlowLayout` **折行不截尾**、分隔符作**每段前缀**）· `BranchRow`（当前胶囊 + 删除；**不判断能不能删**，判据在 `BranchSummary.canDelete`）+ `GitHubIcon`；配套令牌：**语法四色** · `accentSubtle`（`.hunk` 与 `.sha` 同值合一）· `codeInlineSurface`（半透明）· `Radius.control`(9) / `branchChip`(7) · 五档字号（`monospacedCode` / `markdownH1` / `markdownH2` / `markdownBody` / `breadcrumb`）。**Feature 层三件**（`GitDuo/Features/Repo/Components/`，判据 **#43** —— 收领域模型 ⇒ 留 Feature）：`CodeHighlighting`（`SyntaxTokenKind` 七档 → `CodeTone` 五档的**穷尽翻译**，漏档编译不过）· `MarkdownBody`（吃 `[MarkdownBlock]`）· `DiffCard`（吃 `FileChange`，**展开才解析** patch）。⚠️ 四处「规格未给，待评审」已登记（见下方提醒） | ✅ |
 | 6.4 | 表现层（`GitDuo/Features/Repo/`，已落地）：**四页** —— `Views/RepoDetailView`（头部 + 四分段；Issues / PR 两段用 `PendingSection` 占位，**决策 #50**）· `Views/FileView`（PRD §4.5）· `Views/CommitDetailView`（§4.7）· `Views/BranchesView`（§4.8）+ **五个弹层**（`Views/Sheets/`：`BranchSheet` §5.7 · `CreateBranchSheet` · `DeleteBranchSheet` · `MergeSheet` **新弹层，决策 #52** · `AddFileSheet` §5.8）。并**把 `ExploreRepoDetailView` 那两处 `PendingSection`（⑤文件浏览 / ⑥README）换成真件**。⚠️ **四处结构性外置**（不是顺手重构，是 6.4d 绕不开的前置）：`ViewModels/RepoTreeSession`（目录浏览会话：两段式分支解析 / 记忆失效回落 / 副标题补填 / 分支列表 304）· `Components/RepoTreeSection`（§4.4 与 §4.13 共用的"面包屑 + 文件行 + README"）· `GitDuoKit/Repo/RepoWebLinks`（三处"跳网页端"出口）· `GitDuoDesign/Components/SHABadge` —— 判据都是"**同一个 UI 元素有两处定义 ⇒ 必然分叉**"。⚠️ **决策 #51 不可点的按钮**：`编辑` / `历史` / `更多` / `Fork 后可编辑` / 「＋ 添加」一律 `allowsHitTesting(false)` + 去掉 `.isButton` trait + 一句各不相同读屏 hint（**不是** `.disabled`，后者变灰像"暂时不可用"）；**`Raw` 当真做**（复制原文、零请求）。⚠️ **6.4e 修掉两条真缺陷**：① `LoadFileContent` 在 `size` 未知时按名字判 ⇒ 20MB 的 PNG 会被整张拉进内存（现改为**拿到真实字节数后重判一次**，落在第二个请求之前）② **0 字节的文件被判成 `.undecodable`** ⇒ 显示"这个 App 不认识它的编码"（假话）且用户看不到它（`decodeBase64("")` 返回 `nil` 是对的，错的是它后面那一步）。见下方提醒 | ✅ |
 | 6.5 | 装配与路由（已落地）：`RouteView` 把 `.repoDetail` / `.fileView` / `.commitDetail` / `.branches` 四条从 `SkeletonScreen` 换成真实视图（依赖逐条从组合根传，页面自己只从 `@Environment` 拿 `router` / `toast` 这类 UI 通道）；`SkeletonPlaceholders.registry` 删掉"切片 6"那几条、并把它们的消解记进"已消解"清单。⚠️ **`AppEnvironment` 的八条用例与 `branchMemory` 装配在 6.4 那次提交里就顺手做完了**（含 `signOut()` ③ 步的 `await branchMemory.clear()`）—— 施工图原写在本片，实际提前兑现，故本片**只剩路由接线**。⚠️ 顺带修掉三处**陈旧说明**：`.repoDetail` 此前把 `path` 参数写成 `_`（接真件时**必须接上**，丢了它表现为"每次点面包屑都回到仓库根"而源码里看不出异常）· `PendingSection` 的类型注释仍写着"§4.13 有 3 个分区占位"（6.4d 后只剩 1 个）· 它的 `#Preview` 还在演示一个**已经不存在**的占位块（"文件浏览 · 切片 6 落地"）| ✅ |
-| 6.6 | 文档收尾 + `make verify` + 提交 | ⬜ |
+| 6.6 | 文档收尾 + `make verify` + 提交（已落地）：`TECH_SPEC §3.6` 的登出 ③「已接入清单」补入**按仓库的分支记忆**（6.4 就已落，文档却一直挂在「尚未接入：…按仓库的分支记忆（切片 6）」那一行 —— **代码做完了、文档还欠着，是这一片唯一真正过期的一处**）；`AGENTS.md §0` 本行与总述；`REVIEW-CHECKLIST §6` 追加本段并把「下一步」指向切片 7。`make verify` 全绿（五包 **1024** 项 + 模拟器构建，0 error / 0 warning）。⚠️ **本片零代码改动** —— "文档收尾"的价值全在"把已经做完的事从待办里划掉"，划漏了下一片会照着过期描述重做一遍 | ✅ |
 
 > ⚠️ **切片 6 有两条口径是「外部事实把文档里的旧写法推翻」后据实改正的**（与决策 #47 同性质，见 §1.1 决策 #53 后的提醒）：
 > ① 目录清单 `GET /contents/{path}` **不带任何提交信息** ⇒ PRD §3.2 的「最近提交信息」必须**逐文件补请求**（决策 #49）；
@@ -115,6 +115,16 @@
 > ③ **`PendingSection` 的类型注释与 `#Preview` 都过期了**（还写着"§4.13 有 3 个分区占位"、
 >    还在演示"文件浏览 · 切片 6 落地"这个**已经不存在**的占位块）。**占位块是"会变短"的名单** ——
 >    删掉一处占位就同步删掉它的说明与示例，否则读者会以为那页还没做完。
+
+> ⚠️ **6.6 的教训只有一条，但它每片都会重演**：**"代码做完了、文档还欠着"是同一个缺陷的两种状态**。
+> 本片唯一真正过期的一处是 `TECH_SPEC §3.6` 的登出 ③ 清单 —— 它把「按仓库的分支记忆」列在
+> **「尚未接入」**，而 `AppEnvironment.signOut()` 里 `await branchMemory.clear()` **6.4 就在了**。
+> 两处单看都"没错"（代码是对的、文档是照当时的实情写的），合起来却在骗人：
+> **照它动手会把已经接好的线再接一遍**（重复装配不报错，只会让两条装配悄悄分叉 —— 6.5 已踩过同一形状）。
+> ⇒ **每片的收尾都要把所有写着"尚未 / 待 / 未落地 + 本片编号"的句子逐个核一遍**，而不是只改自己那一行。
+
+> **切片 6 交付（2026-10-07）**：6.0 文档先行（决策 #49–#55）· 6.1 领域层 · 6.2 数据层（14 条路由）· 6.3 设计系统 · 6.4 表现层（四页 + 五弹层 + 探索页两处换真件）· 6.5 装配与路由 · 6.6 收尾。
+> **主线在此接通**：`我的仓库列表 → 看代码`，此前点自己有权改的仓库进的是占位屏。⚠️ 唯一未还的账仍是完成定义第 3 条（逐屏对照，**零次**）。
 
 > **切片 5 施工图（2026-10-07 起）**：搜索（PRD §4.2 + §5.10）—— 四范围 · 防抖与取消 · Search 配额纪律。
 > 三个入口（首页 / 仓库 / 探索右上角）**都已存在且已接到真实页面**（`RouteView.search` 换成了 `SearchView`）。

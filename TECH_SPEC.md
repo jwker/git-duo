@@ -357,10 +357,14 @@ GitHub App 的用户访问令牌（`ghu_`）的可见范围是**三重交集**�
   理由：它不属于任何 Feature，却是**唯一可能把凭据留在磁盘上的东西**。真机实测（2026-10-06）：换令牌响应一度被写进
   `Library/Caches/<bundle-id>/Cache.db`；而**改掉写入路径只能阻止将来再写，已落盘的副本只有显式清理才会消失**。
   其余各项随各 Feature 落地时接入 App 层的 ③（那是一处**接线**，不是一处设计）。
-  - 已接入的进度（截至 2026-10-07）：**最近访问**（切片 4）· **Star 基线快照**（切片 4）· **搜索历史 + 搜索缓存**（切片 5.5）。
+  - 已接入的进度（截至 2026-10-07）：**最近访问**（切片 4）· **Star 基线快照**（切片 4）· **搜索历史 + 搜索缓存**（切片 5.5）·
+    **按仓库的分支记忆**（切片 6.4）。
     ⚠️ 搜索那两条要分开记：`searchHistory.clear()` 清的是历史；**`search.invalidateAll()` 清的是 `LoadSearch` 的结果缓存** ——
     后者装的是**上一个账号搜出来的结果**（含私有仓库名），漏了它就会在新账号的界面上露出来。
-  - 尚未接入：收藏夹与归属映射（切片 9）· 按仓库的分支记忆（切片 6）。
+    ⚠️ **分支记忆**（`branchMemory.clear()`）漏了的后果与上一条同源：**分支名本身就是内容** ——
+    `feature/客户XX-报价单改版` 这种名字会直接暴露私有仓库的结构，换个人登录还留着就是别人的东西。
+    （决策 #55 已定它是**持久化**的，所以"不跨启动存活"这条退路不成立、只能靠登出清。）
+  - 尚未接入：收藏夹与归属映射（切片 9）。
 - **撤销端点**（决策 #30 解锁的能力）：`DELETE /applications/{client_id}/grant`
   —— **Basic Auth 用 `client_id` : `client_secret`**，body 传 `access_token`，成功返回 **204**。官方明确该组端点**同时适用于 OAuth App（`gho_`）与 GitHub App 用户令牌（`ghu_`）**：
   > Tokens for OAuth apps have the prefix `gho_`, while OAuth tokens for GitHub Apps… have the prefix `ghu_`. **You can use the following endpoints for both types of OAuth tokens.**
