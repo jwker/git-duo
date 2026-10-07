@@ -38,11 +38,39 @@ public enum Theme {
         public static let stateReleased   = Color(hex: 0x8250DF)   // 已发布 = 紫（与 merged 同色，见上）
         public static let stateClosed     = Color(hex: 0xCF222E)   // 已关闭 / 未合并 = 红
 
+        // MARK: 状态**胶囊**的底与边（切片 5 新增）
+
+        /// 上面那三个 `state*` 是胶囊的**前景**色，这一组是配套的**底 / 边**。
+        ///
+        /// 出处：原型 `styles/03-components.css` 的 `.pill.open` / `.pill.merged` /
+        /// `.pill.closed-p` —— 那里的底与边都是**内联色值**（`#f0fff4` / `#a4d8b0` …），
+        /// 不是变量，所以此前没有名字；不给名字就只能在各处写内联色值，而那正是"魔法值"。
+        ///
+        /// ⚠️ **只有三族**：原型里 `.pill.closed-i`（已关闭的 Issue）与 `.pill.merged`
+        /// 的底与边**完全相同**（紫族），故不另立一组同值异名的 token
+        /// （沿 `stateCompletedIcon` 那条"按族命名、不按单个状态命名"的先例）。
+        public static let stateOpenSurface   = Color(hex: 0xF0FFF4)   // `.pill.open` 底
+        public static let stateOpenBorder    = Color(hex: 0xA4D8B0)   // `.pill.open` 边
+        public static let stateMergedSurface = Color(hex: 0xFAF5FF)   // `.pill.merged` / `.pill.closed-i` 底
+        public static let stateMergedBorder  = Color(hex: 0xD1BCF5)   // 同上，边
+        public static let stateClosedSurface = Color(hex: 0xFFF1F2)   // `.pill.closed-p` 底
+        public static let stateClosedBorder  = Color(hex: 0xF1B8BF)   // `.pill.closed-p` 边
+
         /// diff 行底色 / 文字色
         public static let diffAddedSurface   = Color(hex: 0xDAFBE1)
         public static let diffAddedText      = Color(hex: 0x116329)
         public static let diffDeletedSurface = Color(hex: 0xFFEBE9)
         public static let diffDeletedText    = Color(hex: 0xCF222E)
+
+        /// **代码面**底色 —— 搜索结果「代码」范围的等宽预览行（原型
+        /// `styles/01-base.css` 的 `--code-bg:#f6f8fa`，用于 `.sr-code`）。
+        ///
+        /// ⚠️ 它的值与 `background`（`#F6F8FA`）**今天完全相同**，但**不是同一个令牌**：
+        /// 原型里本来就是两个独立变量（`--bg` 与 `--code-bg`），用途也不同 ——
+        /// 一个是页面底，一个是"嵌在白色卡片里的一小块代码面"。将来补深色时两者未必同步变化
+        /// （代码面通常要比页面底再深一档才分得出来），届时合并会逼着一起改。
+        /// 沿 `repoAvatarSurface` 那条"接近但不是同一个值 ⇒ 两处独立取色"的先例。
+        public static let codeSurface    = Color(hex: 0xF6F8FA)
 
         // MARK: 状态**图标**的配色（与上面那组"状态胶囊"的配色**不是**同一套值）
 
@@ -175,6 +203,13 @@ public enum Theme {
         /// （12pt 灰字 + 字距），字重掉一档就会显得"和旁边的按钮一样重"。
         /// 所以 `.section-label` 从 `label` 的消费方名单里移到了这里。
         public static let sectionLabel = SwiftUI.Font.caption.weight(.bold)
+        /// **标签胶囊**（原型 `.pill{font-size:11px;font-weight:600}`，切片 5 新增）。
+        ///
+        /// ⚠️ 它与 `caption`（`.caption2`，11pt **regular**）**只差一个字重**，但不能合并：
+        /// 胶囊是"一颗带边框的小标签"，字重掉到 regular 会让它比同一行的正文还轻，
+        /// 看起来像"这行没写完"。也不能用 `label`（12pt semibold）—— 那比胶囊大一档，
+        /// 会让胶囊在结果行里抢走标题的主次。
+        public static let tag = SwiftUI.Font.caption2.weight(.semibold)
         /// 行标题（原型 14.5px 那一档：`.file-row .fname` / `.sheet-row`）。
         ///
         /// 14.5px 落在系统 `.subheadline`(15) 与 `.callout`(16) 之间，取前者。
@@ -189,6 +224,13 @@ public enum Theme {
         public static let largeTitle  = SwiftUI.Font.largeTitle.weight(.bold)
         /// 代码 / diff / 提交哈希
         public static let monospaced  = SwiftUI.Font.system(.footnote, design: .monospaced)
+        /// **代码预览行**（搜索结果里那一行小字，原型 `.sr-code{font-size:11.5px}`，切片 5 新增）。
+        ///
+        /// ⚠️ 它比 `monospaced`（`.footnote`，13pt）**小一号**，不能合并：
+        /// 预览行嵌在结果行内部，与同行的标题（14.5pt 那一档）之间必须有可辨的主次；
+        /// 用 13pt 会与标题撞在一起，"这是代码片段"这件事就看不出来了。
+        /// 11.5px 落到 `.caption2`（11pt）—— 与 `t3`（原型同为 11.5px）走的是同一档。
+        public static let monospacedPreview = SwiftUI.Font.system(.caption2, design: .monospaced)
     }
 }
 

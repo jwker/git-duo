@@ -36,12 +36,10 @@ public struct AvatarStack: View {
 
         /// 图片取不到时画在圆里的那个字符。匿名 → `?`（让人一眼看出"这条没有名字"，
         /// 而不是画个空白圆圈让人以为是图片还在加载）。
-        public var initial: String {
-            guard let first = login?.trimmingCharacters(in: .whitespacesAndNewlines).first else {
-                return "?"
-            }
-            return String(first).uppercased()
-        }
+        ///
+        /// 实现委派给 `UserAvatar.initial(for:)` —— 单个头像与头像排共用同一份规则，
+        /// 免得"匿名画 `?`"这件事在两处各写一遍、然后其中一处忘了处理空名字。
+        public var initial: String { UserAvatar.initial(for: login) }
     }
 
     public let members: [Member]
@@ -70,57 +68,22 @@ public struct AvatarStack: View {
     public var body: some View {
         // 用 `indices` 而不是 `Array(members.enumerated())`：后者要靠"元组 keypath"（`\.offset`）
         // 取 id，那种写法在 Swift 里是条灰色地带；下标索引谁也歧义不了。
-        // 匿名成员没有稳定标识，因此下标本就是它的唯一身份 —— 兜底色也随之确定。
         let shown = Array(members.prefix(visibleLimit))
 
         HStack(spacing: 6) {
             ForEach(shown.indices, id: \.self) { index in
-                avatar(for: shown[index], offset: index)
+                // 逐个复用 `UserAvatar` —— 首字母与兜底色算法**只有那一份实现**
+                // （它原本是本文件私有的，切片 5 把它提到了 `UserAvatar` 上）。
+                // 匿名条目传 `anonymous-<下标>` 当种子：一排没有登录名的头像
+                // 若都用同一个种子会得到同一个颜色、糊成一块。
+                UserAvatar(
+                    login: shown[index].login,
+                    avatarURL: shown[index].avatarURL,
+                    diameter: diameter,
+                    fallbackSeed: shown[index].login ?? "anonymous-\(index)"
+                )
             }
         }
-    }
-
-    private func avatar(for member: Member, offset: Int) -> some View {
-        Group {
-            if let url = member.avatarURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image.resizable().scaledToFill()
-                    default:
-                        // 加载中与失败走同一个兜底圆 ——
-                        // 失败时也不需要额外提示：一个头像取不到不该打断整页。
-                        fallback(for: member, offset: offset)
-                    }
-                }
-            } else {
-                fallback(for: member, offset: offset)
-            }
-        }
-        .frame(width: diameter, height: diameter)
-        .clipShape(Circle())
-        .accessibilityLabel(member.login ?? "匿名贡献者")
-    }
-
-    private func fallback(for member: Member, offset: Int) -> some View {
-        ZStack {
-            Circle().fill(Theme.Palette.avatarFallback[colorIndex(for: member, offset: offset)])
-            Text(member.initial)
-                .font(Theme.Font.label)
-                .foregroundStyle(Theme.Palette.surface)
-        }
-    }
-
-    /// 兜底色下标。
-    ///
-    /// ⚠️ **不能用 `hashValue`** —— Swift 的字符串哈希每个进程带随机种子，
-    /// 同一账号会在每次冷启动后换一个颜色（严重时在一次会话里因列表重绘而换色），
-    /// 而"头像颜色"是用户用来认人的视觉线索。这里用 djb2，跨进程稳定。
-    private func colorIndex(for member: Member, offset: Int) -> Int {
-        let seed = member.login ?? "anonymous-\(offset)"
-        var hash: UInt64 = 5_381
-        for byte in seed.utf8 { hash = hash &* 33 &+ UInt64(byte) }
-        return Int(hash % UInt64(Theme.Palette.avatarFallback.count))
     }
 }
 

@@ -1348,6 +1348,27 @@ GlassEffectContainer(spacing: 12) {
 
 ⚠️ 头像走 `AsyncImage`（§10.6 点名可用）是**有意**的例外：它由系统 `URLSession.shared` 驱动、**不经过本项目的出网通道**（决策 #32）。这不违反 #32 —— 那条纪律针对的是**带 `Authorization` 头的 API 请求**（`URLCache` 会连序列化请求对象一起落盘），而头像是公开图片、请求里没有任何凭据。**一旦某张图需要带令牌才能取，必须改走自建的 `HTTPTransport`**。
 
+**切片 5 新增的令牌与组件（2026-10-07）**
+
+令牌同样是"**原型里已经存在、但此前没有对应 token 的色值**"——不登记就只能在各 Feature 里写十六进制。
+
+| 令牌 | 值 | 出处与用途 |
+|---|---|---|
+| `Palette.codeSurface` | `#F6F8FA` | `styles/01-base.css` 的 `--code-bg`（用于 `.sr-code`）。代码预览行的底。⚠️ 与 `background` **今天同值但不同令牌**：原型里本就是两个独立变量，将来补深色时代码面要比页面底再深一档 |
+| `Palette.stateOpenSurface` / `stateOpenBorder` | `#F0FFF4` / `#A4D8B0` | `styles/03-components.css` 的 `.pill.open` 底 / 边（前景是既有的 `stateOpen`） |
+| `Palette.stateMergedSurface` / `stateMergedBorder` | `#FAF5FF` / `#D1BCF5` | `.pill.merged` **与** `.pill.closed-i` 的底 / 边。⚠️ 两处**同色**，故合成一档，不立同值异名 |
+| `Palette.stateClosedSurface` / `stateClosedBorder` | `#FFF1F2` / `#F1B8BF` | `.pill.closed-p`（已关闭**且未合并**的 PR）的底 / 边 |
+| `Font.tag` | `.caption2.weight(.semibold)` | 原型 `.pill{font-size:11px;font-weight:600}`。与 `caption`（11pt regular）只差字重，不能合并 |
+| `Font.monospacedPreview` | `.system(.caption2, design: .monospaced)` | 原型 `.sr-code{font-size:11.5px}`。比 `monospaced`（`.footnote`，13pt）小一号 —— 预览行嵌在结果行里，13pt 会与同行的标题撞在一起 |
+
+| 组件 | 对应原型 | 为什么进设计包（决策 #43 判据） |
+|---|---|---|
+| `StatusPill` | `.pill`（PRD §4.2 结果行、§4.15） | 只收 `title` + `Tone`（三族**视觉**配色），不收 `PullRequestState` ⇒ 与业务无关 |
+| `CodePreviewLine` | `.sr-code`（PRD §4.2） | 只收一段 `String`；路径 / `仓库 · 语言` 那些是结果行的事，留 Feature |
+| `UserAvatar` | `.avatar`（PRD §4.2 用户行、§5.10） | 只收 `login` + `avatarURL` + 直径。**顺带收口**：首字母与 djb2 确定性兜底色下标原本是 `AvatarStack` 私有的，现提为 `UserAvatar` 的公开纯函数、`AvatarStack` 改为委派（两份实现迟早分叉） |
+
+⚠️ **`StatusPill` 只有三族，不是四族**：原型有四个类名（`.open` / `.closed-i` / `.merged` / `.closed-p`），但只有三种配色 —— `.closed-i` 与 `.merged` 逐字相同（紫族）。按**族**命名、不按单个状态命名，沿 `stateCompletedIcon` 的先例。⚠️ 同一颗紫胶囊在原型里还兼管「私有」标记与分支的「当前」之外的「已批准」等，调用方按族取用即可。
+
 **已知偏差 · 星标金在控件底色上的对比度【已定 · 2026-10-06】**
 
 `starActive`（`#EAC54F`，取自原型）压在统计按钮的底色 `surfaceSunken`（`#EFF2F5`）上：
