@@ -291,8 +291,8 @@ enum AuthNotice: Equatable {
 enum SkeletonPlaceholders {
     static let registry: [String] = [
         "「我的」Tab 根页（`ProfileView` 仍是骨架屏，切片 9）",
-        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：搜索（5）· 仓库详情（4 的写侧）· "
-            + "文件查看 / 编辑器 / 提交详情 / 分支（6）· Issue 与 PR 详情 / 新建（7）· "
-            + "我的 Star / 我的收藏 / 设置（9）"
+        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：搜索（5）· "
+            + "仓库详情 / 文件查看 / 提交详情 / 分支（6）· Issue 与 PR 详情 / 新建（7）· "
+            + "编辑器（8）· 我的 Star / 我的收藏 / 设置（9）"
     ]
 }

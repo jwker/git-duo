@@ -24,10 +24,19 @@
 | 4.5 | 装配与路由：`AppEnvironment` 接入（6 个用例 + 2 个落盘存储 + `ToastCenter`）+ `RouteView` 接三个新路由 | ✅ |
 | 4.6 | 文档收尾 + `make verify`（642 项全绿） | ✅ |
 
-⚠️ **4.4 挖出一条切片计划的空隙，待裁定**：`RouteView` 里 `.repoDetail`（**我的**仓库详情 · 可写侧）标着"切片 4 落地"，
-但施工图 4.4 那一行的内容是 `HomeView` / `ExploreView` / `ExploreRepoDetailView` / 探索 Issue·PR 列表 —— **不含它**；
-而切片表（`REVIEW-CHECKLIST §1`）里 §4.4「仓库详情」也**没有被任何一片显式覆盖**（切片 6 只领走了 §4.5/§4.7/§4.8）。
-它现在仍走 `SkeletonScreen`，`SkeletonPlaceholders.registry` 里记作「仓库详情（4 的写侧）」。**归哪一片请你定。**
+> ✅ **已裁定（2026-10-07）：`.repoDetail`（PRD §4.4「仓库详情 · 自己的仓库」）归切片 6，整页押到那时做。**
+>
+> 它此前漂着的原因值得记一笔 —— **同一个编号撞了名**：施工图的「4.4」是**第 4 片的第 4 步**（表现层 5 个视图），
+> 而 `RouteView` 里那条标着「切片 4 落地」的 `.repoDetail` 指的是 **PRD §4.4**，两码事。
+> 施工图 4.4 那一行确实不含它，切片表里 §4.4 又没有被任何一片显式覆盖（切片 6 只领走了 §4.5/§4.7/§4.8）。
+>
+> ⚠️ **后果不是记账问题，是功能洞**：`ReposView.open()` 按可写性二分 —— 点别人的只读仓库进
+> `ExploreRepoDetailView`（已实现），点**自己有权改的**仓库进 `.repoDetail` ⇒ **一张"切片 4 落地"的占位屏**。
+> 即 App 最主线的路径（我的仓库列表 → 看代码）在切片 4 之后仍是断的。
+>
+> **为什么不能提前做**：它的四个分区零件在别人手上 —— 代码 / Commits / 分支依赖切片 6，
+> Issues / PR 依赖切片 7。只有头部能立刻做 ⇒ 整页无法独立完成，提前只会打乱切片边界。
+> 已登记进 `REVIEW-CHECKLIST §1`（切片 6 那行补入 §4.4）与 `SkeletonPlaceholders.registry`。
 
 > ✅ 已裁定并落地（2026-10-06）：切片 3 的 `RepoCard` 图标与原型不一致（原型走深底 `.repo-avatar`，实现走浅底 `book.closed`）。
 > 用户拍板「**两处都改回原型**」⇒ `RepoCard` 已改为复用 `RepoAvatar.standard`，同一 App 里不再有两种仓库图标。

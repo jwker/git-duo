@@ -24,7 +24,10 @@ struct RouteView: View {
         case .search:
             SkeletonScreen(title: "搜索", slice: "切片 5 落地", reference: "PRD §4.2 / TECH_SPEC §9.2")
         case let .repoDetail(fullName, section, _):
-            SkeletonScreen(title: "仓库详情 · \(fullName)", slice: "切片 4 落地", reference: "PRD §4.4 · 分区 \(section.rawValue)")
+            // ⚠️ 这里原写「切片 4 落地」—— **错的**（PRD §4.4 与施工图 4.4「表现层」撞了名）。
+            //    2026-10-07 裁定：PRD §4.4 归**切片 6**，与文件查看 / 提交详情 / 分支同片
+            //    （它的四个分区里「代码 / Commits / 分支」直接依赖那三件产物）。
+            SkeletonScreen(title: "仓库详情 · \(fullName)", slice: "切片 6 落地", reference: "PRD §4.4 · 分区 \(section.rawValue)")
         case let .exploreRepoDetail(fullName, _):
             ExploreRepoDetailView(
                 fullName: fullName,

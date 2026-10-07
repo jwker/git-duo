@@ -37,8 +37,8 @@ struct SkeletonScreen: View {
 
 #Preview {
     SkeletonScreen(
-        title: "首页",
-        slice: "骨架占位 · 切片 4 落地",
-        reference: "PRD §4.1 / prototype/index.html #stackArea"
+        title: "搜索",
+        slice: "切片 5 落地",
+        reference: "PRD §4.2 / TECH_SPEC §9.2"
     )
 }
