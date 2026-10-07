@@ -40,7 +40,7 @@ struct ExploreBoardCacheTests {
 
         func search(
             query: String,
-            sort: String,
+            sort: String?,
             order: String,
             perPage: Int,
             cursor: URL?
@@ -49,7 +49,9 @@ struct ExploreBoardCacheTests {
             cursors.append(cursor)
             if let failure { throw failure }
             guard let first = pages.first else {
-                return SearchRepositoriesResult(items: [], nextCursor: nil, incompleteResults: false)
+                return SearchRepositoriesResult(
+                    items: [], totalCount: 0, nextCursor: nil, incompleteResults: false
+                )
             }
             return pages.count > 1 ? pages.removeFirst() : first
         }
@@ -71,6 +73,9 @@ struct ExploreBoardCacheTests {
                     pushedAt: now.addingTimeInterval(-600)
                 )
             },
+            // 探索榜**不读** `totalCount`（它的标题用已加载条数，PRD §4.12）——
+            // 这里仍给一个诚实的值，免得让"这个字段可以随便填"变成惯例。
+            totalCount: names.count,
             nextCursor: next.flatMap(URL.init(string:)),
             incompleteResults: incomplete
         )

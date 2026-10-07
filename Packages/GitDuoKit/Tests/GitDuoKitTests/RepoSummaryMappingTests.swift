@@ -156,6 +156,7 @@ struct RepoSummaryMappingTests {
                 SearchRepositoryDTO(fullName: "b/two", starCount: 20,
                                     createdAt: Date(timeIntervalSince1970: 0)),
             ],
+            totalCount: 2,
             nextCursor: cursor,
             incompleteResults: true
         )

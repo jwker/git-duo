@@ -69,37 +69,12 @@ public struct SearchRepositoryDTO: Sendable, Equatable, Decodable {
     }
 }
 
-/// `GET /search/repositories` 的完整结果（§4.6.3、决策 #37）。
+/// `GET /search/repositories` 的完整结果（§4.6.3、决策 #37 / #44）。
 ///
-/// 搜索的响应是**一个对象**（`{ total_count, incomplete_results, items }`）而不是裸数组，
-/// 所以它装不进 `Page<T>` —— 这里手工拼出"列表 + 下一页"的形状，
-/// 下一页仍走 `Page.nextCursor(from:)`（`Link` 头的解析只有一处，别在这里另写一遍）。
-public struct SearchRepositoriesResult: Sendable {
-
-    public let items: [SearchRepositoryDTO]
-
-    /// 下一页的**完整 URL**；`nil` 表示已到底（§4.4）。
-    public let nextCursor: URL?
-
-    /// ⚠️ GitHub 在**计算超时**时会返回一个不完整的结果集，并用这个标记说出来
-    /// （`incomplete_results: true`）。它不影响解码，所以很容易被忽略 ——
-    /// 但它是"这一页少了一些本该在里面的仓库"的唯一信号。
-    ///
-    /// 本切片只把它带出来，**尚未**在界面上呈现（那是 4.4 的决定）；
-    /// 丢掉它就等于把这个信号永久删掉，之后想提示也没得提示了。
-    public let incompleteResults: Bool
-
-    public var hasMore: Bool { nextCursor != nil }
-
-    public var isEmpty: Bool { items.isEmpty }
-
-    public init(
-        items: [SearchRepositoryDTO],
-        nextCursor: URL?,
-        incompleteResults: Bool
-    ) {
-        self.items = items
-        self.nextCursor = nextCursor
-        self.incompleteResults = incompleteResults
-    }
-}
+/// 就是通用的 `SearchResult<SearchRepositoryDTO>` —— 四个搜索端点的响应外皮逐字相同
+/// （`total_count` / `incomplete_results` / `items`），所以外皮收在 `SearchResult` 里一处实现。
+/// 这个别名只是给探索榜与搜索页的调用方一个读得懂的名字。
+///
+/// ⚠️ 两处口径别搞混：**搜索页**的结果标题用 `totalCount`（决策 #44），
+/// **探索榜**的标题用已加载条数（PRD §4.12）—— 后者不用这个字段是**有意**的，不是漏了。
+public typealias SearchRepositoriesResult = SearchResult<SearchRepositoryDTO>

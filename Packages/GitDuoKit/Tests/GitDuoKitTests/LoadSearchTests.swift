@@ -99,7 +99,7 @@ struct LoadSearchTests {
 
         let calls = await source.calls
         #expect(calls.map(\.qualifiers) == ["登录 is:issue", "登录 is:pull-request"])
-        #expect(calls.map(\.conversationKind) == [.issue, .pullRequest])
+        #expect(calls.map(\.scope) == [.issues, .issues])
     }
 
     // MARK: - 续页
@@ -430,7 +430,7 @@ private actor ScriptedSearchSource: SearchDataSource {
 
     struct Call: Sendable, Equatable {
         let qualifiers: String
-        let conversationKind: ConversationKind?
+        let scope: SearchScope
         let perPage: Int
         let cursor: URL?
     }
@@ -456,7 +456,7 @@ private actor ScriptedSearchSource: SearchDataSource {
     func search(_ part: SearchQueryPart, perPage: Int, cursor: URL?) async throws -> SearchHitPage {
         calls.append(Call(
             qualifiers: part.qualifiers,
-            conversationKind: part.conversationKind,
+            scope: part.scope,
             perPage: perPage,
             cursor: cursor
         ))

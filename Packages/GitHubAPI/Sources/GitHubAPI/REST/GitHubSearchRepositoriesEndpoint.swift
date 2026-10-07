@@ -36,11 +36,14 @@ public struct GitHubSearchRepositoriesEndpoint: Sendable {
     ///
     /// - Parameters:
     ///   - query: `q=` 的值（限定符串）。**不能为空** —— GitHub 会回 422，
-    ///     而那次失败**照样消耗搜索配额**，所以在这里就地拦掉（见下方 `guard`）。
+    ///     而那次失败**照样消耗搜索配额**，所以在这里就地拦掉（见 `SearchEndpointSupport`）。
     ///   - sort: 服务端排序字段。`stars` 是探索新星榜的天然回退序（无基线时按总 Star 降序，
     ///     §9.10.2）；`updated` 供活跃榜使用 —— 但活跃榜的**最终顺序**由客户端按
     ///     `pushed_at` 重排（§9.10.1），服务端排序只是把最活跃的那批先捞进来。
-    ///   - order: `desc` / `asc`。
+    ///     ⚠️ **`nil` = 不带 `sort`**，也就是服务端的「best match（相关性）」——
+    ///     搜索页（§9.2 没规定排序）要的正是这个。`sort=best+match` 不是合法取值，
+    ///     所以"要 best match"只能靠**不带这个参数**表达。
+    ///   - order: `desc` / `asc`。**只在给了 `sort` 时才发**（官方：不给 sort 时它被忽略）。
     ///   - perPage: 首页 30（与其余列表一致，§4.4）。上限 100，超过会被 GitHub 夹到 100
     ///     —— 夹这件事**不会报错**，只会静默改变分页步长，所以别传大数。
     ///   - cursor: 上一页的 `nextCursor`；`nil` 取第一页。
@@ -49,16 +52,12 @@ public struct GitHubSearchRepositoriesEndpoint: Sendable {
     /// 自己拼 `?page=n` 会在搜索端点上翻错页（§4.4 已为此写过一次教训）。
     public func search(
         query: String,
-        sort: String,
+        sort: String? = nil,
         order: String = "desc",
         perPage: Int = 30,
         cursor: URL? = nil
     ) async throws -> SearchRepositoriesResult {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            // 搜索配额是全局最紧的一档（30/分钟），而空 q 必然 422 ——
-            // 这一次请求**会白白花掉一格**。就地拦掉，别让它出网。
-            throw GitHubError.validation(["q: 搜索关键词不能为空"])
-        }
+        let query = try SearchEndpointSupport.validatedQuery(query)
 
         let response: HTTPResponse
         if let cursor {
@@ -68,46 +67,18 @@ public struct GitHubSearchRepositoriesEndpoint: Sendable {
                 .get(
                     client.url(
                         "search/repositories",
-                        query: [
-                            URLQueryItem(name: "q", value: query),
-                            URLQueryItem(name: "sort", value: sort),
-                            URLQueryItem(name: "order", value: order),
-                            URLQueryItem(name: "per_page", value: String(perPage))
-                        ]
+                        query: SearchEndpointSupport.queryItems(
+                            query: query,
+                            perPage: perPage,
+                            sort: sort,
+                            order: order
+                        )
                     ),
                     rateLimitResource: .search
                 )
             )
         }
 
-        let envelope = try response.decode(Envelope.self)
-
-        return SearchRepositoriesResult(
-            items: envelope.items,
-            // 复用 `Page` 的解析 —— `Link` 头只该有一处实现（它有个"不能 split 逗号"的坑）
-            nextCursor: Page<SearchRepositoryDTO>.nextCursor(from: response.headers),
-            incompleteResults: envelope.incompleteResults
-        )
-    }
-
-    // MARK: - 私有形状
-
-    /// ⚠️ 搜索的响应是**对象**（`{ total_count, incomplete_results, items }`），不是裸数组
-    /// —— 所以走不了 `client.page(...)`（那个按 `[T]` 解）。
-    ///
-    /// 只声明用得上的两个字段：
-    /// - **`total_count` 有意不取**：它**会超过可分页上限**（搜索最多翻到 1000 条，§9.10.1）
-    ///   ⇒ 显示"共 3,847 个"等于承诺一个用户永远翻不到的数字，
-    ///   而这正是本项目说的"看起来正常的错值"。列表标题用**已加载条数**
-    ///   （PRD §4.12 的 `新星榜 · 5 个仓库` 就是加载数）。
-    /// - `incomplete_results` 取，因为它是"这一页少了东西"的唯一信号（见该字段的说明）。
-    private struct Envelope: Decodable, Sendable {
-        let items: [SearchRepositoryDTO]
-        let incompleteResults: Bool
-
-        private enum CodingKeys: String, CodingKey {
-            case items
-            case incompleteResults = "incomplete_results"
-        }
+        return try SearchResult<SearchRepositoryDTO>.decoded(from: response)
     }
 }

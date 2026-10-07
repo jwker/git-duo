@@ -45,6 +45,10 @@ public struct PullRequestDTO: Sendable, Equatable, Decodable {
     public let base: Ref
 
     /// **已合并**：`state == "closed"` 且带 `merged_at`（§4.6.2）。
+    ///
+    /// ⚠️ 领域层有一个**镜像**：`GitDuoKit` 的 `PullRequestState.init(state:mergedAt:)`。
+    /// 本包看不见它（数据层不得引用领域层 ⇒ 依赖单向），所以同一条规则必须有两处写法；
+    /// **改规则要同时改** —— 只改一处的症状是"列表里已合并、搜索结果里已关闭"。
     public var isMerged: Bool { state == "closed" && mergedAt != nil }
 
     public struct Ref: Sendable, Equatable, Decodable {

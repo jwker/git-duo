@@ -97,18 +97,19 @@ struct SearchQueryTests {
         let built = try query(.issues, "登录")
 
         #expect(built.requestCount == 2)
-        #expect(built.parts.map(\.conversationKind) == [.issue, .pullRequest])
+        // 两条 part 同属这个范围 —— 适配器就是靠它选端点与配额桶的。
+        #expect(built.parts.map(\.scope) == [.issues, .issues])
         #expect(built.parts.map(\.qualifiers) == ["登录 is:issue", "登录 is:pull-request"])
         #expect(built.parts[0].qualifiers.contains(SearchQueryBuilder.issueQualifier))
         #expect(built.parts[1].qualifiers.contains(SearchQueryBuilder.pullRequestQualifier))
     }
 
-    @Test("其余三个范围各**只有一条**，且 `conversationKind` 为 `nil`（它们不分类型）")
+    @Test("其余三个范围各**只有一条**（它们不分类型，也不需要 `is:` 限定符）")
     func otherScopesHaveOnePart() throws {
         for scope in [SearchScope.repositories, .users, .code] {
             let built = try query(scope, "swiftui")
             #expect(built.requestCount == 1)
-            #expect(built.parts.map(\.conversationKind) == [ConversationKind?.none])
+            #expect(built.parts.map(\.scope) == [scope])
             #expect(built.parts[0].qualifiers == "swiftui")
         }
     }

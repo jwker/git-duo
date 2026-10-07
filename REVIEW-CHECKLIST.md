@@ -198,7 +198,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 1. ✅ **D1–D4 已全部拍板并落地**（见上；开工评审期共 4 项）。
    ⚠️ **本节只收录开工评审期的 D1–D4**：此后切片落地期新拍板的口径一律记进 `TECH_SPEC.md` 的决策表
-   （当前 **43 项全【已定】**），本节不再逐条复制 —— 两份真相必然漂移。
+   （当前 **48 项全【已定】**），本节不再逐条复制 —— 两份真相必然漂移。
 2. ✅ **GitHub App 已建、凭据已填**（2026-10-06），`P1` / `P4` / `P5` 已完成。
 3. ✅ **切片 1（Auth）已交付**（2026-10-06）：PKCE → 回调 → 换令牌（带 secret）→ Keychain → 刷新 single-flight → **登出撤销** → 门禁；harness 登录段断言已转成 Swift 测试（`GitHubOAuthClientTests` / `AuthCoordinatorTests` / `LoginCopyTests`）。
 4. ✅ **P2 / P3 自查已过**：**P3（回调落地 `gitduo://oauth/callback`）** 由真机实测反证（真实授权成功、自动跳回 App）；
@@ -288,7 +288,16 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
     - ⚠️ **一处已报给用户、尚待裁定的口径（不阻塞施工）**：内置热词的 5 个词**逐字照抄原型**（事实优先级），
       但其中 `设计令牌` 与 `折叠屏` 是**本项目内部概念**、不是 GitHub 通用热词，后者还与 PRD §1「纯 iPhone、不做折叠屏」相冲。
       只出现在 `SearchHotKeywords.all` 一处，改就改这一处。
+    - ✅ **5.2 数据层已交付**（2026-10-07）：`SearchResult` 泛型信封（四端点唯一解码入口，`total_count` 一并接出）
+      · `search/users` / `search/code`（带 `Accept: text-match`，**首屏与续页都带**）/ `search/issues` 三端点与 DTO
+      · `SearchRowMapper`（行级映射：类型取自响应 / `repository_url` 契约解析 / `merged_at` 判定 / 预览行折一行）
+      · `SearchEndpoints` 接缝 + `GitHubSearchDataSource` 适配器（按 `part.scope` 分发，**配错端点只有单测能抓**
+      —— 症状是"该范围永远搜不到东西"而非报错）。GitHubAPI +22 / GitDuoKit +17。
+    - ⚠️ **又一处已报用户、待裁定的取数缺口（5.2 挖出，不阻塞施工）**：`/search/users` 的官方示例**不含**
+      `public_repos` / `followers`（官方 schema 也标它们可选）⇒ 这两个数**拿不到时副标题整段不渲染**（nil ≠ 0）。
+      若产品仍要求显示，唯一路径是**为每条结果补一次** `GET /users/{login}`（主桶 5,000/小时，不紧张）——
+      一笔新增取数成本，是否要付**待用户拍板**；现状 = 按可选字段处理、宁可少一行。
     - ⚠️ **本切片仍未做的事**：完成定义第 3 条「与原型逐屏对照」（要等 5.4 页面做出来）—— 与切片 4 那笔欠账**同一笔**。
 
-**验证闭环已就绪**：`make verify` = **五包单测（当前 713 项全过）** + 模拟器构建，一条命令，**零编译警告**。
-（GitHubAPI 264 · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 35 · GitDuoKit 307）
+**验证闭环已就绪**：`make verify` = **五包单测（当前 752 项全过）** + 模拟器构建，一条命令，**零编译警告**。
+（GitHubAPI 286 · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 35 · GitDuoKit 324）

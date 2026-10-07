@@ -8,8 +8,9 @@ import GitHubAPI
 /// `PullRequestDTO.state` 只有 `open` / `closed` 两个取值：**合并**与"关闭但没合并"
 /// 在它上面长得一模一样。区分只能靠 `merged_at`（`state == "closed" && merged_at != nil`）。
 ///
-/// 那条规则写在 `PullRequestDTO.isMerged` 里（**唯一实现**），本枚举只是把它翻译成
-/// "界面要画的三种样子" —— 而不是在每个调用点各写一次那个布尔表达式。
+/// 那条规则有**两个写法**，各自待在自己能待的那一层：DTO 上是 `PullRequestDTO.isMerged`
+/// （GitHubAPI 看不见本枚举 —— 依赖单向），领域层是这个枚举的
+/// `init(state:mergedAt:)`（见下面的扩展）。调用方**不许**自己写那个布尔表达式：
 /// 各写一次的下场是**总有一处漏掉 `merged_at` 那一半**，于是所有被关闭的 PR
 /// 都显示成"已合并"，而这看起来完全正常。
 public enum PullRequestState: String, Sendable, Hashable {
@@ -29,6 +30,41 @@ public enum PullRequestState: String, Sendable, Hashable {
         case .open: "开放"
         case .merged: "已合并"
         case .closed: "已关闭"
+        }
+    }
+}
+
+extension PullRequestState {
+
+    /// 由「原始 `state` + `merged_at`」判定（切片 5 的搜索结果行与 PR 列表共用）。
+    ///
+    /// ## 为什么这里又出现一次那条规则
+    ///
+    /// `PullRequestDTO.isMerged` 是**DTO 层的事实**（GitHubAPI 看不见本枚举 ——
+    /// 依赖是单向的，数据层不得引用领域层）；本初始化器是**领域层的判定**，
+    /// 供所有"手上只有原始 `state` 与 `mergedAt`"的调用方共用
+    /// （`PullRequestDTO`、`SearchConversationDTO` 各是其一）。
+    ///
+    /// ⚠️ 两者**是同一条规则的两种写法**，改规则必须同时改 —— `PullRequestDTO.isMerged`
+    /// 的注释里写明了它的镜像在这里。之所以仍然这么分：让调用方各写一遍
+    /// `state == "closed" && mergedAt != nil` 的下场是**总有一处漏掉 `mergedAt` 那一半**，
+    /// 于是所有被关闭的 PR 都显示成"已合并"，而这看起来完全正常。
+    ///
+    /// ## 三档的判据
+    ///
+    /// - `closed` + 有 `mergedAt` ⇒ `.merged`
+    /// - `open` ⇒ `.open`
+    /// - 其余（`closed` 但没有 `mergedAt`）⇒ `.closed`
+    ///
+    /// ⚠️ Issue 也走这里：它没有 `mergedAt`，于是只会取到 `.open` / `.closed`
+    /// —— 与"Issue 没有已合并"这件事天然一致。
+    public init(state: String, mergedAt: Date?) {
+        if state == "closed", mergedAt != nil {
+            self = .merged
+        } else if state == "open" {
+            self = .open
+        } else {
+            self = .closed
         }
     }
 }
@@ -172,9 +208,9 @@ public struct LoadRepoPulls: Sendable {
         )
     }
 
-    /// `open` / `merged` / `closed` —— 判定集中在这里，用的是 DTO 上那个**唯一实现**。
+    /// `open` / `merged` / `closed` —— 判定收在 `PullRequestState(state:mergedAt:)`
+    /// 那**一个**初始化器里（DTO 上的 `isMerged` 是它的镜像，见那里的说明）。
     private static func state(from dto: PullRequestDTO) -> PullRequestState {
-        if dto.isMerged { return .merged }
-        return dto.state == "open" ? .open : .closed
+        PullRequestState(state: dto.state, mergedAt: dto.mergedAt)
     }
 }

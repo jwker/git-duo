@@ -13,9 +13,13 @@ public protocol RepositorySearchDataSource: Sendable {
     /// ⚠️ 参数名与标签必须与 `GitHubSearchRepositoriesEndpoint.search` **逐字一致**：
     ///    协议要求的实参标签与实现不符时，Swift 不会给出"差一个标签"这种提示，
     ///    而是报"类型不满足协议"，排查时很容易绕远路。
+    ///
+    /// ⚠️ `sort` 是**可选**的：探索榜两种榜各带各的（`stars` / `updated`），
+    ///    而搜索页要的是服务端的 best match —— 那只能靠**不带** `sort` 表达
+    ///    （`sort=best+match` 不是合法取值）。这条"可选"是 2026-10-07 切片 5.2 补的。
     func search(
         query: String,
-        sort: String,
+        sort: String?,
         order: String,
         perPage: Int,
         cursor: URL?

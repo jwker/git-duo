@@ -43,17 +43,25 @@ public struct SearchQuery: Sendable, Hashable {
     public var requestCount: Int { parts.count }
 }
 
-/// `SearchQuery` 里的一条查询。
+/// `SearchQuery` 里的一条查询 —— **要发出去的一次请求**。
 public struct SearchQueryPart: Sendable, Hashable {
 
-    /// 这条查询取回来的是哪一类会话；`nil` = 仓库 / 用户 / 代码三个范围（它们不分类型）。
-    public let conversationKind: ConversationKind?
+    /// 这条查询属于哪个范围。
+    ///
+    /// ## 为什么每条 part 都带着它（明明同属一个范围）
+    ///
+    /// 一条查询的所有 part 确实同属 `SearchQuery.scope`，但取数的**接缝**
+    /// （`SearchDataSource.search(_:perPage:cursor:)`）只收到 part ——
+    /// 没有它就不知道该打哪个端点，也不知道该占哪个配额桶
+    /// （代码搜索那一档约 10 次/分钟，与其余的 30 差三倍）。
+    /// 把范围放进 part，接缝就不必再多一个"范围"参数，调用方也就没机会传错。
+    public let scope: SearchScope
 
     /// 完整的 `q=` 值（用户关键词 + 该条自带的限定符）。
     public let qualifiers: String
 
-    public init(conversationKind: ConversationKind?, qualifiers: String) {
-        self.conversationKind = conversationKind
+    public init(scope: SearchScope, qualifiers: String) {
+        self.scope = scope
         self.qualifiers = qualifiers
     }
 }
@@ -142,13 +150,18 @@ public enum SearchQueryBuilder {
     ///
     /// 「Issue · PR」是**两条**（官方限制，见 `SearchQuery`），其余范围是**一条**。
     /// 顺序固定为 Issue 在前 —— 原型就是 `ISSUES.map(…).concat(PRS.map(…))`。
+    ///
+    /// ⚠️ 这里**不**为每条 part 标注"Issue / PR"：那件事由**响应**决定
+    /// （`SearchConversationDTO.isPullRequest`，判据是 `pull_request` 字段的存在性）。
+    /// 按我们发出的查询去贴标签也行，但一旦服务端把一条 PR 混进 `is:issue` 的结果里，
+    /// 就会把它画成 Issue —— 而响应里本来就有现成的答案，没有理由去猜。
     private static func parts(scope: SearchScope, keyword: String) -> [SearchQueryPart] {
         guard scope == .issues else {
-            return [SearchQueryPart(conversationKind: nil, qualifiers: keyword)]
+            return [SearchQueryPart(scope: scope, qualifiers: keyword)]
         }
         return [
-            SearchQueryPart(conversationKind: .issue, qualifiers: "\(keyword) \(issueQualifier)"),
-            SearchQueryPart(conversationKind: .pullRequest, qualifiers: "\(keyword) \(pullRequestQualifier)")
+            SearchQueryPart(scope: scope, qualifiers: "\(keyword) \(issueQualifier)"),
+            SearchQueryPart(scope: scope, qualifiers: "\(keyword) \(pullRequestQualifier)")
         ]
     }
 

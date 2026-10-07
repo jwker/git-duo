@@ -35,9 +35,17 @@ public struct SearchHitPage: Sendable {
 }
 
 /// 搜索的数据来源接缝。
+///
+/// 实现只有两个：`GitHubSearchDataSource`（生产，按 `part.scope` 分发到四个真实端点）
+/// 与测试里的脚本化替身。**分发与映射都归实现**，`LoadSearch` 只跟 `SearchRow` 打交道。
 public protocol SearchDataSource: Sendable {
 
     /// 发**一条**查询（`SearchQueryPart`）的一页。
+    ///
+    /// ⚠️ 打哪个端点、占哪个配额桶由 `part.scope` 决定（见 `SearchQueryPart` 的说明）——
+    /// 也就是说**实现必须按 scope 分发**，而不是把所有 part 都发到同一个端点。
+    /// 漏了这件事不会报错：`q=` 里的 `is:issue` 会让 `/search/users` 返回**空结果**，
+    /// 屏幕上表现为"这个范围永远搜不到东西"。
     ///
     /// ⚠️ `part.qualifiers` **不能为空**、代码范围**不能只有限定符** —— 两者服务端都回 422，
     /// 而**那次失败照样扣配额**（代码那一档只有 10 次/分钟）。

@@ -107,6 +107,13 @@ public struct RepositoryHit: Sendable, Hashable, Identifiable {
 ///
 /// ⚠️ 与仓库行**有意不同**：这里的人数用 **k/m 缩写**（原型数据里是 `'210k'`、`'98k'`），
 /// 与仓库 Star 的千分位不是一套 —— 两张卡在原型里就是这么分的，别顺手统一。
+///
+/// ## ⚠️ 两个计数都**可能查不到**
+///
+/// `/search/users` 未必返回 `public_repos` / `followers`（见 `SearchUserDTO`：
+/// 官方 schema 声明它们可选，而官方文档示例里没有）。硬把它们声明成 `Int`
+/// 就等于**把"不知道"写成 0** —— 卡片会显示"0 个公开仓库"，而那是我们并不知道真假的一句话。
+/// 所以两者都是 `Int?`，拿不到时**整段不渲染**（见 `metaLabel`）。
 public struct UserHit: Sendable, Hashable, Identifiable {
 
     public let login: String
@@ -117,8 +124,11 @@ public struct UserHit: Sendable, Hashable, Identifiable {
     /// 简介。**可以是 `nil`**。
     public let bio: String?
 
-    public let publicRepoCount: Int
-    public let followerCount: Int
+    /// 公开仓库数。`nil` = **不知道**（不是 0）。
+    public let publicRepoCount: Int?
+
+    /// 关注者数。`nil` = **不知道**（不是 0）。
+    public let followerCount: Int?
 
     public var id: String { login }
 
@@ -126,8 +136,8 @@ public struct UserHit: Sendable, Hashable, Identifiable {
         login: String,
         name: String? = nil,
         bio: String? = nil,
-        publicRepoCount: Int,
-        followerCount: Int
+        publicRepoCount: Int? = nil,
+        followerCount: Int? = nil
     ) {
         self.login = login
         self.name = name
@@ -140,15 +150,33 @@ public struct UserHit: Sendable, Hashable, Identifiable {
     public var handle: String { "@\(login)" }
 
     /// 结果行副标题：`5 个公开仓库 · 210k 关注者`（原型 `userResultRow` 逐字）。
-    public var metaLabel: String {
-        "\(publicRepoCount) 个公开仓库 · \(CompactNumber.string(from: followerCount)) 关注者"
+    ///
+    /// ⚠️ **两个数都拿不到时返回 `nil`**（卡片那一行不渲染），只有一个时只写那一个 ——
+    /// 而不是拿 0 顶上。这与"查不到"这个词在界面上的意思是同一件事：
+    /// 宁可少一行，也不要写出一句不知道真假的话。
+    public var metaLabel: String? {
+        let parts = [
+            publicRepoCount.map { "\($0) 个公开仓库" },
+            followerCount.map { "\(CompactNumber.string(from: $0)) 关注者" }
+        ]
+        .compactMap { $0 }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// 资料弹层副标题：`@dev-j · 5 个仓库 · 210k 关注者`（原型 `openUserSheet` 逐字）。
     ///
     /// ⚠️ 比结果行少了「公开」二字，且多了 `@登录名` —— **两处原型就是这么写的**，不是笔误。
+    /// `@登录名` **恒在**（它必然知道），后面两段按"知不知道"追加。
     public var profileMetaLabel: String {
-        "\(handle) · \(publicRepoCount) 个仓库 · \(CompactNumber.string(from: followerCount)) 关注者"
+        let parts = [
+            handle,
+            publicRepoCount.map { "\($0) 个仓库" },
+            followerCount.map { "\(CompactNumber.string(from: $0)) 关注者" }
+        ]
+        .compactMap { $0 }
+
+        return parts.joined(separator: " · ")
     }
 }
 
