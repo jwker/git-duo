@@ -41,6 +41,31 @@ struct MarkdownBody: View {
 
     let blocks: [MarkdownBlock]
 
+    /// 点一个链接时的处置。`nil` = 全部交给系统（`openURL` 默认行为）。
+    ///
+    /// ## 为什么需要它（2026-10-07 目视发现的第 3 条）
+    ///
+    /// `AttributedString.link` 上的地址由系统直接打开，而 README 里**大多数**链接是
+    /// 相对地址（`[中文](README_zh.md)`）—— 系统打不开一个没有 scheme 的地址，
+    /// 表现是"点了没反应"。调用方要在这一刻把它解析成仓库内的路径（`RepoLinkResolver`），
+    /// 再推入对应的页面。
+    ///
+    /// ⚠️ 用 `OpenURLAction` 而不是"把链接的地址换掉"：换地址要在**画之前**知道
+    /// 当前仓库与分支，而那正是 `AttributedString` 造好之后才有的上下文，
+    /// 等于把解析时机提前到渲染里，每重绘一次解析一遍。
+    ///
+    /// ⚠️ 返回 `.systemAction` 表示"我不处理，按默认来"——外部地址必须走它，
+    /// 否则整个 README 里的外链会静默失效。
+    let onOpenLink: ((URL) -> OpenURLAction.Result)?
+
+    init(
+        blocks: [MarkdownBlock],
+        onOpenLink: ((URL) -> OpenURLAction.Result)? = nil
+    ) {
+        self.blocks = blocks
+        self.onOpenLink = onOpenLink
+    }
+
     /// 原型 `line-height:1.65`。正文 15pt 时约 24.75pt，系统行高约 18pt
     /// ⇒ 差额约 7pt，取 4pt 阶里的 `Spacing.s`（8，略宽松一档）。
     /// 不写 6.75 这种裸数字（那条"不许写魔法值"的规矩在行距上同样成立）。
@@ -63,6 +88,11 @@ struct MarkdownBody: View {
             RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
                 .stroke(Theme.Palette.borderSoft, lineWidth: 1)
         )
+        // 链接的落点。⚠️ 挂在最外层：`Text` 里行内链接的点击走的是**环境**里的
+        // `openURL`，而不是某个修饰符 —— 包住整块才拦得到它。
+        .environment(\.openURL, OpenURLAction { url in
+            onOpenLink?(url) ?? .systemAction
+        })
     }
 
     // MARK: - 分派

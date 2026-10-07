@@ -5,24 +5,30 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地。**
-`make verify` = **五包单测 1024 项 + 模拟器构建**，一条命令，**零编译警告**。
-（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 520**）
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已开始**陪跑目视修复（6.7 起）**。**
+`make verify` = **五包单测 1060 项 + 模拟器构建**，一条命令，**零编译警告**。
+（**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 556**）
 
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
 （仓库列表 / 首页置顶 / 最近访问 / 搜索）都点得进去。
 
-⚠️ **但有一笔欠账现在真正该还了**：完成定义第 3 条「与原型逐屏对照」**到现在一次都没做过**
-（此前唯一的理由是"这些页面都要登录才可达" —— 6.5 之后这个理由不再成立）。
-它是 4 条完成定义里**唯一**能发现"页面缺失 / 做错"的一条；另外 3 条每片都在做。
-**待对照清单（正本在 `REVIEW-CHECKLIST §6` 末尾：页级 12 项 + **逐项细则 82 条** + **已知有意偏差 16 条**）**：
-- 切片 4 / 5 交的 7 项 —— 首页 · 探索（双榜）· 探索仓库详情 · 探索 Issues 列表 ·
-  探索 PR 列表 · 搜索页（四范围 + 空闲态 + 四种结果行）· 用户资料弹层；
-- 切片 6 交的 5 项 —— 仓库详情（§4.4 四分段）· 文件查看（§4.5 三档结局）·
+✅ **完成定义第 3 条「与原型逐屏对照」已经开跑（2026-10-07）**，不再是一次都没做过。
+第 1 批报回来 5 条，**前 4 条是真缺陷（已修，见 6.7 与 `REVIEW-CHECKLIST §6`）、第 5 条是拍过板的设计**：
+① 首页「清除」确认是系统动作表（贴屏幕底）而 PRD §5.1 与原型要的是弹层；
+② README 里的 HTML 标签**原样打出来**（真实 README 大量用 `<p align>/<img>/<br>/<details>`）；
+③ README 里的**仓库内相对链接点了没反应**（`[中文](README_zh.md)`）；
+④ 搜索回车后**键盘一直挂着**，不收起；
+⑤ 「＋ 添加 / 编辑 / 历史 / 更多」**点不动** —— 这一条**是决策 #51（有意为之）**，不是接线漏了，
+   正在等用户裁定是"保持现状 / 改灰 / 先藏着 / 提前做编辑器"。
+**清单正本在 `REVIEW-CHECKLIST §6` 末尾（页级 12 项 + 逐项细则 82 条 + 已知有意偏差 21 条 + 已完成 6.7）**：
+- 切片 4 / 5 交的 7 项 —— 首页（✅ 已过，见 6.7①）· 探索（双榜）· 探索仓库详情 ·
+  探索 Issues 列表 · 探索 PR 列表 · 搜索页（✅ 已过，见 6.7④）· 用户资料弹层；
+- 切片 6 交的 5 项 —— 仓库详情（§4.4 四分段）（✅ 已过，见 6.7⑤）· 文件查看（§4.5 三档结局）（✅ 已过，见 6.7⑤）·
   提交详情（§4.7）· 分支管理（§4.8）· 五个弹层（§5.7 切换分支 / 新建 / 删除 / 合并 / §5.8 添加文件）。
 
-⇒ **动切片 7 之前先跑一次真机 / 模拟器目视**（`make device`，或模拟器直接运行）。
+⇒ **接着跑**：探索仓库详情的 README 已经报过两条（6.7②③），修完后要**回头复看一次**；
+提交详情 / 分支管理 / 五个弹层还没过。
 
 > **切片 6 施工图（2026-10-07 起）**：文件查看 + 提交详情 + 分支管理 **+ 仓库详情外壳（PRD §4.4）**。
 > 对应 PRD **§4.4 / §4.5 / §4.7 / §4.8**（+ §5.7 切换分支弹层 / §5.8 添加文件弹层 / §3.10 分支）。
@@ -37,7 +43,7 @@
 | 6.3 | 设计系统（已落地）：**设计包四件** —— `CodeSurface`（等宽 + 横向滚动 + 行距用一个 `Text` 装全部行）· `DiffRow`（**六档**：原型四档 + `.note`/`.content` 兜住"少一行"）· `BreadcrumbBar`（路径段走 `FlowLayout` **折行不截尾**、分隔符作**每段前缀**）· `BranchRow`（当前胶囊 + 删除；**不判断能不能删**，判据在 `BranchSummary.canDelete`）+ `GitHubIcon`；配套令牌：**语法四色** · `accentSubtle`（`.hunk` 与 `.sha` 同值合一）· `codeInlineSurface`（半透明）· `Radius.control`(9) / `branchChip`(7) · 五档字号（`monospacedCode` / `markdownH1` / `markdownH2` / `markdownBody` / `breadcrumb`）。**Feature 层三件**（`GitDuo/Features/Repo/Components/`，判据 **#43** —— 收领域模型 ⇒ 留 Feature）：`CodeHighlighting`（`SyntaxTokenKind` 七档 → `CodeTone` 五档的**穷尽翻译**，漏档编译不过）· `MarkdownBody`（吃 `[MarkdownBlock]`）· `DiffCard`（吃 `FileChange`，**展开才解析** patch）。⚠️ 四处「规格未给，待评审」已登记（见下方提醒） | ✅ |
 | 6.4 | 表现层（`GitDuo/Features/Repo/`，已落地）：**四页** —— `Views/RepoDetailView`（头部 + 四分段；Issues / PR 两段用 `PendingSection` 占位，**决策 #50**）· `Views/FileView`（PRD §4.5）· `Views/CommitDetailView`（§4.7）· `Views/BranchesView`（§4.8）+ **五个弹层**（`Views/Sheets/`：`BranchSheet` §5.7 · `CreateBranchSheet` · `DeleteBranchSheet` · `MergeSheet` **新弹层，决策 #52** · `AddFileSheet` §5.8）。并**把 `ExploreRepoDetailView` 那两处 `PendingSection`（⑤文件浏览 / ⑥README）换成真件**。⚠️ **四处结构性外置**（不是顺手重构，是 6.4d 绕不开的前置）：`ViewModels/RepoTreeSession`（目录浏览会话：两段式分支解析 / 记忆失效回落 / 副标题补填 / 分支列表 304）· `Components/RepoTreeSection`（§4.4 与 §4.13 共用的"面包屑 + 文件行 + README"）· `GitDuoKit/Repo/RepoWebLinks`（三处"跳网页端"出口）· `GitDuoDesign/Components/SHABadge` —— 判据都是"**同一个 UI 元素有两处定义 ⇒ 必然分叉**"。⚠️ **决策 #51 不可点的按钮**：`编辑` / `历史` / `更多` / `Fork 后可编辑` / 「＋ 添加」一律 `allowsHitTesting(false)` + 去掉 `.isButton` trait + 一句各不相同读屏 hint（**不是** `.disabled`，后者变灰像"暂时不可用"）；**`Raw` 当真做**（复制原文、零请求）。⚠️ **6.4e 修掉两条真缺陷**：① `LoadFileContent` 在 `size` 未知时按名字判 ⇒ 20MB 的 PNG 会被整张拉进内存（现改为**拿到真实字节数后重判一次**，落在第二个请求之前）② **0 字节的文件被判成 `.undecodable`** ⇒ 显示"这个 App 不认识它的编码"（假话）且用户看不到它（`decodeBase64("")` 返回 `nil` 是对的，错的是它后面那一步）。见下方提醒 | ✅ |
 | 6.5 | 装配与路由（已落地）：`RouteView` 把 `.repoDetail` / `.fileView` / `.commitDetail` / `.branches` 四条从 `SkeletonScreen` 换成真实视图（依赖逐条从组合根传，页面自己只从 `@Environment` 拿 `router` / `toast` 这类 UI 通道）；`SkeletonPlaceholders.registry` 删掉"切片 6"那几条、并把它们的消解记进"已消解"清单。⚠️ **`AppEnvironment` 的八条用例与 `branchMemory` 装配在 6.4 那次提交里就顺手做完了**（含 `signOut()` ③ 步的 `await branchMemory.clear()`）—— 施工图原写在本片，实际提前兑现，故本片**只剩路由接线**。⚠️ 顺带修掉三处**陈旧说明**：`.repoDetail` 此前把 `path` 参数写成 `_`（接真件时**必须接上**，丢了它表现为"每次点面包屑都回到仓库根"而源码里看不出异常）· `PendingSection` 的类型注释仍写着"§4.13 有 3 个分区占位"（6.4d 后只剩 1 个）· 它的 `#Preview` 还在演示一个**已经不存在**的占位块（"文件浏览 · 切片 6 落地"）| ✅ |
-| 6.6 | 文档收尾 + `make verify` + 提交（已落地）：`TECH_SPEC §3.6` 的登出 ③「已接入清单」补入**按仓库的分支记忆**（6.4 就已落，文档却一直挂在「尚未接入：…按仓库的分支记忆（切片 6）」那一行 —— **代码做完了、文档还欠着，是这一片唯一真正过期的一处**）；`AGENTS.md §0` 本行与总述；`REVIEW-CHECKLIST §6` 追加本段并把「下一步」指向切片 7。`make verify` 全绿（五包 **1024** 项 + 模拟器构建，0 error / 0 warning）。⚠️ **本片零代码改动** —— "文档收尾"的价值全在"把已经做完的事从待办里划掉"，划漏了下一片会照着过期描述重做一遍 | ✅ |
+| 6.7 | **目视修复 · 第 1 批**（用户对着原型走完之后报回 5 条，本行只记已修的 4 条 + 1 条待裁定）：① **首页「清除」确认改成弹层**（原先用 `.confirmationDialog`，在 iPhone 上贴着屏幕底、标题被压成一行小字；PRD §5.1 与原型 `openClearRecent()` 要的是"标题 + 说明 + 两个整宽按钮"那张卡片 ⇒ 新增 `Home/Components/ClearRecentSheet`，`HomeView` 换 `.sheet(isPresented:)`）② **搜索回车后收起键盘**（`.submitLabel(.search)` 只改字样、不关键盘，第一响应者仍是输入框 ⇒ 搜完键盘占半屏；`submit()` 里 `isFieldFocused = false`。⚠️ 与 PRD §4.2「刷新结果区时保持输入焦点与光标」**不冲突**：那条管的是"边打边搜"，这里管的是"用户主动提交"）③ **README 里的 HTML 降级**（新增 `GitDuoKit/Rendering/MarkdownHTML`：HTML 块 → Markdown 源的纯函数；`MarkdownParser` 在引用判定之后、列表判定之前接入，`isBlockStart` 同步；收尾条件是**空行**，照 CommonMark 6/7 型）④ **README 里的仓库内相对链接**（新增 `GitDuoKit/Repo/RepoLinkResolver`：相对路径 / 同仓库 blob·tree / 站点根 / 锚点 / 外部五档；`MarkdownBody` 加 `onOpenLink`，`RepoTreeSection` 接线到 `onOpenFile` / `onOpenDirectory` ⇒ §4.4 与 §4.13 同时受益）。⑤ 「＋ 添加 / 编辑 / 历史 / 更多」点不动 —— **这是决策 #51，不是缺陷**，待用户裁定。⚠️ **新写的 36 条单测当场抓到一个真缺陷**：HTML 块收集时**漏掉起始那一行**，单行 `<h1>x</h1>` 会整行消失，而多行输入里这个 bug 是**隐形的**（起始行通常只是一个纯标签，转换之后本来就是空串）。`make verify` 全绿（五包 **1060** 项 + 模拟器构建，0 error / 0 warning） | ✅ |
 
 > ⚠️ **切片 6 有两条口径是「外部事实把文档里的旧写法推翻」后据实改正的**（与决策 #47 同性质，见 §1.1 决策 #53 后的提醒）：
 > ① 目录清单 `GET /contents/{path}` **不带任何提交信息** ⇒ PRD §3.2 的「最近提交信息」必须**逐文件补请求**（决策 #49）；

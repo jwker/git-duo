@@ -82,17 +82,19 @@ struct HomeView: View {
             guard depth == 0 else { return }
             Task { await model.reloadVisits() }
         }
-        .confirmationDialog(
-            HomeCopy.clearConfirmTitle,
-            isPresented: $isConfirmingClear,
-            titleVisibility: .visible
-        ) {
-            Button(HomeCopy.clearConfirmAction, role: .destructive) {
-                Task { await model.clearVisits() }
+        // ⚠️ 这里**是弹层，不是 `.confirmationDialog`**（2026-10-07 目视修正）：
+        //    动作表在本项目唯一的平台上贴着屏幕底、标题压成一行小字，
+        //    而 PRD §5.1 与原型 `openClearRecent()` 给的都是"标题 + 说明 + 两个整宽按钮"
+        //    那张卡片 —— 与 `DeleteBranchSheet` 同一套版式。详见 `ClearRecentSheet`。
+        //
+        //    仍然是**一个布尔量**就够：本页只有这一张弹层（`RepoDetailView` 那边用枚举
+        //    是因为它有第二张，"哪一张盖在上面"会变成呈现顺序问题）。
+        .sheet(isPresented: $isConfirmingClear) {
+            ClearRecentSheet {
+                await model.clearVisits()
             }
-            Button(HomeCopy.clearConfirmCancel, role: .cancel) {}
-        } message: {
-            Text(HomeCopy.clearConfirmHint)
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
     }
 

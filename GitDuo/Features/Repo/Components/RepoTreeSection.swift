@@ -155,7 +155,39 @@ struct RepoTreeSection<Trailing: View>: View {
             SectionHeader(title: RepoCopy.readmeSectionTitle)
             // ⚠️ 解析（`MarkdownParser`）在取数层已经做完 —— `MarkdownDocument`
             //    带的是算好的块。视图只负责画，不在 `body` 里重扫全文。
-            MarkdownBody(blocks: readme.blocks)
+            //
+            // ⚠️ 链接要**在这里接一次线**（2026-10-07 目视发现的第 3 条）：
+            //    README 里大量链接是仓库内的相对地址（`[中文](README_zh.md)`），
+            //    系统打不开一个没有 scheme 的地址 ⇒ 表现为"点了没反应"。
+            //    判据（哪一档去哪儿）全在领域层的 `RepoLinkResolver`，这里只做分派 ——
+            //    两页（§4.4 / §4.13）共用本件，接线也只有这一处。
+            MarkdownBody(blocks: readme.blocks) { url in
+                switch RepoLinkResolver.target(
+                    for: url,
+                    fullName: session.fullName,
+                    // README 画在**它所在的那个目录**下，所以基准就是当前目录
+                    // （`LoadRepoTree` 只在根目录问 `readme` 端点，见上一层说明）。
+                    baseDirectory: session.path
+                ) {
+                case let .file(path):
+                    onOpenFile(path)
+                    return .handled
+
+                case let .directory(path):
+                    onOpenDirectory(path)
+                    return .handled
+
+                case .external:
+                    // 外部地址必须落到系统，否则 README 里所有外链会一起静默失效。
+                    return .systemAction
+
+                case .anchor, .unresolved:
+                    // 两档都**没有落点**（页内锚点这一版不做；相对地址跳出仓库根时
+                    // 猜不出它想去哪儿）。`.discarded` 是"我们要过它、并决定不跳"，
+                    // 比 `.handled` 诚实 —— 后者声称"已经处理了"。
+                    return .discarded
+                }
+            }
         }
     }
 

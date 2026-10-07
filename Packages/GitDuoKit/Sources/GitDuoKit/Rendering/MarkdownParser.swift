@@ -82,6 +82,31 @@ public enum MarkdownParser {
                 continue
             }
 
+            // ④.5 HTML 块（2026-10-07 目视发现的第 2 条：真实 README 大量用 HTML）。
+            //
+            //      ⚠️ 必须排在**列表与段落之前**：`<p align="center">` 那一行
+            //      既不是段落也不是列表，而它后面的若干行（`<img>` / `</p>`）
+            //      都属于同一块。收尾条件是**空行**，不是 `</div>` ——
+            //      这正是 CommonMark 6 / 7 型块的规定，也与 README 的实际写法吻合
+            //      （`<details>` 里夹一段 markdown 表格，中间就有空行）。
+            if Self.htmlBlockStart(content) {
+                // ⚠️ **起始那一行也要收进来**。少了它，`<h1>标题</h1>` 这种
+                //    单行 HTML 会整行消失 —— 而多行输入里这个 bug 是隐形的
+                //    （起始行通常只是一个纯标签，转换之后本来就是空串）。
+                var htmlLines: [String] = [content]
+                index += 1
+                while index < lines.count,
+                      !lines[index].trimmingCharacters(in: .whitespaces).isEmpty {
+                    htmlLines.append(lines[index].trimmingCharacters(in: .whitespaces))
+                    index += 1
+                }
+                // ⚠️ 改写 + 再解析，而不是在本文件里直接产块：块判定 / 行内解析 /
+                //    实体 / 列表缩进栈全部复用同一条路（见 `MarkdownHTML`）。
+                blocks.append(contentsOf: MarkdownHTML.blocks(from: htmlLines.joined(separator: "\n")))
+                indentStack.removeAll()
+                continue
+            }
+
             // ⑤ 列表项
             if let item = Self.listItem(line) {
                 let depth = Self.depth(forIndent: item.indent, stack: &indentStack)
@@ -138,7 +163,32 @@ public enum MarkdownParser {
             || isDivider(content)
             || heading(content) != nil
             || content.hasPrefix(">")
+            || htmlBlockStart(content)
             || listItem(content) != nil
+    }
+
+    /// 这一行是不是 **HTML 块的起始**（CommonMark 的 6 / 7 型，简化版）。
+    ///
+    /// 判据是"看起来像起始标签"：`<` + 可选 `/` + 字母开头的标签名，
+    /// 且标签名之后紧跟着 `>` / `/` / 空白。
+    /// 最后那一条专为把 `<https://example.com>` 挡在外面 —— 它的"标签名"后面
+    /// 跟的是 `:`，而那是正文里的一个网址。
+    static func htmlBlockStart(_ content: String) -> Bool {
+        guard content.hasPrefix("<") else { return false }
+        if content.hasPrefix("<!--") { return true }
+
+        // ⚠️ 必须**同一行里有收尾的 `>`**。少了这一条，一行残缺的 `<b`
+        //    会被当成 HTML 块，而 `MarkdownHTML` 处理不了它（不是标签）、原样返回，
+        //    下一趟又被判定成 HTML 块 ⇒ **递归不收敛**。
+        guard content.contains(">") else { return false }
+
+        var rest = content.dropFirst()
+        if rest.hasPrefix("/") { rest = rest.dropFirst() }
+        guard let first = rest.first, first.isLetter else { return false }
+
+        let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "-" }
+        guard let next = rest.dropFirst(name.count).first else { return true }
+        return next == ">" || next == "/" || next.isWhitespace
     }
 
     /// `---` / `***` / `___`（至少三个同类字符，其间允许空格）。
