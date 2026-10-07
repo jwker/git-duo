@@ -205,7 +205,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 1. ✅ **D1–D4 已全部拍板并落地**（见上；开工评审期共 4 项）。
    ⚠️ **本节只收录开工评审期的 D1–D4**：此后切片落地期新拍板的口径一律记进 `TECH_SPEC.md` 的决策表
-   （当前 **48 项全【已定】**），本节不再逐条复制 —— 两份真相必然漂移。
+   （当前 **55 项全【已定】**），本节不再逐条复制 —— 两份真相必然漂移。
 2. ✅ **GitHub App 已建、凭据已填**（2026-10-06），`P1` / `P4` / `P5` 已完成。
 3. ✅ **切片 1（Auth）已交付**（2026-10-06）：PKCE → 回调 → 换令牌（带 secret）→ Keychain → 刷新 single-flight → **登出撤销** → 门禁；harness 登录段断言已转成 Swift 测试（`GitHubOAuthClientTests` / `AuthCoordinatorTests` / `LoginCopyTests`）。
 4. ✅ **P2 / P3 自查已过**：**P3（回调落地 `gitduo://oauth/callback`）** 由真机实测反证（真实授权成功、自动跳回 App）；
@@ -334,7 +334,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
     - ▶ **下一步**：完成定义第 3 条目视（切片 4 四页 + 搜索页）→ 再开**切片 6**
       （文件查看 + 提交详情 + 分支管理 + **仓库详情外壳 §4.4**）。
 
-11. ▶ **切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）开工 —— 6.0 文档先行已交付**（2026-10-07）。
+11. ▶ **切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）开工 —— 6.0 文档先行、6.1 领域层已交付**（2026-10-07）。
     本片共 **7 处口径**进了 `TECH_SPEC` 决策表（**#49–#55**），其中 **4 处由用户拍板**、**3 处补文档缺口**：
     - **#49** 文件树行的「最近提交信息」⇒ **逐文件补 `GET /commits?path={p}&per_page=1`**。
       ⚠️ **实测出来的**：`GET /contents/{path}` 的目录清单只有 `name`/`path`/`sha`/`size`/`type`/`url`/`_links`/`git_url`/`html_url`/`download_url`
@@ -358,6 +358,23 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
       与**逐文件副标题**（决策 #49 的 N 次）。已按本片真实成本补成一张更细的表（文件查看 1–2 / 提交详情 1 / 分支管理 1 / 删除分支 2）。
     - ⚠️ **欠账未动且更贵了**：完成定义第 3 条「与原型逐屏对照」到 6.0 为止**仍未做过**。
       待对照页面已从 5 个涨到 9 个（切片 4 四页 + 搜索 + 本片四个）⇒ 见 `AGENTS.md §0` 的提醒。
+    - ✅ **6.1 领域层已交付**（2026-10-07）：`GitDuoKit` 新增 **16 个源文件**（按四个目录分）+ **8 个测试文件**（**+132 项**，GitDuoKit 330 → **462**）。
+      - `Branches/` —— `BranchName`（git ref 八条规则 + 逐条中文提示，纯函数）· `BranchResolver`（**两段式解析**：记忆值立即用 / 分支列表回来后校正 / `didFallBack` 与"本来就没记忆"**必须分开**）· `BranchSummary` + `RepoComparison`（`canDelete(defaultBranch:)` = 非默认 **且** 非受保护；`hasUnmergedCommits` = `aheadBy > 0`）· `BranchCopy`。
+      - `Files/` —— `RepoPath`（拼接与逐段校验；**不禁** `.` 开头，`.gitignore` / `.github` 是真实条目）· `TreeEntry`（含 `Kind.unsupported` —— 原型没有这一档：symlink 的 content 是链接目标那串文本、submodule 的 sha 是另一个仓库的提交）· `FilePreviewKind`（**三档降级**，两张扩展名表 + 一张文件名表 —— `Makefile` / `LICENSE` / `.gitignore` 的 `pathExtension` 是空串，必须另建表）· `FileContent` + `FileContentCodec`（base64 剥换行 / 空壳判定 / 严格解码 / **行拆分保留空行**）· `CommitSummary` / `CommitDetail` / `FileChange` · `FileCopy` / `CommitCopy`。
+      - `Rendering/` —— `MarkdownBlock` + `MarkdownParser`（三趟：拆行 → 块判定 → 行内）· `UnifiedDiff`（hunk 头解出四数 + section；**`\ No newline` 不消耗行号**）· `SyntaxHighlighter` + `SyntaxHighlightCache`（actor，默认上限 2,000 行）。
+      - `Repo/` —— `RepoSection`（**不在这里放"本片交付哪几段"** —— 那是施工进度，切片 7 之后还得改一次）· `RepoCopy`（四页零散文案）。
+      - ⚠️ **两处实现偏离已登记**（`AGENTS.md §0` + `TECH_SPEC §11.1 / §11.3`）：**Markdown 输出纯结构而非 `AttributedString`**（本包不得 import SwiftUI + 输出本来就异构 + 可 `==` 逐块断言）；**语法高亮逐行独立 ⇒ 块注释与多行字符串只对首行着色**（换来"只对可见区域着色"成立）。
+      - ⚠️ **一处自拟文案已登记待评审**：「规格未给」的四组 —— `BranchCopy.unmergedBlockedToast` / `protectedBranchBlockedToast` / 新建分支弹层整套 / 合并弹层整套（决策 #52 的新弹层，PRD 与原型都没有）。都按同类句式拟，**只此一处**，要改只需改这一个文件。
+      - ⚠️ **施工期挖出并已修的五个真实缺陷**（都不是风格问题）：
+        ① **行内代码的闭合必须等长** —— 原实现只找"下一个反引号"，`` ``` swift ``` extra `` 里三个反引号被错配成一对，**吃掉两个字符**（页面上看不出来）；现改为按 run length 找闭合。
+        ② **`0x1F` 被切成 `0` + 标识符 `x1F`**（`isHexDigit` 不含 `x`）⇒ 数字分支特判 `0x` / `0b` / `0o` 前缀。
+        ③ **`1..<5` 的 `..` 被吃进数字** ⇒ 遇到连续两个 `.` 即中断。
+        ④ **`FileChange.isBinary` 用 `if case .unsupported` 判 ⇒ 图片不算二进制**，但图片确实没有可读的文本 diff ⇒ 改成 `switch`，`.image` 与 `.unsupported` 都算。
+        ⑤ ⚠️ **最严重的一个：整个测试进程被 SIGKILL（exit 137），没有任何失败信息** —— 症状是 `swift test` 连 `◇ Test run started.` 之后什么都没有，**看起来像环境坏了**。
+        真因：`SyntaxHighlighter.scan` 的标识符分支**起始**字符集合含 `@`、而**后续**字符集合（`isIdentifierBody`）不含 ⇒ `@available(…)` 走进去 `while` 一步不跑、`index` 原地不动 ⇒ **死循环**（0.2 秒内吃满 CPU 被系统杀掉）。
+        修法三件：`isIdentifierBody` 改为 `isIdentifierStart || isNumber`（两集合的关系由断言 `identifierStartImpliesBody` 守住）；加 `defer { if index == iterationStart { index += 1 } }` 作**结构性兜底**（以后再加分支忘推下标，最坏是"少染一个字符"而不是"跑不动"）；新增守卫测试。
+        **判据（已进 `MEMORY.md`）**：**词法扫描器的"起始字符集合"必须 ⊆ "后续字符集合"**；**`swift test` 无输出地被杀，先查死循环，不要先怀疑沙箱。**
+      - ▶ **下一步**：**6.2 数据层**（11 个端点 + 配额桶逐个声明并配守卫）。
 
-**验证闭环已就绪**：`make verify` = **五包单测（当前 768 项全过）** + 模拟器构建，一条命令，**零编译警告**。
-（GitHubAPI 286 · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 45 · GitDuoKit 330）
+**验证闭环已就绪**：`make verify` = **五包单测（当前 900 项全过）** + 模拟器构建，一条命令，**零编译警告**。
+（GitHubAPI 286 · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 45 · **GitDuoKit 462**）

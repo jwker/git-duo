@@ -1022,6 +1022,9 @@ enum Route: Hashable {
 - 列表：`GET /repos/{owner}/{repo}/branches?per_page=100`——**本页只列当前仓库的分支**，标题带仓库全名。⚠️ 每项含 `name` / `commit` / **`protected`**（2026-10-07 实测）。
 - 新建：`POST /git/refs`（`ref: refs/heads/{name}`, `sha:` 当前分支 HEAD）。`sha` 优先取分支列表里那一项的 `commit.sha`，取不到才补 `GET /branches/{branch}`。
   - **分支名校验放在客户端**（领域层纯函数，可单测）：服务端不合法时回 **422**，而 422 的文案不是表单校验（用户会读成"服务器坏了"）。判据照 git 的 `check_refname_format`：不能为空；不能含空格与 `~ ^ : ? * [ \`；不能含控制字符（< 0x20 / 0x7F）；不能以 `/` 或 `.` 开头 / 结尾；不能含 `//` 或 `..`；不能以 `.lock` 结尾；不能是保留名 `HEAD`。
+    - ⚠️ **`@{` 有意不拦**（6.1 登记）：git 的完整规则里另有一条「不能含 `@{`」（`@` 后紧跟 `{`），但**本节只列了上面八条、不含它** ⇒ 实现**不比规格严**，只做这八条
+      （`BranchName.forbiddenCharacters` = 空格 `~ ^ : ? * [ \`）。要补就是**改规格**，先写在这里再加判据。
+    - ⚠️ **不做 trim**：`"feature "` 判为「含禁止字符 ` `」而不是"首尾空格" —— 首尾空格本身就是第 2 条禁止的东西，不需要单独一条规则。
 - 删除：`DELETE /git/refs/heads/{branch}`。**不给删除入口的分支有两类：默认分支 + 受保护分支**（**决策 #53**，UI 不给入口 **+** 逻辑层拦截，同收藏夹默认夹的做法）。
   - **删前校验**：`GET /repos/{owner}/{repo}/compare/{branch}...{base}`，**`ahead_by > 0` ⇒ 有未合并提交 ⇒ 阻止并提示**。⚠️ 只读 `ahead_by` / `behind_by` / `total_commits` 三个计数字段，**不要数 `commits` 数组的长度**（服务端会截断）。
   - ⚠️ **若删除的正是该仓库当前分支**：删除成功后按 §9.4.1 解析规则**回落 `defaultBranch`**，并失效该仓库的 contents/commits 缓存（否则会继续按已不存在的 `ref` 请求而 404）。
@@ -1452,6 +1455,12 @@ GlassEffectContainer(spacing: 12) {
 
 **注意**：`AttributedString(markdown:)` 系统能力对块级结构支持有限，需自研解析器补足（按行扫描 → 块类型判定 → 行内解析），并用单测覆盖边界（嵌套列表、代码块内的 `#`、未闭合标记等）。
 
+> ⚠️ **实现偏离（6.1 已登记）**：**输出不是 `AttributedString`，而是纯结构 `[MarkdownBlock]`**（`MarkdownBlock` + `MarkdownSpan`，见 `GitDuoKit/Rendering/`）；上表「输出」与「渲染」两栏的写法据此作废。
+> 三条理由：① `GitDuoKit` **不得 import SwiftUI**（`AGENTS.md §1` 依赖铁律）⇒ 构造不出带自定义 `AttributedStringKey` 的可渲染值，而解析器又必须落在这个包里才可单测；
+> ② 本表自己就写着「代码块**单独**用等宽视图 + 横向滚动」—— 输出从一开始就是**异构**的，硬塞进一个 `AttributedString` 只会让渲染侧再拆回来一次；
+> ③ `AttributedString` 的断言要读 runs、逐段比 attribute，写出来极难维护；纯结构可以直接 `==` **逐块断言**（6.1 的 Markdown 测试正是这么写的）。
+> 三个解析器（`MarkdownParser` / `UnifiedDiffParser` / `SyntaxHighlighter`）**一律是纯函数**：只吃 `String`、只吐结构体，不碰任何 UI 类型。
+
 ### 11.2 unified diff 解析
 
 | 项 | 方案 |
@@ -1470,6 +1479,13 @@ GlassEffectContainer(spacing: 12) {
 | 方式 | 轻量词法着色（关键字 / 字符串 / 注释 / 数字 / 函数名），非完整语法分析 |
 | 性能 | 逐行着色 + 结果缓存；只对**可见区域**着色（长文件必须分段） |
 | 与玻璃的关系 | 代码块属**内容层**，实色背景，不走玻璃 |
+
+> ⚠️ **实现边界（6.1 已登记）**：「逐行着色」被**做到底**了 —— `SyntaxHighlighter.scan` 对每一行**独立**着色，不维护任何跨行状态 ⇒
+> **块注释（`/* … */`）与多行字符串只对首行着色**，续行按普通代码染。
+> 这是**有意**的取舍：本表要求「只对**可见区域**着色（长文件必须分段）」，而跨行状态一旦引入，
+> 滚到文件中间时必须先把前面所有行扫一遍才知道"此刻处在什么状态" —— 该要求当场失效。
+> 代价是**颜色不准**，但**内容逐字正确**（着色只产 token、不产文本，任何情况下都不会改字）。
+> 语言白名单见 `CodeLanguage`（比本表的"少量高频语言"多两个）；`markdown` 返回 `nil` —— 不做词法着色，块级已在 §11.1 处理。
 
 ---
 

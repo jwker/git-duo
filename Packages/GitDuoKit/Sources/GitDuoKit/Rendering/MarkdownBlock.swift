@@ -1,0 +1,123 @@
+import Foundation
+
+/// 一段行内文本的样式（TECH_SPEC §11.1「支持范围」）。
+///
+/// ## ⚠️ 有意**不嵌套**
+///
+/// `**粗体里有 `代码`**` 这种嵌套，本解析器**不会**把内层也解析出来 ——
+/// 它会得到一段 `.bold`，文字是 `粗体里有 `代码``（含反引号）。
+/// 完整递归解析要引入一棵行内树，而 §11.1 列出的支持范围（标题、段落、列表、
+/// 引用、行内代码、代码块、链接、粗斜体、分隔线、任务列表）**没有要求嵌套**。
+/// 少做一层递归换来的是"解析结果是一维数组"，视图一个 `Text` 拼接就能渲染。
+public struct MarkdownSpan: Equatable, Sendable {
+
+    /// 可见文字（已去掉标记符号）。
+    public let text: String
+
+    public let style: Style
+
+    public init(text: String, style: Style = .text) {
+        self.text = text
+        self.style = style
+    }
+
+    public enum Style: Equatable, Sendable {
+
+        /// 普通文字（**兜底**，解析不出任何标记时的默认值）。
+        case text
+
+        /// 行内代码 `` `x` `` —— 等宽 + 底色的那一小段。
+        case code
+
+        case bold
+
+        case italic
+
+        /// 链接。⚠️ 带 `URL` 而不是 `String`：无效地址在**解析阶段**就被丢掉
+        /// （退回普通文本），视图拿到的永远是一个能打开的地址。
+        case link(URL)
+
+        /// 解析样式时用的**标记符号**，供 `plainText` 与调试。
+        ///
+        /// 它不进界面 —— 存在只是为了在断言里区分"这段是粗体"与"这段是纯文本"时
+        /// 能读出原因，以及在拼 `plainText` 时判断要不要补回符号。
+        public var isEmphasized: Bool {
+            switch self {
+            case .bold, .italic: true
+            case .text, .code, .link: false
+            }
+        }
+    }
+
+    /// 读屏与"复制原文"用的纯文字（丢掉全部样式）。
+    public static func plainText(of spans: [MarkdownSpan]) -> String {
+        spans.map(\.text).joined()
+    }
+}
+
+/// 一个块级元素（TECH_SPEC §11.1）。
+///
+/// ## ⚠️ 关于「输出 `AttributedString`」的一处**实现偏离**（已登记）
+///
+/// §11.1 的方案栏写的是"输出 `AttributedString` + 自定义 `AttributedStringKey`"。
+/// 这里改为**纯结构模型**，理由是三条，且都不是偏好问题：
+///
+/// 1. **本包是领域层，不得 import SwiftUI / UIKit**（`AGENTS.md` 的铁律）。
+///    `AttributedString` 本身在 Foundation 里，但它的**自定义 key**、
+///    以及"代码块要单独用等宽视图"这件事，都只能由视图层决定 ——
+///    于是必然出现"领域层造了一半的排版信息、视图层再拆开"的往返。
+/// 2. **可测性**：`[MarkdownBlock]` 能用 `==` 逐块断言
+///    （"这个 `#` 变成了 `heading(level: 1)`"）；
+///    `AttributedString` 的断言要读 runs、逐段比 attribute，写成测试后极难维护。
+/// 3. **视图本来就要分开画**：§11.1 自己写着"代码块单独用等宽视图 + 横向滚动" ——
+///    也就是说输出从一开始就是**异构**的，硬塞进一个 `AttributedString`
+///    反而要在视图层按 range 反查块边界、再拆开。
+///
+/// 所以领域层出结构，视图层出样式。这不是"少做"，是把职责放回各自该在的地方。
+public enum MarkdownBlock: Equatable, Sendable {
+
+    /// 标题，`level` 为 1–6（`#` 的个数）。
+    case heading(level: Int, spans: [MarkdownSpan])
+
+    /// 段落。
+    case paragraph([MarkdownSpan])
+
+    /// 列表项。
+    ///
+    /// - `ordered`: 有序（`1.`）还是无序（`-` / `*` / `+`）。
+    /// - `number`: 有序列表项的编号（`1.` → `1`）；无序为 `nil`。
+    ///   ⚠️ 保留服务端给的编号，不自己从 1 数 —— 一段 `3. / 4. / 5.` 是有意义的。
+    /// - `depth`: 嵌套层级，**从 0 开始**（0 = 顶层）。
+    /// - `checked`: 任务列表的勾选态（`- [x]`）；非任务列表为 `nil`。
+    case listItem(ordered: Bool, number: Int?, depth: Int, checked: Bool?, spans: [MarkdownSpan])
+
+    /// 引用（`> `）。⚠️ **每一行各自成块**（相邻的引用块在渲染上没有间距，看起来是一段）。
+    case quote([MarkdownSpan])
+
+    /// 代码块。
+    ///
+    /// - `language`: fence 后面那个词（```` ```swift ```` ⇒ `"swift"`）；没写为 `nil`。
+    /// - `lines`: **已按行拆好**（尾部那个由"文件以换行结尾"产生的空串已去掉）。
+    case codeBlock(language: String?, lines: [String])
+
+    /// 分隔线（`---` / `***` / `___`）。
+    case divider
+
+    /// 这段块是不是空的（**不渲染任何东西**）。
+    ///
+    /// 空白块要能被识别出来：列表之间、代码块之后常常夹着空行，
+    /// 若把它们也当成 `.paragraph([])`，视图会画出一个个空段落，
+    /// 页面上的垂直间距会莫名其妙地大。
+    public var isEmpty: Bool {
+        switch self {
+        case let .heading(_, spans), let .paragraph(spans), let .quote(spans):
+            spans.allSatisfy { $0.text.isEmpty }
+        case let .listItem(_, _, _, _, spans):
+            spans.allSatisfy { $0.text.isEmpty }
+        case let .codeBlock(_, lines):
+            lines.allSatisfy { $0.isEmpty }
+        case .divider:
+            false
+        }
+    }
+}
