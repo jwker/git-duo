@@ -99,7 +99,19 @@
 | 47 | 搜索「Issue · PR」范围怎么取 | **拆成两条查询再合并**（用户 2026-10-07 拍板，**被外部事实逼出来的**）：官方限制（`docs.github.com/rest/search/search`，多版本一致）—— **"For requests made by GitHub Apps with a user access token, you can't retrieve a combination of issues and pull requests in a single query. Requests that don't include the `is:issue` or `is:pull-request` qualifier will receive an HTTP 422. To get results for both issues and pull requests, you must send separate queries."** 本项目用的正是 **GitHub App 用户令牌（`ghu_`）** ⇒ 原先 §9.2 写的"一次 `/search/issues`、按类型字段区分"**根本不成立**（那种"一次拿到两类"的前提是 PAT / 无鉴权，与我们的令牌类型不符）。落地口径：每条关键词发 `is:issue` + `is:pull-request` **两条**，结果 **Issue 在前、PR 在后**（与原型 `ISSUES.concat(PRS)` 同序），**两个独立游标**；「加载更多」同时续两边，已经到底的那条**跳过不重发**。**代价（明写）**：这一范围每翻一页消耗 **2 格**搜索配额（30/min 的桶），是四个范围里最贵的。**备选被否**：只搜 Issue（PRD §4.2 的结果行去向表列了 PR 详情 ⇒ 等于砍掉一半功能）；只取第一页不给续页（与本决策 #44 的"按钮续页"口径在这一范围上自相矛盾）。同一次核实还确认了 §9.2 那条**本来就写对了**的：代码搜索**必须**含至少一个非限定词（`language:go` 不合法，`amazing language:go` 合法） | 【已定】 |
 | 48 | 代码范围只填了限定符时说什么 | **复用原型已有的 `先输入关键词`**（用户 2026-10-07 拍板）：原型是本地过滤、**从不发请求**，所以它没有"服务端不收这个查询"的情形 —— 这条文案在原型与 PRD 里都不存在，属新口径。用户选择**不新拟**、复用 `commitSearch` 里那句 toast（`SearchCopy.needsKeyword`），语义也对得上：**只有限定符等于没有关键词**。用途从"回车时的 toast"扩到"代码范围结果区的说明行"（`.needsBareTerm`）。**备选被否**：新拟一句更明确的（`代码搜索需要至少一个关键词…`，清楚但属新增文案）；照常发请求让服务端回 422（白烧一格代码搜索配额 —— 那一档只有 10 次/分钟，是四档里最紧的） | 【已定】 |
 
-> **状态汇总**：48 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+| 49 | 文件树行的「最近提交信息」从哪来 | **逐文件补 `GET /repos/{owner}/{repo}/commits?path={p}&per_page=1`**（用户 2026-10-07 拍板）：PRD §3.2 的 `TreeEntry` 定义了「最近提交信息」、原型每行也都画了它（`f.msg`），而**实测**（2026-10-07，`cli/cli/contents/docs`）目录清单只回 `name` / `path` / `sha` / `size` / `type` / `url` / `_links` / `git_url` / `html_url` / `download_url` —— **一个提交信息字段都没有**，GitHub 也没有批量接口。**备选被否**：① 不渲染副标题（与原型逐屏对照必然出现可见差异，而原型是唯一可点验收依据）；② 走 GraphQL `history(first:1, path:…)` 带别名一次取回（往返最少，但要把 §4.6.5 的「四个 GraphQL 场景」扩到五个、动到「REST 为骨架」这条主线，收益不值）。**代价（明写）**：每个目录 N 次请求（30 项目录 = 30 次），但带 ETag ⇒ 复访命中 304 **不计配额**；副标题**随请求陆续填充**，不阻塞文件列表先出（§9.5） | 【已定】 |
+| 50 | 切片 6 的边界（§11.2 diff 提前） | **`§11.2` unified diff 解析随切片 6 落地；PRD §4.4 的 Issues / Pull Requests 两个分区归切片 7**（用户 2026-10-07 拍板）：§4.7 提交详情页的结构里**第二块就是 Diff 卡片**，而 §11.2 的解析器原文归属被写在 §4.11（切片 7）⇒ 按原边界 §4.7 在切片 6 **必然缺一块**，按完成定义（`REVIEW-CHECKLIST §2`）不算做完。反方向看，diff 是 §4.7 与 §4.11 **共用**的零件，先做不产生返工。Issues / PR 两段则相反 —— 零件确实在切片 7 手上（要给 `LoadRepoIssues` 加 `state` 参数、补「已关闭」筛选），提前做会把切片 7 掏空。**落地口径**：切片 6 的 §4.4 仍画**四个分段**（形态与原型一致），Issues / PR 两段用 `PendingSection` 显式标注「切片 7 落地」；§4.13 的 ⑤文件浏览 / ⑥README 两处 `PendingSection` 一并换成真件（TECH_SPEC §9.11 与 `ExploreRepoDetailView` 早已写明归切片 6）。切片 7 的验证方式随之从「diff 边界」改为「**PR 侧多文件 diff 边界 + 复用解析器**」（§11.2） | 【已定】 |
+| 51 | 属别片的入口按钮在切片 6 怎么呈现 | **画出来但不可点**（用户 2026-10-07 拍板）：`allowsHitTesting(false)` + 读屏 hint 说明「切片 8 落地」，**不用** `.disabled`（那会变灰、看起来像"暂时不可用"）。**范围**：「＋ 添加」（§5.8 → 切片 8）、文件查看页的「编辑」「更多」（切片 8），以及 PRD 标 ⏳ 的「历史」。判据同决策 #46 与 4.4 期 Watch / Fork 先例。**备选被否**：① 先完全不画（页面更干净，但原型上那些入口在切片 6 完全不可见，逐屏对照时会算成差异）；② 画出可点 + 点后轻提示（与 PRD §8.1「不允许停留在入口或提示」相冲）。**两处例外**：**「Raw」当真做**（复制文件原文到剪贴板，**零请求** —— 原型演的正是这个：`toast('已复制 Raw 内容')`，且按事实优先级"原型 > PRD"，PRD 标 ⏳ 只说明它没细化、不构成反对）；**「↩ Revert 此提交」**按 §9.7.3 既定口径（点击提示 `Revert 需在 GitHub 网页端完成` 并打开网页） | 【已定】 |
+| 52 | 「合并分支」的弹层形态 | **单独的新弹层，不复用「提交更改」弹层**（用户 2026-10-07 拍板）：PRD §4.8 与原型都写"打开提交更改弹层（标题 `合并 {源} → {当前}`）"，但那个弹层的内容是「提交信息 + **提交到当前分支 / 新分支 + PR**」，而合并走 `POST /repos/{owner}/{repo}/merges`（`base` + `head` + 可选 `commit_message`）—— **「新分支 + PR」这一段对合并没有对应语义**；且原型的源分支是**自动取第一个非当前分支**（`meta.list.find(b=>b!==cb)`），用户**选不了**，而"合并哪条分支"恰是这个操作的唯一关键输入。故新弹层 = 源分支选择器 + 目标分支（当前分支，只读）+ 提交信息（可选）+ 合并按钮 + 冲突引导文案。**登记为有意偏离原型**，理由与出处写进代码注释（§9.7.1） | 【已定】 |
+| 53 | 哪些分支不给「删除」入口 | **默认分支 + 受保护分支都不给**；「有未合并提交」的判据是 `compare` 的 `ahead_by > 0`（2026-10-07 **外部事实逼出来的修正**）：实测 `GET /repos/{owner}/{repo}/branches` 的每一项除 `name` / `commit` 外**还有 `protected`**（`cli/cli` 实测；单分支端点另给 `protection` / `protection_url`）。PRD §4.8 只写了「**非默认**分支带删除按钮」，照它画会在**受保护分支**上给出一个必然 422 的按钮 —— 而 GitHub 那时返回的文案解释不了"为什么别人能删我不能"。故删除入口判据 = `name != defaultBranch && !protected`（逻辑层**同时**拦截，位置同收藏夹默认夹的做法）。未合并校验：`GET /repos/{owner}/{repo}/compare/{branch}...{base}`，`ahead_by > 0` ⇒ 有未合并提交 ⇒ 阻止并提示（实测响应含 `status` / `ahead_by` / `behind_by` / `total_commits`；两端相同时 `status == "identical"`）。⚠️ 与决策 #47 同性质：**外部事实逼出来的修正，不是偏好**（§9.7.1） | 【已定】 |
+| 54 | 文件查看页对大文件 / 二进制文件的降级 | **三档，判据是一个纯函数**（2026-10-07 定，方向承 §9.5）：① **≤1MB 文本** ⇒ contents 的 `content` 是 base64，解出即用；② **>1MB** ⇒ contents 回 **200 + `encoding:"none"` + 空 `content`**（**实测**：`kubernetes/kubernetes` 的 `api/openapi-spec/swagger.json`，4,280,356 字节 ⇒ `encoding='none'`、`content_len=0`），改走 `Accept: application/vnd.github.raw` 取原文（**实测同一文件回 200 + 完整 4,280,356 字节**，不是截断）；③ **二进制** ⇒ 按**扩展名**判为图片者走 raw 取字节 + 图片预览，其余二进制给「不支持预览」+ 跳网页端。**识别规则落点**：领域层纯函数 `FilePreviewKind`（扩展名 → `.text` / `.image` / `.other`）—— App target 没有测试 target，留在这里就没人守得住（§9.5）。⚠️ **不按"UTF-8 解码失败"判二进制**：那要求先把可能很大的字节读进内存再试解码，而扩展名在**发请求之前**就有。⚠️ 图片也**先看 `size` 再决定下不下载**（上限是常量，见 §9.5） | 【已定】 |
+| 55 | 分支记忆存在哪里 | **持久化到 UserDefaults，按仓库分别记忆，登出清空**（2026-10-07 收口）：PRD §3.10 明写"分支记忆属**账号绑定数据**，退出登录时清空" ⇒ 它必须**跨启动存活**，否则"登出要清"无从谈起。§9.4.1 原文写的是"记忆为会话级（**可持久化以提升体验**）"，把两件事并列了、措辞含糊，现收口为**持久化**。落点照 `UserDefaultsRecentVisitStore` 先例（键前缀独立，不与 `recentVisits` / `searchHistory` 共用）；`signOut()` ③ 步补 `clear()` —— 该挂账本就写在 `AppEnvironment.signOut()` 的注释里（"按仓库的分支记忆（切片 6）"）。⚠️ **解析是两段式的**：记忆值**立即使用**（乐观，不串行等分支列表），分支列表回来后再校正；若 contents 因该 `ref` 不存在回 404，按 §9.4.1 的回落规则**静默重发一次、不向用户报错**（否则用户会先看到一个"不存在或无权访问"再自愈） | 【已定】 |
+
+> **状态汇总**：55 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+
+> ⚠️ **#53 与 #47 的共性**：两条都是**外部事实把文档里的旧写法推翻**后据实改正的，不是偏好选择。
+> 记在这里是因为它们是同一类事故的两例 —— **写文档时"看起来显然"的写法，可能只在某种令牌类型 / 某个字段上才成立**。
+> 核对纪律：凡结论依赖"某个端点会给我们什么"，**引原文或实测一次**，别按直觉写。
 
 ### 1.2 三条"不可动摇"的约束
 
@@ -344,7 +356,7 @@ GitHub App 的用户访问令牌（`ghu_`）的可见范围是**三重交集**�
 - ⚠️ **③ 的落点分两处**（决策 #31 之后追认）：**"接口缓存"由认证编排层收口** —— `AuthCoordinator.signOut()` → `HTTPCachePurging`（`GitDuoCore`）。
   理由：它不属于任何 Feature，却是**唯一可能把凭据留在磁盘上的东西**。真机实测（2026-10-06）：换令牌响应一度被写进
   `Library/Caches/<bundle-id>/Cache.db`；而**改掉写入路径只能阻止将来再写，已落盘的副本只有显式清理才会消失**。
-  其余各项（最近访问 / 收藏夹 / 搜索历史 / 分支记忆）仍按原计划随各 Feature 落地时接入 App 层的 ③。
+  其余各项随各 Feature 落地时接入 App 层的 ③（那是一处**接线**，不是一处设计）。
   - 已接入的进度（截至 2026-10-07）：**最近访问**（切片 4）· **Star 基线快照**（切片 4）· **搜索历史 + 搜索缓存**（切片 5.5）。
     ⚠️ 搜索那两条要分开记：`searchHistory.clear()` 清的是历史；**`search.invalidateAll()` 清的是 `LoadSearch` 的结果缓存** ——
     后者装的是**上一个账号搜出来的结果**（含私有仓库名），漏了它就会在新账号的界面上露出来。
@@ -564,10 +576,11 @@ enum GitHubError: Error {
 | Star 切换 | `PUT` / `DELETE /user/starred/{owner}/{repo}` | 计数由响应后本地 +1/−1，无需重拉。⚠️ **±1 的基准必须先查**：`GET /user/starred/{owner}/{repo}`（**204 = 已 Star，404 = 未 Star**，此处的 404 不是"仓库不存在"）。不查的后果是可复现的错值 —— 已 Star 过的仓库按"未 Star"起手，点一下发的是**幂等的 PUT**、服务端什么都没变，而本地 +1 把界面变成 `已 Star · {n+1}`，比真实值多 1。写成功后**失效两份缓存**：`/user/starred` 与 `/repos/{o}/{r}`（后者不清会把本地 ±1 打回旧值） |
 | Watch | `GET /repos/{owner}/{repo}/subscription` | **本期只读计数，不实现订阅动作**（§3.5.2） |
 | Fork | `POST /repos/{owner}/{repo}/forks` | |
-| 分支列表 | `GET /repos/{owner}/{repo}/branches` | |
-| 文件树 / 目录 | `GET /repos/{owner}/{repo}/contents/{path}?ref={branch}` | 目录清单 |
-| 递归文件树 | `GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1` | 代码搜索/全局定位时用 |
-| README | `GET /repos/{owner}/{repo}/readme`（`Accept: application/vnd.github.raw`） | 块级渲染见 §11.1 |
+| 分支列表 | `GET /repos/{owner}/{repo}/branches?per_page=100` | ⚠️ 每一项含 `name` / `commit` / **`protected`**（2026-10-07 实测）—— 删除入口的判据要用到它，见**决策 #53**。`per_page=100` 一页取回，无下一页时条目数即精确总数（口径同决策 #40） |
+| 单个分支（取 HEAD 的 sha） | `GET /repos/{owner}/{repo}/branches/{branch}` | 新建分支要 `sha` ⇒ 就取这里的 `commit.sha`（实测：`cli/cli/branches/trunk` ⇒ `commit.sha` = `17142e08db…`）。**不额外请求**：分支列表那一页里已带每个分支的 `commit.sha`，能命中就用它 |
+| 文件树 / 目录 | `GET /repos/{owner}/{repo}/contents/{path}?ref={branch}` | 目录清单。⚠️ 返回项**只有** `name` / `path` / `sha` / `size` / `type` / `url` / `_links` / `git_url` / `html_url` / `download_url` —— **没有任何提交信息**（2026-10-07 实测），PRD §3.2 的「最近提交信息」要另外取，见**决策 #49** |
+| 递归文件树 | `GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1` | 代码搜索/全局定位时用。⚠️ 同样**不含提交信息**（`path`/`mode`/`type`/`sha`/`size`/`url`），别指望用它省掉决策 #49 那几次请求 |
+| README | `GET /repos/{owner}/{repo}/readme`（`Accept: application/vnd.github.raw`） | 块级渲染见 §11.1。✅ 2026-10-07 实测：`Accept: application/vnd.github.raw` 与 `application/vnd.github.raw+json` **两种写法都回 200 + 裸 Markdown**（响应头的 `content-type` 会原样回带请求里那个串，所以别按它判类型） |
 | Issue 列表（开放/已关闭） | `GET /repos/{owner}/{repo}/issues?state=open\|closed` | ⚠️ **会混入 PR，需按 `pull_request` 字段过滤** |
 | 新建 Issue | `POST /repos/{owner}/{repo}/issues`（`title`,`body`,`labels[]`） | |
 | Issue 详情 / 评论 | `GET /repos/{owner}/{repo}/issues/{n}`；`GET/POST …/issues/{n}/comments` | 也可用 GraphQL 聚合（§4.6.5） |
@@ -583,16 +596,18 @@ enum GitHubError: Error {
 | PR Commits | `GET …/pulls/{n}/commits` | |
 | 合并 PR | `PUT …/pulls/{n}/merge`，`merge_method: merge\|squash\|rebase` | 三种方式一一对应 |
 | 关闭 PR | `PATCH …/pulls/{n}`，`state: closed` | |
-| 提交列表 | `GET /repos/{owner}/{repo}/commits?sha={branch}` | 分支联动 |
-| 提交详情 + 文件 diff | `GET /repos/{owner}/{repo}/commits/{sha}` | 响应含 `files[].patch` |
+| 提交列表 | `GET /repos/{owner}/{repo}/commits?sha={branch}` | 分支联动。⚠️ 列表项**不含** `files` / `stats`（2026-10-07 实测）—— 增删统计只在提交详情里 |
+| 提交列表（按文件过滤） | `GET /repos/{owner}/{repo}/commits?path={p}&per_page=1` | **决策 #49** 用它给文件树的每一行取「最近提交信息」。`path` 可以是文件也可以是目录 |
+| 提交详情 + 文件 diff | `GET /repos/{owner}/{repo}/commits/{sha}` | 响应含 `files[].patch` 与 `stats{additions,deletions,total}`；`files.length` 即 PRD §4.7 的「{N} 个文件」 |
+| 比较两个提交 / 分支 | `GET /repos/{owner}/{repo}/compare/{base}...{head}` | **决策 #53** 用它判「分支有没有未合并提交」。响应含 `status`（`identical` / `ahead` / `behind` / `diverged`）/ `ahead_by` / `behind_by` / `total_commits`（实测 `trunk...trunk` ⇒ `status=identical`, 三者皆 0）。⚠️ 服务端对 `commits` / `files` 有截断（数量上限），故**只读这三个计数字段**、不要靠数 `commits` 数组的长度 |
 | 提交 diff 原文 | `Accept: application/vnd.github.diff` | |
 | **Revert 提交** | ⚠️ **REST 无原生 revert 端点** → **本期不在客户端实现**，入口跳转网页端（§9.7.3） | 【已定】 |
 | 新建 / 编辑 / 上传文件 | `PUT /repos/{owner}/{repo}/contents/{path}`（`message`,`content`(base64),`sha`(更新时必需),`branch`） | ≤1MB |
 | 大文件 / 多文件提交 | ❌ **本期不引入 Git Data API**（`POST /git/blobs` → `trees` → `commits` → `PATCH /git/refs/…`） | 与 §9.6 的能力边界一致 |
 | 上传图片 | 同文件上传（二进制 → base64） | 相册取图需降采样 |
-| 创建分支 | `POST /repos/{owner}/{repo}/git/refs`（`refs/heads/x`, `sha`） | |
-| 删除分支 | `DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}` | 删前校验未合并提交 |
-| 合并分支 | `POST /repos/{owner}/{repo}/merges`（`base`,`head`） | 冲突 → 引导网页端 |
+| 创建分支 | `POST /repos/{owner}/{repo}/git/refs`（`refs/heads/x`, `sha`） | `sha` 取当前分支 HEAD（来源见上表「单个分支」行）。⚠️ 分支名不合法时服务端回 **422**，故客户端**先本地校验**（规则见 §9.7.1），别拿 422 当表单校验 |
+| 删除分支 | `DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}` | 删前校验未合并提交（`compare` + `ahead_by`）。⚠️ **默认分支与受保护分支都会失败**（受保护分支回 422）⇒ 入口判据见**决策 #53** |
+| 合并分支 | `POST /repos/{owner}/{repo}/merges`（`base`,`head`,可选 `commit_message`） | 冲突 → 引导网页端。⚠️ **没有「新建分支 + PR」这回事** —— 弹层不复用提交弹层，见**决策 #52** |
 | 创建 PR（提交面板"新分支 + PR"） | `POST /repos/{owner}/{repo}/pulls` | |
 
 #### 4.6.3 探索（他人仓库）
@@ -732,7 +747,7 @@ View State（表现层，为 UI 量身裁剪，含 loading/empty/error）
 | 最近访问（全名 + 时间戳 + **当时是否可写**，≤6） | UserDefaults（JSON） | 同上 |
 | 收藏夹（`name` / `isDefault`）与归属映射 `favMap` | UserDefaults（JSON）或轻量文件夹 | 数据量小，无查询需求；**`count` 不落盘**，由映射推导（§9.12） |
 | 搜索历史（≤8） | UserDefaults | 同上 |
-| 当前分支（**按仓库**，`branchByRepo`） | 内存 + 可选 UserDefaults | 恢复现场；作用域见 §9.4.1 |
+| 当前分支（**按仓库**，`branchByRepo`） | UserDefaults（JSON） | **决策 #55**：PRD §3.10 的"退出登录时清空"要求它**跨启动存活** ⇒ 必须落盘（原文写"内存 + 可选 UserDefaults"把两件事并列了，现收口）。键前缀独立，作用域与两段式解析见 §9.4.1 |
 | 分区 / 滚动位置等页面态 | 内存 | 页面销毁即丢，无需持久化 |
 | 网络响应缓存 | 文件目录 + LRU（§5.1） | 大对象、可丢弃 |
 
@@ -940,7 +955,8 @@ enum Route: Hashable {
 - 头部：`GET /repos/{owner}/{repo}`。
 - 分区切换**不重新请求头部**，只切换内容区；分区状态存 ViewModel。
 - 代码分区：见 §9.5。Issues / PR：见 §9.8 / §9.9。Commits：`GET …/commits?sha={branch}`，**随当前分支联动**。
-- **当前分支是按仓库分别记忆的会话状态**（同一仓库内代码与 Commits 共用，跨仓库互不影响）；切分支后失效该仓库的 contents/commits 缓存。
+- **当前分支是按仓库分别记忆的状态**（同一仓库内代码与 Commits 共用，跨仓库互不影响）；切分支后失效该仓库的 contents/commits 缓存。⚠️ 记忆**持久化**（不是"会话级"，见**决策 #55**）。
+- ⚠️ **本页的四个分区不在同一个切片里交付**（**决策 #50**）：切片 6 交 ①代码 + ④Commits（外加 §4.5 / §4.7 / §4.8），**②Issues / ③Pull Requests 归切片 7**。落地方式：分段条**照原型画满四项**，未交付的两段用 `PendingSection` 显式标注「切片 7 落地」—— 整块不渲染会让评审看不出还差什么（`AGENTS.md §0` 的"一眼可辨、不冒充成品"）。
 
 #### 9.4.1 分支解析规则【已定】
 
@@ -955,7 +971,11 @@ enum Route: Hashable {
 
 - 实现：`RepositoryScope.branch(for fullName: String) -> String` + `private var branchByRepo: [String: String]`；`Repository.defaultBranch` 作为回落值（§6.2 实体字段）。
 - 分支列表本身来自 `GET …/branches`（已带缓存），因此"分支是否存在"的校验**不额外消耗请求**。
-- 记忆为会话级（可持久化以提升体验）；**登出时清空**（§3.6），与其它账号绑定数据一致。
+- 记忆**持久化**（键前缀独立，落点照 `UserDefaultsRecentVisitStore` 先例）；**登出时清空**（§3.6 ③），与其它账号绑定数据一致。见**决策 #55**。
+- ⚠️ **解析是两段式的**（决策 #55）——"记忆值是否仍存在"要等分支列表到手才知道，而首屏的 contents 请求**不能**等它（那是白白多一个 RTT）：
+  1. **立即**用记忆值（无记忆则 `defaultBranch`）发 contents / commits ⇒ 不串行等待；
+  2. 分支列表回来后校正：记忆值**不在**列表里 ⇒ 按上表**回落 `defaultBranch`**、失效该仓库的 contents/commits 缓存并重取；
+  3. 若第 1 步那次 contents 因该 `ref` 不存在回了 **404**，走同一套回落**静默重发一次、不向用户报错** —— 否则用户会先看到一个"不存在或无权访问"（§4.3：404 与无权限在 GitHub 侧被混同）再自愈，而那正是回落规则本就该吸收的情况。
 
 ### 9.5 代码浏览与文件树
 
@@ -966,8 +986,16 @@ enum Route: Hashable {
 | 文件查看 | `GET …/contents/{path}`（小文件返回 base64；大文件用 `Accept: application/vnd.github.raw` 取原文） |
 | README 渲染 | `GET …/readme`（raw）→ §11.1 块级渲染 |
 
-- ⚠️ **二进制文件**（图片等）需识别并展示预览而非当文本渲染。
-- ⚠️ Contents API 对 **>1MB 的文件**不返回内容（返回 `content: ""`），需回退到 `Accept: application/vnd.github.raw` 取原文（`git/blobs` 属 Git Data API，本期不引入）。**只读浏览大文件仍然支持**——不做的是"上传/编辑提交大文件"。
+- ⚠️ **目录清单里没有「最近提交信息」**：`GET …/contents/{path}` 的返回项只有 `name`/`path`/`sha`/`size`/`type`/`url`/`_links`/`git_url`/`html_url`/`download_url`（2026-10-07 实测），`git/trees` 也不含提交信息。PRD §3.2 的副标题要**逐文件补一次** `GET …/commits?path={p}&per_page=1`（**决策 #49**）；带 ETag ⇒ 复访 304 不计配额，且副标题**随请求陆续填充**、不阻塞文件列表先出。
+- ⚠️ **三档降级由纯函数判定**（**决策 #54**，落点在领域层 `FilePreviewKind`，因为 App target 没有测试 target）：
+  | 判定 | 依据 | 通道 |
+  |---|---|---|
+  | 文本 · ≤1MB | 扩展名 → `.text` 且 `size ≤ 1MB` | contents 的 `content`（base64）解出 |
+  | 文本 · >1MB | `encoding == "none"`（**实测** 4,280,356 字节的文件回 200 且 `content` 为空串） | `Accept: application/vnd.github.raw` 取原文（实测同文件回 200 + **完整** 4,280,356 字节） |
+  | 图片 | 扩展名 → `.image`，且 `size ≤ FilePreviewKind.maxImageBytes`（常量，5MB） | raw 取字节 → 解码预览 |
+  | 其余二进制 / 超限图片 | 扩展名 → `.other`，或超上限 | 不下载，显示「不支持预览」+ 跳网页端 |
+- ⚠️ **不按"UTF-8 解码失败"判二进制**：那要求先把可能很大的字节读进内存再试解码，而扩展名在**发请求之前**就有。图片也一样 —— **先看 `size` 再决定下不下载**（解码成位图后内存约为字节数的数倍，手机上没有理由硬拉一张 20MB 的 PNG 只为把它画出来）。
+- 注意区分：**只读浏览大文件仍然支持**（上表第二行）；不做的是"**上传 / 编辑 / 提交**大文件"（§9.6，`git/blobs` 属 Git Data API，本期不引入）。这两件事常被混为一句"不支持大文件"。
 - 路径合法性：进入目录前校验 path 拼接，避免 `..` 与双重斜杠。
 
 ### 9.6 编辑器与提交
@@ -991,11 +1019,14 @@ enum Route: Hashable {
 ### 9.7 分支、合并与 Revert
 
 #### 9.7.1 分支管理
-- 列表：`GET /repos/{owner}/{repo}/branches`——**本页只列当前仓库的分支**，标题带仓库全名。
-- 新建：`POST /git/refs`（`ref: refs/heads/{name}`, `sha:` 当前分支 HEAD）。
-- 删除：`DELETE /git/refs/heads/{branch}`。**默认分支不可删**（UI 不给入口 + 逻辑层拦截，同收藏夹默认夹的做法）。**删前校验**：`GET /repos/{owner}/{repo}/compare/{branch}...{base}` 判断是否有未合并提交，有则阻止并提示。
+- 列表：`GET /repos/{owner}/{repo}/branches?per_page=100`——**本页只列当前仓库的分支**，标题带仓库全名。⚠️ 每项含 `name` / `commit` / **`protected`**（2026-10-07 实测）。
+- 新建：`POST /git/refs`（`ref: refs/heads/{name}`, `sha:` 当前分支 HEAD）。`sha` 优先取分支列表里那一项的 `commit.sha`，取不到才补 `GET /branches/{branch}`。
+  - **分支名校验放在客户端**（领域层纯函数，可单测）：服务端不合法时回 **422**，而 422 的文案不是表单校验（用户会读成"服务器坏了"）。判据照 git 的 `check_refname_format`：不能为空；不能含空格与 `~ ^ : ? * [ \`；不能含控制字符（< 0x20 / 0x7F）；不能以 `/` 或 `.` 开头 / 结尾；不能含 `//` 或 `..`；不能以 `.lock` 结尾；不能是保留名 `HEAD`。
+- 删除：`DELETE /git/refs/heads/{branch}`。**不给删除入口的分支有两类：默认分支 + 受保护分支**（**决策 #53**，UI 不给入口 **+** 逻辑层拦截，同收藏夹默认夹的做法）。
+  - **删前校验**：`GET /repos/{owner}/{repo}/compare/{branch}...{base}`，**`ahead_by > 0` ⇒ 有未合并提交 ⇒ 阻止并提示**。⚠️ 只读 `ahead_by` / `behind_by` / `total_commits` 三个计数字段，**不要数 `commits` 数组的长度**（服务端会截断）。
   - ⚠️ **若删除的正是该仓库当前分支**：删除成功后按 §9.4.1 解析规则**回落 `defaultBranch`**，并失效该仓库的 contents/commits 缓存（否则会继续按已不存在的 `ref` 请求而 404）。
-- 合并：`POST /repos/{owner}/{repo}/merges`。**冲突时 GitHub 返回 409**，且客户端无法解决 → 按 PRD 文案引导用户到网页端处理。
+- 合并：`POST /repos/{owner}/{repo}/merges`（`base` = 当前分支，`head` = 用户选的源分支，可选 `commit_message`）。**冲突时 GitHub 返回 409**，且客户端无法解决 → 按 PRD 文案引导用户到网页端处理。
+  - ⚠️ **合并用的是自己的弹层，不是「提交更改」弹层**（**决策 #52**）：后者的「提交到当前分支 / 新分支 + PR」分段对合并没有语义，而且原型的源分支是自动挑的、用户选不了；合并时"哪条分支合进哪条"是唯一的关键输入，必须可选。
 
 #### 9.7.2 PR 合并
 `PUT /repos/{owner}/{repo}/pulls/{n}/merge`，`merge_method` 直接对应 PRD 的三种方式：
@@ -1399,6 +1430,16 @@ GlassEffectContainer(spacing: 12) {
 
 ## 11. 自研渲染模块（零第三方依赖）
 
+> **切片归属**（**决策 #50**，2026-10-07 拍板）：三个模块**全部落在切片 6** ——
+> §11.1（README / 文件查看）+ §11.3（文件查看 / 代码块）本来就是 §4.4 与 §4.5 的零件；
+> **§11.2 原写"组件说明见 §4.11"（切片 7），但那句话让 §4.7 提交详情页在切片 6 缺了第二块**（结构里紧挨头部卡片的就是 Diff 卡片），
+> 故随切片 6 一起做 —— 它同时是 §4.11 的零件，先做不产生返工。
+> 切片 7 的这部分工作改为「**PR 侧多文件 diff 的边界 + 复用**」（`REVIEW-CHECKLIST §1`）。
+>
+> ⚠️ **三个模块都必须可单测**（零第三方依赖 ⇒ 全是自研）：解析器一律做成**纯函数**放 `GitDuoKit`，
+> 边界（嵌套列表、代码块内的 `#`、未闭合标记、`\ No newline at end of file`、`\r\n`、二进制文件行）逐条覆盖。
+> App target 没有测试 target —— 留在 View 里的解析逻辑等于没测。
+
 ### 11.1 Markdown 块级渲染
 
 | 项 | 方案 |
@@ -1478,7 +1519,12 @@ GlassEffectContainer(spacing: 12) {
 
 | 操作 | 请求数 | 备注 |
 |---|---|---|
-| 打开仓库详情（代码分区） | 1（repo）+ 1（contents） | README 另计 1 |
+| 打开仓库详情（代码分区） | 1（repo）+ 1（contents）+ 1（branches） + **N**（文件树副标题） | README 另计 1。⚠️ 2026-10-07 补：原表写「1 + 1」漏了两处 —— **分支列表**（面包屑上的分支胶囊与切换弹层都要它）与**逐文件副标题**（**决策 #49**，N = 该目录条目数，带 ETag ⇒ 复访 304 不计配额） |
+| 文件查看（≤1MB 文本） | 1 | `contents` base64 解开即可 |
+| 文件查看（>1MB 或图片） | 2 | 先 `contents` 拿 `size` 与 `encoding:"none"`，再 raw 取原文（**决策 #54**） |
+| 提交详情 | 1 | `commits/{sha}`，响应含 `files[].patch` 与 `stats` |
+| 分支管理页 | 1 | `branches?per_page=100` 一页取回 |
+| 删除分支（含校验） | 2 | `compare` 判未合并 → `DELETE`（**决策 #53**） |
 | 提交流程（新分支 + PR） | 3–4 | refs → contents → pulls |
 | 搜索（边输边搜） | ≥1/次输入 | **必须防抖**，否则 30/min 秒破 |
 
