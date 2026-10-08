@@ -81,12 +81,55 @@ struct RepoLabelsTests {
 
     @Test("色板逐字对齐原型 `LBL_COLORS`（去掉 CSS 的 `#`）")
     func paletteMatchesPrototype() {
+        // ⚠️ 2026-10-08 换过四档（橙 / 黄 / 粉 / 灰）—— 理由见 `LabelPalette` 的文档注释。
+        // 这份清单必须与 `redesign/prototype/scripts/07-issues.js` 的 `LBL_COLORS` 逐字一致。
         #expect(
             LabelPalette.hexes == [
-                "d73a4a", "e16f24", "fbca04", "0e8a16", "0075ca",
-                "5319e7", "8250df", "db61a2", "959da5", "1f2328"
+                "d73a4a", "bc4c00", "9a6700", "0e8a16", "0075ca",
+                "5319e7", "8250df", "bf3989", "6a737d", "1f2328"
             ]
         )
+    }
+
+    @Test("⚠️ 十档的白字对比度**全部 ≥ 4.5:1** —— `.lbl-tag` 是白字压色块，浅色会让标签名读不出来")
+    func paletteAllPassWhiteTextContrast() {
+        // 这条是 2026-10-08 那次换色的**护栏**：将来谁把某一档调浅（"这个黄更亮好看"），
+        // 编译不会报错、也不会有人发现 —— 除非这条断言拦下他。
+        // 门槛 4.5 = WCAG 2.1 对正文的 AA 要求（标签名是要读的文字，不按"非文字图形"的 3:1 算）。
+        for hex in LabelPalette.hexes {
+            let ratio = Self.whiteTextContrast(of: hex)
+            #expect(
+                ratio >= 4.5,
+                "`\(hex)` 白字对比度只有 \(ratio):1 —— 低于 4.5，标签名会读不出来"
+            )
+        }
+    }
+
+    @Test("⚠️ 最紧的一档是绿 `0e8a16`（4.50）—— 它离门槛只有 0.001，换色时别把它也当成「有余量」")
+    func paletteTightestEntryIsGreen() {
+        // 留这条是为了说清一件事：**别看到"全过了"就以为还能再调浅一档**。
+        let ratios = LabelPalette.hexes.map { ($0, Self.whiteTextContrast(of: $0)) }
+        let tightest = ratios.min { $0.1 < $1.1 }
+        #expect(tightest?.0 == "0e8a16")
+        #expect((tightest?.1 ?? 0) < 4.51, "绿那一档的余量比登记的大了 —— 换色后请一并更新这条与文档")
+    }
+
+    /// 白字压在这个色值上的对比度（WCAG 2.1 相对亮度公式）。
+    ///
+    /// ⚠️ 它是**测试内部的**实现，不进产品代码：产品侧只需要"色板里每一档都够深"这一个事实，
+    /// 而运行时按亮度自动选字色这件事**已经判定不做**（偏离原型，见 `LabelPalette` 的说明）。
+    private static func whiteTextContrast(of hex: String) -> Double {
+        let digits = Array(hex)
+        func channel(_ index: Int) -> Double {
+            Double(Int(String(digits[index * 2 ... index * 2 + 1]), radix: 16) ?? 0) / 255
+        }
+        func linear(_ value: Double) -> Double {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let luminance = 0.2126 * linear(channel(0))
+            + 0.7152 * linear(channel(1))
+            + 0.0722 * linear(channel(2))
+        return 1.05 / (luminance + 0.05)
     }
 
     @Test("每个色值都是**六位十六进制小写**")

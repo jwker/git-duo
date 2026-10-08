@@ -5,9 +5,9 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已**陪跑目视修复（6.7 起，现已到 6.9 —— 完成定义第 3 条「与原型逐屏对照」12 项于 2026-10-07 全部走完）**；**切片 7（Issues / PR）已于 2026-10-08 开工：7.0 文档先行（决策 #56–#62）已提交，7.2 数据层 + 7.1 领域层**全部**落地 —— 下一段是 7.3 设计系统。***
-`make verify` = **五包单测 1225 项 + 模拟器构建**，一条命令，**零编译警告**。
-（**GitHubAPI 362** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign 60 · **GitDuoKit 696**）
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已**陪跑目视修复（6.7 起，现已到 6.9 —— 完成定义第 3 条「与原型逐屏对照」12 项于 2026-10-07 全部走完）**；**切片 7（Issues / PR）已于 2026-10-08 开工：7.0 文档先行（决策 #56–#63）已提交，7.2 数据层 + 7.1 领域层 + 7.3 设计系统**全部**落地 —— 下一段是 7.4 表现层。***
+`make verify` = **五包单测 1240 项 + 模拟器构建**，一条命令，**零编译警告**。
+（**GitHubAPI 362** · GitDuoAuth 57 · GitDuoCore 50 · **GitDuoDesign 73** · **GitDuoKit 698**）
 
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
@@ -55,7 +55,7 @@
 | 7.0 | 文档先行：决策 **#56–#62**（表格筛选只按标签走服务端 / Issue 详情 REST 两次 / PR 卡片不显示增删 / 评论草稿落本地 / **评审状态取 `/reviews` 而非 `/comments`** / 两段范围与组件落点 / Issue 关闭重开本期不做）+ `TECH_SPEC §9.8` / **`§9.8.1`（新增：仓库详情两段）** / `§9.9` / `§4.6.2` 改写 + `PRD §4.4` 两段 / `§4.9` / `§4.11` 补口径 | 🔄 |
 | 7.1 | 领域层（`GitDuoKit`）：✅ **已落地**（2026-10-08）—— `RepoListState`（`open`/`closed`/`all`）· `LoadRepoIssues` / `LoadRepoPulls` 加 `state` 参数与**标签筛选**（决策 #56）· 两文件**移出 `Explore/` 到 `Repo/`**（决策 #61，它们现在服务两个页面）· `IssueDetail` + `LoadIssueDetail`（**REST 两次、评论可单独重试**，决策 #57）· `IssueComment` + `PostIssueComment`（空内容判据 `canSend`）· `Label` / `LabelPalette`（10 色，**不带 `#`**）/ `LabelCatalog`（自动续页 + **空名与重名都不发那次必败的请求**）· `NewIssueDraft` + `CreateIssue`（占位标题 `新 Issue`、正文不 trim）· `PullDetail` / `PullReview` / `PullTimelineItem`（**评论与评审按时间合成一条流**，决策 #60）· `LoadPullDetail`（详情 + 对话；Commits / 文件**进分区才取**）· `PullAction`（合并三方式 / 关闭 / 重开；`PullMergeResult.merged(at:sha:)`）· `CommentDraftStore`（决策 #59）· 文案 `IssueCopy` / `PullCopy` / `ConversationCopy` / `AuthorName` · **PR 侧多文件 diff 边界**（`PullDetailTests` 里 3 条，含"接成一份会算错哪"的正面证据）| ✅ |
 | 7.2 | 数据层（`GitHubAPI`）：✅ **已落地**（2026-10-08）—— `GitHubRepoIssuesEndpoint` 加 `state`/`labels` 参数 + 详情 / 评论读 / 评论写 / 新建 · 新增 `GitHubRepoLabelsEndpoint`（列表 + 新建）· `GitHubRepoPullsEndpoint` 加 `state` 参数 + 详情 / 文件 / Commits / **评审** / 合并 / 改状态（评论写复用 issues 端点 —— PR 的时间线就是 issue 评论）· 新 DTO：`AuthorDTO`（从 `IssueDTO.Author` 提为顶层）· `LabelDTO` · `IssueDetailDTO` · `IssueCommentDTO` · `PullRefDTO` · `PullDetailDTO`（⚠️ **`createdAt` 是 7.1 追加的** —— PR 正文气泡那个时间，用 `updated_at` 会随每次改动而变）· `PullReviewDTO` · `PullMergeResultDTO`（+ `PullMergeMethod` / `PullMergeOutcome`；`PullFileDTO` 是 `CommitFileDTO` 的别名）。⚠️ 13 条路由**配额桶逐个显式声明**并由 `RepoEndpointQuotaTests` 正面断言。⚠️ **Issue 的「改状态」按决策 #62 不做** —— 施工图原先那一行与 #62 冲突，以 #62（后定）为准 | ✅ |
-| 7.3 | 设计系统（`GitDuoDesign`）：`CommentBubble`（头像 + 作者 + 时间 + 正文 + 可选状态胶囊）· `LabelPill`（自定义颜色）· `ColorSwatch`（10 色板）· `ConversationHeader`（状态胶囊 + 说明 + 标题 + 元信息）。判据 **#43**：只收基础类型、不认识领域模型 | ⬜ |
+| 7.3 | 设计系统（`GitDuoDesign`）：✅ **已落地**（2026-10-08）—— `CommentBubble`（头像 + 作者 + 时间 + **注入的正文** + 可选状态胶囊）· `LabelPill`（自定义颜色，**白字**）· `ColorSwatch`（10 色板，选中态两层：深边 + 内白环）· `ConversationHeader`（状态胶囊 + 说明 + 标题 + 元信息，形状直接用 `CardBox(vertical: 15, horizontal: 15)`）· **`LabelDot`**（12×12 标签小色块）· **`LabelAddButton`**（虚线「＋ 标签 / 新建」，⚠️ 后两件超出施工图原名、经用户 2026-10-08 裁定一并做掉）· **`LabelColor`**（服务端色值 → `Color` 的唯一转换处，三处共用以免分叉）。新令牌 6 个：`bubbleHeaderSurface` / `labelFallbackSurface` / `Radius.bubble`(12) / `Radius.labelDot`(4) / `Font.conversationTitle` / `Font.commentMeta`。判据 **#43**：只收基础类型、不认识领域模型。⚠️ 顺带一条**口径变更（决策 #63）**：标签是白字压色块，原 10 色色板有四档太浅（黄 1.55 · 灰 2.75）⇒ 按用户裁定换同族深色，十档全部 ≥ 4.5:1；`LabelPalette.hexes` / 原型 `LBL_COLORS` / `RepoLabelsTests` 三处同步，并新增对比度护栏 | ✅ |
 | 7.4 | 表现层（`GitDuo/Features/Repo/`）：**仓库详情两段换真件**（`RepoIssuesSection` / `RepoPullsSection`，含标签筛选档）· `IssueDetailView`（§4.9）· `NewIssueView`（§4.10）· `PullDetailView`（§4.11 三分区）· 两个弹层（`LabelPickerSheet` §5.2 / `MergePRSheet` §5.3）。⚠️ `IssueCard` / `PullCard` **移出 `Features/Explore/`** 改两处共用（决策 #61） | ⬜ |
 | 7.5 | 装配与路由：`AppEnvironment` 接入新用例与**草稿存储**（含 `signOut()` 清理）· `RouteView` 把 `.issueDetail` / `.newIssue` / `.prDetail` 三条从骨架屏换成真件 · `SkeletonPlaceholders.registry` 同步消解 | ⬜ |
 | 7.6 | 收尾：`make verify` + 文档同步 + **逐屏对照清单新增一批**（Issue 详情 / 新建 Issue / PR 详情 —— ⚠️ 别攒着，4.4 那次就是攒出来的） | ⬜ |
@@ -282,7 +282,7 @@
 |---|---|---|
 | `redesign/prototype/` | **唯一可点验收依据**（入口 `index.html`；`scripts/` 16 个 JS · `styles/` 5 个 CSS） | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
-| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**62 项全部【已定】**） |
+| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**63 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 | `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |

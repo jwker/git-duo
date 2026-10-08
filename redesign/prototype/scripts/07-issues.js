@@ -3,7 +3,13 @@ const REPO_LABELS = [
   {n:'bug',c:'#d73a4a'},{n:'enhancement',c:'#a2eeef'},{n:'docs',c:'#0075ca'},
   {n:'good first issue',c:'#7057ff'},{n:'help wanted',c:'#008672'}
 ];
-const LBL_COLORS = ['#d73a4a','#e16f24','#fbca04','#0e8a16','#0075ca','#5319e7','#8250df','#db61a2','#959da5','#1f2328'];
+/* ⚠️ 2026-10-08：色板改过一轮 —— `.lbl-tag` 是**白字压色块**，而其中四档太浅、
+   白字读不出来（对比度按 WCAG 2.1 算：橙 3.23 · 黄 1.55 · 粉 3.36 · 灰 2.75）。
+   换成同族深色后十档全部 ≥ 4.5:1，其余六档**原值不动**：
+     橙 #e16f24→#bc4c00(5.03) · 黄 #fbca04→#9a6700(4.87)
+     粉 #db61a2→#bf3989(5.05) · 灰 #959da5→#6a737d(4.82)
+   领域层 `GitDuoKit.LabelPalette.hexes` 存的是同一份（去掉 `#`），改一处必须改两处。 */
+const LBL_COLORS = ['#d73a4a','#bc4c00','#9a6700','#0e8a16','#0075ca','#5319e7','#8250df','#bf3989','#6a737d','#1f2328'];
 let pickedClr = LBL_COLORS[0];
 let niLabels = [];
 SCR.newIssue = {

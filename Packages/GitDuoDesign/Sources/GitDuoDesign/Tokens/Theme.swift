@@ -187,6 +187,45 @@ public enum Theme {
 
         /// 玻璃着色值（浅色约 30% 混合 —— §10.4 #4）
         public static let glassTint       = Color(hex: 0xFFFFFF).opacity(0.30)
+
+        // MARK: 切片 7 新增（出处与理由见 TECH_SPEC §10.7）
+
+        /// **评论气泡头部条**的底 —— 原型 `styles/04-screens.css` 第 34 行的
+        /// `.comment .bhead{background:#f9fafb}`。
+        ///
+        /// 出处是**内联色值**（不是变量），所以此前没有名字。
+        ///
+        /// ⚠️ 它与 `background`（`#F6F8FA`）**很接近但不是同一个值**，
+        /// 也不能拿 `surfaceSunken`（`#EFF2F5`）顶替：
+        /// - `bubbleHeaderSurface` → 白气泡**内部**的一条浅灰头，比卡片白暗一点点就够；
+        /// - `surfaceSunken` → 嵌在页面里的控件底（`.btn.ghost` / `.prtabs` 的槽），
+        ///   它比这一条暗一档。
+        ///
+        /// 混用（例如拿 `background` 顶替）不会报错，只会让气泡的头看起来**和卡片外的页面底
+        /// 一模一样**，于是"气泡从哪开始"这件事在白底上失去线索。
+        /// 沿 `codeSurface` / `background` 那条"接近但不是同一个值 ⇒ 两处独立取色"的先例。
+        public static let bubbleHeaderSurface = Color(hex: 0xF9FAFB)
+
+        /// **色值读不出来时**的兜底填充（标签胶囊 / 色块）。
+        ///
+        /// ## ⚠️「规格未给，待评审」—— 原型一次都没渲染过这一档
+        ///
+        /// 实时数据里它只会在**服务端回了一个不是六位十六进制的色值**时出现
+        /// （GitHub 正常路径永远回六位小写十六进制）。没有兜底的话，
+        /// `LabelColor.color(forHex:)` 返回 `nil`，标签就只剩一行白字**压在空气上** ——
+        /// 连"这个标签存在"都看不出来，比画错色更糟。
+        ///
+        /// ## 选它的唯一判据：白字压上去读得出来
+        ///
+        /// 值取 `#6A737D`（白字对比度 **4.82:1**）。它恰好与颜色色板里的"灰"同值，
+        /// 但**那是巧合，不是同一个东西**：
+        /// - 色板里的灰是**产品给用户选的一个颜色**，改它要同步改原型与 PRD；
+        /// - 这一档是**读不出来时的兜底表象**，将来改成斜纹 / 边框 / 问号图标都不会碰色板。
+        ///
+        /// 沿 `codeSurface` / `background` 那条"同值不是同一个令牌、将来未必同步变化"的判例。
+        /// ⚠️ 别拿 `textSecondary`（`#656D76`）顶替 —— 那是个**文字**令牌，
+        /// 让"按用途命名"这条规矩当场失效（下次有人想改正文次级色就会动到标签的底）。
+        public static let labelFallbackSurface = Color(hex: 0x6A737D)
     }
 
     // MARK: - 间距（4pt 基准）
@@ -247,6 +286,25 @@ public enum Theme {
         public static let hero: CGFloat = 16
         /// 与容器同心（Liquid Glass 推荐，§10.3）
         public static let container: CGFloat = 12
+        /// **评论气泡**那一档（切片 7 新增）。
+        ///
+        /// 原型 `styles/04-screens.css` 第 33 行的 `.comment .bubble{border-radius:12px}`。
+        ///
+        /// ⚠️ 它与 `container`(12) **今天同值，但不是一个令牌**：
+        /// `container` 是**设计指南**推出来的（"与父容器同心"，§10.3），只在玻璃那套语境里说话；
+        /// 而这一颗是**原型写死的**一档。将来补深色 / 调玻璃时 `container` 可能要动，
+        /// 而气泡的圆角不该跟着动 —— 那是"看起来会变形的气泡"。
+        /// 沿 `codeSurface` / `background` 那条"同值不是同一个令牌"的判例
+        /// （反面是 `Radius.control`：三处**同源于原型**的 9 才合成一档）。
+        public static let bubble: CGFloat = 12
+        /// **标签小色块**那一档（切片 7 新增）。
+        ///
+        /// 原型 `styles/03-components.css` 第 59 行的 `.lbl-dot{border-radius:4px}`。
+        ///
+        /// 4 是圆角阶里**最小的一档**（`chip` 是 6），只服务 12×12 的小方块：
+        /// 用 6 会让它看起来像个圆点（12 的方块配 6 的圆角已接近胶囊），
+        /// 而原型画的是**方一点的小色块** —— 与旁边 30×30 的 `ColorSwatch` 同族。
+        public static let labelDot: CGFloat = 4
     }
 
     // MARK: - 字号（沿用系统 Dynamic Type 语义层级，不自造点数）
@@ -333,6 +391,31 @@ public enum Theme {
         /// 所以这里不能复用 `Font.caption` —— 12.5px 落到的是系统 `.caption`(12pt)。
         /// 当前层那一段用 `.fontWeight(.semibold)` 叠在这上面（原型 `.crumb b{font-weight:600}`）。
         public static let breadcrumb = SwiftUI.Font.caption
+
+        // MARK: 切片 7 新增（出处与理由见 TECH_SPEC §10.7）
+
+        /// **对话头部标题**（原型 `styles/04-screens.css` 第 31 行的
+        /// `.conv-head h2{font-size:17.5px;font-weight:720}`）⇒ `.body`(17pt) + bold。
+        ///
+        /// ⚠️ 与 `markdownH2`（`.body.weight(.bold)`）**今天同值，但不是一个令牌**：
+        /// 原型里那两处是**两处独立取值**（`.markdown h2` 是 `17px/700`，
+        /// 这里是 `17.5px/720`），恰好都落到系统 17pt + bold 而已。
+        /// 名字也要说真话 —— 调 Markdown 的标题字号时，不该顺手改掉对话页的标题。
+        /// 沿 `markdownBody` / `rowTitle`（`14px` 与 `14.5px` 同落 `.subheadline`）的先例。
+        public static let conversationTitle = SwiftUI.Font.body.weight(.bold)
+
+        /// **评论气泡的头部行**（原型 `.comment .bhead{font-size:12px}`）⇒ 系统 `.caption`(12pt)。
+        ///
+        /// ⚠️ 与 `breadcrumb` 同值（都落系统 `.caption`），但**不是一个令牌**：
+        /// 原型里是两处独立取值（`.crumb` 是 `12.5px`、`.bhead` 是 `12px`），
+        /// 沿 `markdownBody` / `rowTitle` 同一条先例。
+        ///
+        /// 这一个令牌管**整条头部行**：作者名在它之上叠 `.fontWeight(.bold)`
+        /// （原型 `.bhead .author{font-weight:700}`），时间戳改用 `Font.caption`(11pt)
+        /// （原型 `.t3{font-size:11.5px}`，与页面里所有次级时间同一档）。
+        /// ⚠️ 别拿 `label`（12pt **semibold**）顶替：那会让整条头部行都变粗，
+        /// 于是作者名的"更粗"就看不出来了 —— 而作者名是这一行里唯一要抢眼的。
+        public static let commentMeta = SwiftUI.Font.caption
     }
 }
 
