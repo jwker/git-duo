@@ -1,3 +1,11 @@
+// Issue 列表的领域层：行模型 · 说明行文案 · 取数用例。
+//
+// ⚠️ 本文件切片 7 起**从 `Explore/` 移到了 `Repo/`**（决策 #61）：它服务两个页面 ——
+// 探索 Issues 列表（§4.14）与仓库详情 Issues 段（§4.4 分区二）。
+// 留在 `Explore/` 会让"这是探索页专属"变成一个**目录名说的谎**，
+// 而下一个要动它的人会先相信目录名。
+// ⚠️ 移动是纯整理（同一个 Swift 模块，路径不进编译单元）—— 没有一行行为因它改变。
+
 import Foundation
 import GitHubAPI
 import GitDuoCore
@@ -8,8 +16,8 @@ import GitDuoCore
 ///
 /// `IssueDTO.state` 是 `String`（见它的类型说明：GitHub 还在演进 `state_reason`，
 /// 枚举化一个仍在变的取值集合会让"某天多一个取值"表现为整页解码失败）。
-/// 但**到了领域层**，这个列表的场景是确定的：本列表只列开放式（决策 #38）
-/// ⇒ `isOpen` 就是全部所需。多留一个 `String` 只会让视图有机会去 `== "closed"` 地猜。
+/// 但**到了领域层**，这个列表的场景是确定的：只有"开放"与"已关闭"两档
+/// ⇒ 一个布尔值就是全部所需。多留一个 `String` 只会让视图有机会去 `== "closed"` 地猜。
 public struct IssueRow: Sendable, Hashable, Identifiable {
 
     /// 仓库内唯一编号 —— 卡片上的 `#42`，也是跳详情页的键。
@@ -17,8 +25,11 @@ public struct IssueRow: Sendable, Hashable, Identifiable {
 
     public let title: String
 
-    /// 是否开放。⚠️ 探索 Issues 列表**只会有 `true`**（决策 #38）；
-    /// 保留这个字段是为了让卡片组件能被「我的仓库」四分区（切片 7）直接复用。
+    /// 是否开放。
+    ///
+    /// ⚠️ 探索 Issues 列表里**只会是 `true`**（决策 #38：那一页只取 `.open`）；
+    /// 而仓库详情 Issues 段的「已关闭」档（决策 #61）会取到 `false` ——
+    /// 同一个行模型服务两处，值由**请求的那一档**决定。
     public let isOpen: Bool
 
     /// 评论条数（本列表的说明行**不显示它**，但卡片上显示 `3 条评论`）。
@@ -112,18 +123,47 @@ public enum OpenIssueIndicator {
 /// Issue 列表的数据来源 —— 领域层与网络层之间的接缝。
 public protocol RepoIssuesDataSource: Sendable {
 
-    /// `GET /repos/{owner}/{repo}/issues?state=open` 的一页。
+    /// `GET /repos/{owner}/{repo}/issues?state=…&labels=…` 的一页。
     ///
     /// ⚠️ **返回里混着 PR**（GitHub 把 PR 当作一种 Issue），过滤是**领域层的活**
     /// （见 `LoadRepoIssues`）—— 数据层原样返回，才能让"这一页 30 条里怎么只有 9 条"
     /// 这个问题有据可查。
-    func openIssues(owner: String, repo: String, cursor: URL?) async throws -> Page<IssueDTO>
+    ///
+    /// ⚠️ 参数用 `String` 而**不是**领域层的 `RepoListState`，这是接缝的硬约束：
+    /// 本协议由 `GitDuoKit` 声明、由 `GitHubAPI` 的 `GitHubRepoIssuesEndpoint`
+    /// **空扩展体**满足（那边看不见领域层的类型 —— 依赖是单向的）。
+    /// 词汇转换在 `LoadRepoIssues` 里做一次，别在两处各转一遍。
+    /// 服务端取值：`open` / `closed` / `all`。
+    ///
+    /// ⚠️ `labels` 为空数组 ⇒ 数据层**不带**该参数（不筛）；
+    /// 非空 ⇒ 逗号分隔、服务端按 **AND** 语义（要同时带上这些标签）。
+    func issues(
+        owner: String,
+        repo: String,
+        state: String,
+        labels: [String],
+        cursor: URL?
+    ) async throws -> Page<IssueDTO>
 }
 
 /// 让真实端点满足上面的接缝（协议是我们自己声明的，不是追溯适配）。
+///
+/// ⚠️ **空扩展体能成立，靠的是方法签名逐字一致** —— 数据层那边改了名字或参数顺序，
+/// 这里不会报"少实现一个方法"（那会），但如果两边"看起来都实现了"却对不上，
+/// 编译器只会在别处抛一句难懂的错。签名对齐是这套接缝唯一的纪律。
 extension GitHubRepoIssuesEndpoint: RepoIssuesDataSource {}
 
-/// 取探索 Issues 列表的一页（PRD §4.14、TECH_SPEC §4.6.2、决策 #38）。
+/// 取 Issues 列表的一页（PRD §4.14 / §4.4 分区二、TECH_SPEC §9.8、决策 #38 / #56 / #61）。
+///
+/// ## 它同时服务两个页面（决策 #61）
+///
+/// | 调用方 | `state` | `labels` |
+/// |---|---|---|
+/// | 探索 Issues 列表（§4.14） | `.open` | 不筛 |
+/// | 仓库详情 Issues 段（§4.4 分区二） | `.open` / `.closed` | 可有（标签筛选） |
+///
+/// 两处的**取数规则完全相同**（滤掉混进来的 PR），差别只在"向服务端要哪一批" ⇒
+/// 用一个用例 + 参数表达，而不是复制一份。
 public struct LoadRepoIssues: Sendable {
 
     private let source: any RepoIssuesDataSource
@@ -132,23 +172,41 @@ public struct LoadRepoIssues: Sendable {
         self.source = source
     }
 
-    /// - Parameter cursor: 上一页的 `nextCursor`；`nil` 取第一页。
+    /// - Parameters:
+    ///   - state: 向服务端要哪一档。**没有默认值** —— 四个调用方的意图各不相同，
+    ///     给默认值等于让"忘了传"静默地选错一批数据，而结果看起来完全正常。
+    ///   - labels: 标签筛选（**走服务端**，决策 #56）。空数组 ⇒ 不筛。
+    ///   - cursor: 上一页的 `nextCursor`；`nil` 取第一页。
     /// - Returns: **已滤掉 PR** 的一页。
     ///
     /// ## 为什么过滤放在这一层（而不是数据层或视图层）
     ///
-    /// - **不能放数据层**：那样"哪些算 Issue"这条产品口径就沉进了 `GitHubAPI`，
-    ///   而它下次还可能变（切片 7 的「我的仓库」要显示已关闭的）。
-    /// - **不能放视图层**：视图拿到的条目会被 `PagedListState` 计数，而
+    /// - **不能放数据层**：那样"哪些算 Issue"这条产品口径就沉进了 `GitHubAPI`。
+    /// - **不能放视图层**：视图拿到的条目会被分页状态机计数，而
     ///   `{N}` 的语义正是"已加载的**非 PR** 条目数"（决策 #38）——
     ///   过滤晚一步，计数就把 PR 也算进去了，而那个数会与屏幕上看到的条数对不上。
     ///
     /// ⚠️ **分页步长因此不是"每页 30 个 Issue"**：一页 30 条里可能只有 9 个 Issue。
     /// 这不是 bug，是 `GET /issues` 的固有行为 —— 也正因如此，
     /// 用完一页不代表"看完了 30 个 Issue"，`hasMore` 必须原样带走。
-    public func load(fullName: String, cursor: URL? = nil) async throws -> Page<IssueRow> {
+    ///
+    /// ⚠️ **标签筛选也走服务端**（决策 #56）—— 不做本地过滤：
+    /// 本地只能筛**已加载的那一页**（30 条，其中还混着 PR），结果显著偏少，
+    /// 而说明行的计数会与"实际有多少"对不上（决策 #38 被否掉的是同一个形状）。
+    public func load(
+        fullName: String,
+        state: RepoListState,
+        labels: [String] = [],
+        cursor: URL? = nil
+    ) async throws -> Page<IssueRow> {
         let (owner, repo) = try RepositoryMapper.splitFullName(fullName)
-        let page = try await source.openIssues(owner: owner, repo: repo, cursor: cursor)
+        let page = try await source.issues(
+            owner: owner,
+            repo: repo,
+            state: state.rawValue,
+            labels: labels,
+            cursor: cursor
+        )
 
         return Page(
             items: page.items.filter { !$0.isPullRequest }.map(Self.row(from:)),
@@ -163,9 +221,9 @@ public struct LoadRepoIssues: Sendable {
         IssueRow(
             number: dto.number,
             title: dto.title,
-            // 本端点只取 `state=open`（决策 #38），所以这里是 `true`；
-            // 仍然读一次而不是写死 `true` —— 将来加了 `state=all` 的参数时，
-            // 写死的那一处会静默把所有条目说成"开放"。
+            // ⚠️ 读一次 `state` 而不是按"我们请求的是 open"写死 `true`：
+            // 现在这个用例已经能取 `.closed` 了（决策 #61），写死的那一处会
+            // 静默把已关闭的 Issue 说成"开放"。
             isOpen: dto.state == "open",
             comments: dto.comments,
             // 用 `created_at` 而不是 `updated_at`：卡片文案说的是"创建"。

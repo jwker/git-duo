@@ -38,7 +38,9 @@ struct ExploreIssueListView: View {
         //    外面的 `self.fullName`，而两者恰好同值时，遮蔽出的错会一直潜伏到
         //    某天有人改了其中一个（这个坑今天在两个包里各踩过一次）。
         _model = State(initialValue: RepoSubListViewModel { name, cursor in
-            try await issues.load(fullName: name, cursor: cursor)
+            // 探索页固定取「开放」那一档（决策 #38）—— 现在 `state` 是显式的，
+            // 因为同一个用例也服务仓库详情 Issues 段（那一页两档都要，决策 #61）。
+            try await issues.load(fullName: name, state: .open, cursor: cursor)
         })
     }
 

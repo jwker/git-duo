@@ -27,12 +27,32 @@ struct RepoPullsTests {
 
         private var pages: [Page<PullRequestDTO>]
         private(set) var cursors: [URL?] = []
+        /// 实际发出去的 `state` —— 四个调用方的意图各不相同，传错档会静默给错一批。
+        private(set) var states: [String] = []
 
         init(pages: [Page<PullRequestDTO>]) { self.pages = pages }
 
-        func pullRequests(owner: String, repo: String, cursor: URL?) async throws -> Page<PullRequestDTO> {
+        func pullRequests(
+            owner: String,
+            repo: String,
+            state: String,
+            cursor: URL?
+        ) async throws -> Page<PullRequestDTO> {
+            states.append(state)
             cursors.append(cursor)
-            return pages.count > 1 ? pages.removeFirst() : (pages.first ?? Page(items: [], nextCursor: nil))
+            let next = pages.count > 1 ? pages.removeFirst() : (pages.first ?? Page(items: [], nextCursor: nil))
+
+            // ⚠️ 替身**按 `state` 筛一遍**，模仿服务端 —— 否则"三档各自要哪一批"这件事
+            //    在测试里根本不存在：喂进去 3 条，三档都会拿回同样的 3 条，
+            //    而真实调用里"要错一批"是这个功能唯一会错的地方（见 `stateIsForwardedVerbatim`）。
+            let filtered = next.items.filter { dto in
+                switch state {
+                case "open": dto.state == "open"
+                case "closed": dto.state == "closed"
+                default: true          // `all` = 不筛（服务端语义）
+                }
+            }
+            return Page(items: filtered, nextCursor: next.nextCursor, headers: next.headers)
         }
     }
 
@@ -66,7 +86,7 @@ struct RepoPullsTests {
             ], nextCursor: nil)
         ])
 
-        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b")
+        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b", state: .all)
 
         // 2 号留下 ⇒ `state == "closed"` 加上 `merged_at` 确实判成了 `.merged`；
         // 3 号走的是**另一个分支**（`.closed` 后被滤），两条路径必须分开 ——
@@ -86,7 +106,7 @@ struct RepoPullsTests {
             ], nextCursor: nil)
         ])
 
-        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b")
+        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b", state: .all)
 
         #expect(page.items.map(\.number) == [1, 2])
         #expect(!page.items.contains { $0.state == .closed },
@@ -99,7 +119,7 @@ struct RepoPullsTests {
             Page(items: [dto(1, state: "closed", mergedAt: base)], nextCursor: nil)
         ])
 
-        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b")
+        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b", state: .all)
 
         #expect(page.items.count == 1)
         #expect(page.items.first?.state == .merged)
@@ -113,7 +133,7 @@ struct RepoPullsTests {
             Page(items: [dto(1, state: "closed"), dto(2, state: "closed")], nextCursor: next)
         ])
 
-        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b")
+        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b", state: .all)
 
         #expect(page.items.isEmpty)
         #expect(page.nextCursor == next, "丢掉游标会让用户以为这个仓库一个 PR 都没有")
@@ -126,8 +146,8 @@ struct RepoPullsTests {
         let source = ScriptedPullsSource(pages: [Page(items: [dto(1)], nextCursor: next)])
         let loader = LoadRepoPulls(source: source)
 
-        _ = try await loader.load(fullName: "a/b")
-        _ = try await loader.load(fullName: "a/b", cursor: next)
+        _ = try await loader.load(fullName: "a/b", state: .all)
+        _ = try await loader.load(fullName: "a/b", state: .all, cursor: next)
 
         #expect(await source.cursors == [nil, next])
     }
@@ -140,7 +160,7 @@ struct RepoPullsTests {
         let source = ScriptedPullsSource(pages: [])
         var threw = false
         do {
-            _ = try await LoadRepoPulls(source: source).load(fullName: fullName)
+            _ = try await LoadRepoPulls(source: source).load(fullName: fullName, state: .all)
         } catch let error as RepositoryMappingError {
             #expect(error == .malformedFullName(fullName))
             threw = true
@@ -216,5 +236,74 @@ struct RepoPullsTests {
         #expect(PullListIndicator.emptyTitle != PullListIndicator.emptyHint)
         #expect(PullListIndicator.emptyTitle != OpenIssueIndicator.emptyTitle)
         #expect(PullListIndicator.footer != OpenIssueIndicator.footer)
+    }
+
+    // MARK: - 切片 7：三档都用同一个用例（决策 #61）
+
+    @Test("⚠️ 三个调用方各自的 `state` 逐档传下去（`.all` / `.open` / `.closed` 意图不同）")
+    func stateIsForwardedVerbatim() async throws {
+        let source = ScriptedPullsSource(pages: [Page(items: [], nextCursor: nil)])
+        let loader = LoadRepoPulls(source: source)
+
+        _ = try await loader.load(fullName: "a/b", state: .all)
+        _ = try await loader.load(fullName: "a/b", state: .open)
+        _ = try await loader.load(fullName: "a/b", state: .closed)
+
+        #expect(await source.states == ["all", "open", "closed"])
+    }
+
+    @Test(
+        """
+        ⚠️ **「关闭但未合并」在三档里都不显示** —— 过滤条件与 `state` 无关，
+        写成一条不变量，而不是按档分支（按档写要维护三处，漏一处屏幕上完全看不出来）
+        """
+    )
+    func closedButNotMergedIsHiddenInEveryState() async throws {
+        // 同一批数据喂三次：开放 / 已合并 / 关闭未合并 各一条。
+        let makeSource = {
+            ScriptedPullsSource(pages: [
+                Page(
+                    items: [
+                        self.dto(1, title: "还开着", state: "open"),
+                        self.dto(2, title: "合了", state: "closed", mergedAt: self.base),
+                        self.dto(3, title: "关掉了没合", state: "closed", mergedAt: nil),
+                    ],
+                    nextCursor: nil
+                )
+            ])
+        }
+
+        for state in [RepoListState.all, .open, .closed] {
+            let page = try await LoadRepoPulls(source: makeSource()).load(fullName: "a/b", state: state)
+            #expect(
+                page.items.contains { $0.number == 3 } == false,
+                "\(state.rawValue)：关闭但未合并的 3 号不该出现"
+            )
+        }
+    }
+
+    @Test("各档实际留下谁：`.all` 开放 + 已合并 · `.open` 只剩开放 · `.closed` 只剩已合并")
+    func eachStateKeepsTheRightRows() async throws {
+        let makeSource = {
+            ScriptedPullsSource(pages: [
+                Page(
+                    items: [
+                        self.dto(1, state: "open"),
+                        self.dto(2, state: "closed", mergedAt: self.base),
+                        self.dto(3, state: "closed", mergedAt: nil),
+                    ],
+                    nextCursor: nil
+                )
+            ])
+        }
+
+        let all = try await LoadRepoPulls(source: makeSource()).load(fullName: "a/b", state: .all)
+        #expect(all.items.map(\.number) == [1, 2])
+
+        let open = try await LoadRepoPulls(source: makeSource()).load(fullName: "a/b", state: .open)
+        #expect(open.items.map(\.number) == [1])
+
+        let closed = try await LoadRepoPulls(source: makeSource()).load(fullName: "a/b", state: .closed)
+        #expect(closed.items.map(\.number) == [2])
     }
 }

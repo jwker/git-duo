@@ -30,7 +30,10 @@ struct ExplorePRListView: View {
         self.fullName = fullName
         // ⚠️ 闭包形参叫 `name` 而不是 `fullName` —— 避免遮蔽 `self.fullName`（同 Issues 页）。
         _model = State(initialValue: RepoSubListViewModel { name, cursor in
-            try await pulls.load(fullName: name, cursor: cursor)
+            // 探索页取 `.all` 再滤掉「关闭但未合并」（§4.15、决策 #39）——
+            // 它要的是"开放 + 已合并"，而服务端**没有**这一个筛选项。
+            // `state` 现在必须显式给：仓库详情 PR 段两档分别是 `.open` / `.closed`（决策 #61）。
+            try await pulls.load(fullName: name, state: .all, cursor: cursor)
         })
     }
 

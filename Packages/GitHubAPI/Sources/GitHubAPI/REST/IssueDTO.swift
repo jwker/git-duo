@@ -14,9 +14,11 @@ import Foundation
 ///
 /// ## 只声明卡片真正用到的字段
 ///
-/// PRD §4.14 的 Issue 卡片是：状态图标 + 标题 + `#N · {时间} · 由 {作者} 创建`。
-/// 所以**没有** `labels` / `body` / `assignees` / `milestone` / `closed_at` ——
-/// 那些是 Issue 详情页（切片 7）的事，现在猜进来等于替那时的自己拍板。
+/// PRD §4.14 的 Issue 卡片是：状态图标 + 标题 + `#N · {时间} · 由 {作者} 创建`；
+/// 仓库详情（§4.4 分区二，决策 #61）**多一枚标签胶囊** ⇒ 切片 7 补了 `labels`。
+/// 仍然**没有** `body` / `assignees` / `milestone` / `closed_at` ——
+/// 那几样是 Issue **详情**页的事，而详情走的是另一个端点（`GET …/issues/{n}`，
+/// 见 `IssueDetailDTO`）；卡片不需要它们。
 public struct IssueDTO: Sendable, Equatable, Decodable {
 
     /// Issue 编号（仓库内唯一）—— 卡片上的 `#42`，也是跳详情页的键。
@@ -42,7 +44,27 @@ public struct IssueDTO: Sendable, Equatable, Decodable {
 
     /// 作者。**可以是 `null`** —— 账号被删除后，GitHub 把整段 `user` 置为 `null`。
     /// 声明成必需会让"一个已删除用户的 Issue"把整页打崩。
-    public let user: Author?
+    ///
+    /// ⚠️ 类型是顶层的 `AuthorDTO`（切片 7 从本类型里提出去的）：Issue 详情、评论、PR、评审
+    /// 四处都用同一个形状，嵌在各自的 DTO 里迟早长岔。
+    public let user: AuthorDTO?
+
+    /// 标签（**切片 7 新增**）。
+    ///
+    /// ## 为什么是**可选**的
+    ///
+    /// 合成的 `init(from:)` 对**非可选**字段缺一个 key 就整页解码失败 ——
+    /// 而"少一组标签"远不该值这个代价（与 `state` 那条不同：那一次是为"取值集合还会变"
+    /// 留余地，这一次是为"形状可能不带"留的）。领域层按空数组处理。
+    ///
+    /// ## 为什么数据层也带上它（探索页并不画它）
+    ///
+    /// PRD §4.4 分区二的 Issue 卡片写了「标签胶囊」，而探索页的卡片没有
+    /// （原型 `10-explore-repo.js` 的卡片只有两行）。同一份 DTO 两处共用 ⇒
+    /// 差异表达在**消费端**（卡片画不画），而不是在数据形状上 ——
+    /// 这也正是"同形必分叉"的正面用法：让一处定义承担两种用法，
+    /// 而不是复制一份 DTO。
+    public let labels: [LabelDTO]?
 
     /// `pull_request` 字段的**存在性**就是判据。
     ///
@@ -54,14 +76,6 @@ public struct IssueDTO: Sendable, Equatable, Decodable {
     /// 它是 PR 而不是 Issue —— 列表必须按这个过滤（见类型说明）。
     public var isPullRequest: Bool { pullRequest != nil }
 
-    public struct Author: Sendable, Equatable, Decodable {
-        public let login: String
-
-        public init(login: String) {
-            self.login = login
-        }
-    }
-
     public struct PullRequestMarker: Sendable, Equatable, Decodable {
         public init() {}
     }
@@ -72,7 +86,8 @@ public struct IssueDTO: Sendable, Equatable, Decodable {
         state: String,
         comments: Int,
         createdAt: Date,
-        user: Author? = nil,
+        user: AuthorDTO? = nil,
+        labels: [LabelDTO]? = nil,
         pullRequest: PullRequestMarker? = nil
     ) {
         self.number = number
@@ -81,6 +96,7 @@ public struct IssueDTO: Sendable, Equatable, Decodable {
         self.comments = comments
         self.createdAt = createdAt
         self.user = user
+        self.labels = labels
         self.pullRequest = pullRequest
     }
 
@@ -91,6 +107,7 @@ public struct IssueDTO: Sendable, Equatable, Decodable {
         case comments
         case createdAt = "created_at"
         case user
+        case labels
         case pullRequest = "pull_request"
     }
 }

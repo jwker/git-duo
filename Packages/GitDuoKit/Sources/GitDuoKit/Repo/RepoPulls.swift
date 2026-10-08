@@ -1,3 +1,8 @@
+// PR 列表的领域层：三态判定 · 行模型 · 说明行文案 · 取数用例。
+//
+// ⚠️ 本文件切片 7 起**从 `Explore/` 移到了 `Repo/`**（决策 #61）：它服务两个页面 ——
+// 探索 PR 列表（§4.15）与仓库详情 PR 段（§4.4 分区三）。理由同 `RepoIssues.swift`。
+
 import Foundation
 import GitHubAPI
 
@@ -180,14 +185,24 @@ public enum PullListIndicator {
 /// PR 列表的数据来源 —— 领域层与网络层之间的接缝。
 public protocol RepoPullsDataSource: Sendable {
 
-    /// `GET /repos/{owner}/{repo}/pulls?state=all` 的一页。
-    func pullRequests(owner: String, repo: String, cursor: URL?) async throws -> Page<PullRequestDTO>
+    /// `GET /repos/{owner}/{repo}/pulls?state=…` 的一页。
+    ///
+    /// ⚠️ 参数用 `String` 而不是领域层的 `RepoListState` —— 与 `RepoIssuesDataSource`
+    /// 同一条约束（协议由本包声明、由 `GitHubAPI` 的端点空扩展体满足，
+    /// 那边看不见领域层的类型）。词汇转换在 `LoadRepoPulls` 里做一次。
+    /// 服务端取值：`open` / `closed` / `all`。
+    func pullRequests(
+        owner: String,
+        repo: String,
+        state: String,
+        cursor: URL?
+    ) async throws -> Page<PullRequestDTO>
 }
 
 /// 让真实端点满足上面的接缝（协议是我们自己声明的，不是追溯适配）。
 extension GitHubRepoPullsEndpoint: RepoPullsDataSource {}
 
-/// 取探索 PR 列表的一页（PRD §4.15、决策 #39）。
+/// 取 PR 列表的一页（PRD §4.15 / §4.4 分区三、决策 #39 / #61）。
 public struct LoadRepoPulls: Sendable {
 
     private let source: any RepoPullsDataSource
@@ -196,29 +211,45 @@ public struct LoadRepoPulls: Sendable {
         self.source = source
     }
 
-    /// - Parameter cursor: 上一页的 `nextCursor`；`nil` 取第一页。
-    /// - Returns: 一页 PR（**开放 + 已合并**，每行按状态换图标）。
+    /// - Parameters:
+    ///   - state: 向服务端要哪一档。
+    ///     ⚠️ **要"已合并"必须传 `.closed`** —— GitHub 没有"只看已合并"这一个筛选项
+    ///     （`state` 只有 open / closed，合并与"关闭但没合并"长得一样），
+    ///     取回闭档后再按 `merged_at` 本地分开。
+    ///   - cursor: 上一页的 `nextCursor`；`nil` 取第一页。
+    /// - Returns: 一页 PR（**滤掉「关闭但未合并」**）。
     ///
-    /// ## ⚠️ 两边都有过滤，但滤的不是同一样东西
+    /// ## 三个调用方，同一套过滤规则 —— 这是有意的
     ///
-    /// | | `LoadRepoIssues` | `LoadRepoPulls` |
+    /// | 调用方 | `state` | 结果里剩什么 |
     /// |---|---|---|
-    /// | 滤掉什么 | **混进来的 PR**（`pull_request` 字段） | **已关闭但未合并的** |
-    /// | 依据 | `GET /issues` 会混入 PR | PRD §4.15 只列开放 + 已合并 |
+    /// | 探索 PR 列表（§4.15） | `.all` | 开放 + 已合并 |
+    /// | 仓库详情「开放」档（§4.4 分区三） | `.open` | 开放 |
+    /// | 仓库详情「已合并」档 | `.closed` | 已合并 |
     ///
-    /// 两个取数用例长得像、规则却不同 —— 这正是**不能合并成一个**的理由：
-    /// 合并后必然要传一个"滤什么"的开关，而那个开关迟早会被用错一侧。
+    /// 三档看起来要三种过滤，其实**一句话就够**：**「关闭但未合并」在任何一档里都不显示**
+    /// （PRD §4.15 与 §4.4 分区三都这么写）。所以过滤条件与 `state` 无关，
+    /// 写成一个不变量比按档分支更难写错 —— 后者要维护三处、而"某一档忘了滤"
+    /// 的表现是列表里混进几条用户不想看的记录，屏幕上完全看不出来。
     ///
-    /// ⚠️ 另一处不同：这里的过滤条件**在映射之后才成立**（"已关闭未合并"要靠
-    /// `merged_at` 算出来，见 `PullRequestState`）⇒ 是 `map` 完再 `filter`，
-    /// 而不是像 `LoadRepoIssues` 那样先 `filter`（那边判据 `pull_request`
-    /// 在原始 DTO 上就成立）。
+    /// ⚠️ 过滤条件在**映射之后**才成立（"已关闭未合并"要靠 `merged_at` 算出来，
+    /// 见 `PullRequestState`）⇒ 是 `map` 完再 `filter`，而不是像 `LoadRepoIssues`
+    /// 那样先 `filter`（那边判据 `pull_request` 在原始 DTO 上就成立）。
     ///
-    /// ⚠️ 因此**分页步长同样不是"每页 30 个 PR"**：一页里被滤掉几条就少几条，
+    /// ⚠️ 因此**分页步长不是"每页 30 个 PR"**：一页里被滤掉几条就少几条，
     /// 而"这一页没有可显示的了"不代表"后面也没有"⇒ `hasMore` 必须原样带走。
-    public func load(fullName: String, cursor: URL? = nil) async throws -> Page<PullRow> {
+    public func load(
+        fullName: String,
+        state: RepoListState,
+        cursor: URL? = nil
+    ) async throws -> Page<PullRow> {
         let (owner, repo) = try RepositoryMapper.splitFullName(fullName)
-        let page = try await source.pullRequests(owner: owner, repo: repo, cursor: cursor)
+        let page = try await source.pullRequests(
+            owner: owner,
+            repo: repo,
+            state: state.rawValue,
+            cursor: cursor
+        )
 
         return Page(
             items: page.items.map(Self.row(from:)).filter { $0.state != .closed },

@@ -3,7 +3,7 @@ import Testing
 
 @testable import GitHubAPI
 
-/// 切片 6 数据层的**配额桶守卫**（TECH_SPEC §4.5、§13.2）。
+/// 切片 6 / 7 数据层的**配额桶守卫**（TECH_SPEC §4.5、§13.2）。
 ///
 /// ## 为什么需要这一套
 ///
@@ -22,7 +22,7 @@ import Testing
 /// - `.search` / `.codeSearch` **从没被写过** ⇒ 它没有误用搜索桶。
 ///
 /// 比"断言它没被限速"强：后者对 `.core` 与"压根没声明"这两种情况给出同一个结果。
-@Suite("切片 6 数据层 · 配额桶守卫")
+@Suite("切片 6/7 数据层 · 配额桶守卫")
 struct RepoEndpointQuotaTests {
 
     private let credentials = GitHubAppCredentials(
@@ -193,9 +193,103 @@ struct RepoEndpointQuotaTests {
         }
     }
 
+    // MARK: - 切片 7：Issues / PR 共 13 条路由
+    //
+    // ⚠️ 这 13 条**全在主桶**（`.core`）—— 与 §4.14 / §4.15 的探索两页同一个桶（§9.8.1）。
+    //    一条都不能落到搜索桶：Search 桶只有 30/分钟，而这些路由是**点进一页就会连发几条**
+    //    （详情 = 正文 + 评论两条），落错桶的表现是"翻两个 PR 就 403"，而单看代码看不出来。
+
+    private static let issueDetailJSON = StubURLProtocol.Response.json(
+        #"{"number":42,"title":"t","state":"open","created_at":"2026-10-06T08:00:00Z"}"#
+    )
+    private static let createdJSON = StubURLProtocol.Response.json(
+        #"{"id":903,"body":"b","created_at":"2026-10-08T09:00:00Z"}"#,
+        status: 201
+    )
+    private static let labelJSON = StubURLProtocol.Response.json(
+        #"{"name":"bug","color":"d73a4a","description":null}"#,
+        status: 201
+    )
+    private static let pullDetailJSON = StubURLProtocol.Response.json(
+        """
+        {"number":57,"title":"t","state":"open","merged_at":null,
+         "head":{"ref":"a"},"base":{"ref":"main"},
+         "additions":1,"deletions":1,"changed_files":1}
+        """
+    )
+    private static let pullMergeJSON = StubURLProtocol.Response.json(
+        #"{"sha":"s","merged":true,"message":"ok"}"#
+    )
+
+    @Test("Issue 5 条路由 —— 全部主桶（列表 / 详情 / 评论读 / 评论写 / 新建）")
+    func issueRoutesAreCore() async {
+        await assertCoreBucket("issues（列表）", stub: Self.emptyPage) { client in
+            _ = try await GitHubRepoIssuesEndpoint(client: client)
+                .issues(owner: "o", repo: "r", state: "open", labels: ["bug"])
+        }
+        await assertCoreBucket("issues/{n}（详情）", stub: Self.issueDetailJSON) { client in
+            _ = try await GitHubRepoIssuesEndpoint(client: client).issue(owner: "o", repo: "r", number: 42)
+        }
+        await assertCoreBucket("issues/{n}/comments（读）", stub: Self.emptyPage) { client in
+            _ = try await GitHubRepoIssuesEndpoint(client: client)
+                .issueComments(owner: "o", repo: "r", number: 42)
+        }
+        await assertCoreBucket("issues/{n}/comments（写）", stub: Self.createdJSON) { client in
+            _ = try await GitHubRepoIssuesEndpoint(client: client)
+                .createIssueComment(owner: "o", repo: "r", number: 42, body: "b")
+        }
+        await assertCoreBucket("issues（新建）", stub: Self.issueDetailJSON) { client in
+            _ = try await GitHubRepoIssuesEndpoint(client: client)
+                .createIssue(owner: "o", repo: "r", title: "t")
+        }
+    }
+
+    @Test("标签 2 条路由 —— 全部主桶（列出 / 新建）")
+    func labelRoutesAreCore() async {
+        await assertCoreBucket("labels（列表）", stub: Self.emptyPage) { client in
+            _ = try await GitHubRepoLabelsEndpoint(client: client).labels(owner: "o", repo: "r")
+        }
+        await assertCoreBucket("labels（新建）", stub: Self.labelJSON) { client in
+            _ = try await GitHubRepoLabelsEndpoint(client: client)
+                .createLabel(owner: "o", repo: "r", name: "bug", color: "d73a4a")
+        }
+    }
+
+    @Test("PR 7 条路由 —— 全部主桶（列表 / 详情 / 文件 / Commits / 评审 / 合并 / 改状态）")
+    func pullRoutesAreCore() async {
+        await assertCoreBucket("pulls（列表）", stub: Self.emptyPage) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .pullRequests(owner: "o", repo: "r", state: "all")
+        }
+        await assertCoreBucket("pulls/{n}（详情）", stub: Self.pullDetailJSON) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .pullRequest(owner: "o", repo: "r", number: 57)
+        }
+        await assertCoreBucket("pulls/{n}/files", stub: Self.emptyPage) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .pullFiles(owner: "o", repo: "r", number: 57)
+        }
+        await assertCoreBucket("pulls/{n}/commits", stub: Self.emptyPage) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .pullCommits(owner: "o", repo: "r", number: 57)
+        }
+        await assertCoreBucket("pulls/{n}/reviews", stub: Self.emptyPage) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .pullReviews(owner: "o", repo: "r", number: 57)
+        }
+        await assertCoreBucket("pulls/{n}/merge", stub: Self.pullMergeJSON) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .mergePull(owner: "o", repo: "r", number: 57, method: .squash)
+        }
+        await assertCoreBucket("pulls/{n}（改状态）", stub: Self.pullDetailJSON) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .updatePullState(owner: "o", repo: "r", number: 57, state: "closed")
+        }
+    }
+
     // MARK: - 默认会话不挂 URLCache（决策 #32）
 
-    @Test("四个新端点的**默认**会话都不挂 URLCache（决策 #32：令牌会跟着序列化请求对象落盘）")
+    @Test("七个端点的**默认**会话都不挂 URLCache（决策 #32：令牌会跟着序列化请求对象落盘）")
     func defaultSessionsDoNotUseURLCache() {
         let plain = GitHubRESTClient(credentials: credentials)
 
@@ -203,5 +297,9 @@ struct RepoEndpointQuotaTests {
         #expect(GitHubRepoContentEndpoint(client: plain).session.configuration.urlCache == nil)
         #expect(GitHubRepoCommitEndpoint(client: plain).session.configuration.urlCache == nil)
         #expect(GitHubRepoBranchEndpoint(client: plain).session.configuration.urlCache == nil)
+        // 切片 7 三个（含两个新的写入口）
+        #expect(GitHubRepoIssuesEndpoint(client: plain).session.configuration.urlCache == nil)
+        #expect(GitHubRepoPullsEndpoint(client: plain).session.configuration.urlCache == nil)
+        #expect(GitHubRepoLabelsEndpoint(client: plain).session.configuration.urlCache == nil)
     }
 }

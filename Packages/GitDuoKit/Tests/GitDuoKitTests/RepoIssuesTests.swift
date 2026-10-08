@@ -32,11 +32,23 @@ struct RepoIssuesTests {
         private var pages: [Page<IssueDTO>]
         private(set) var cursors: [URL?] = []
         private(set) var owners: [String] = []
+        /// 实际发出去的 `state` —— 「请求的那一档」必须是调用方显式给的那个。
+        private(set) var states: [String] = []
+        /// 实际发出去的标签筛选。
+        private(set) var labelFilters: [[String]] = []
 
         init(pages: [Page<IssueDTO>]) { self.pages = pages }
 
-        func openIssues(owner: String, repo: String, cursor: URL?) async throws -> Page<IssueDTO> {
+        func issues(
+            owner: String,
+            repo: String,
+            state: String,
+            labels: [String],
+            cursor: URL?
+        ) async throws -> Page<IssueDTO> {
             owners.append("\(owner)/\(repo)")
+            states.append(state)
+            labelFilters.append(labels)
             cursors.append(cursor)
             return pages.count > 1 ? pages.removeFirst() : (pages.first ?? Page(items: [], nextCursor: nil))
         }
@@ -56,7 +68,7 @@ struct RepoIssuesTests {
             state: state,
             comments: comments,
             createdAt: base,
-            user: author.map(IssueDTO.Author.init(login:)),
+            user: author.map(AuthorDTO.init(login:)),
             pullRequest: isPullRequest ? IssueDTO.PullRequestMarker() : nil
         )
     }
@@ -73,7 +85,7 @@ struct RepoIssuesTests {
             ], nextCursor: nil)
         ])
 
-        let page = try await LoadRepoIssues(source: source).load(fullName: "kuda/ui-craft")
+        let page = try await LoadRepoIssues(source: source).load(fullName: "kuda/ui-craft", state: .open)
 
         #expect(page.items.map(\.number) == [1])
         #expect(page.items.first?.title == "真的是 Issue")
@@ -86,7 +98,7 @@ struct RepoIssuesTests {
             Page(items: [dto(1)], nextCursor: next)
         ])
 
-        let page = try await LoadRepoIssues(source: source).load(fullName: "a/b")
+        let page = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .open)
 
         #expect(page.nextCursor == next)
         #expect(page.hasMore)
@@ -98,8 +110,8 @@ struct RepoIssuesTests {
         let source = ScriptedIssuesSource(pages: [Page(items: [dto(1)], nextCursor: next)])
         let loader = LoadRepoIssues(source: source)
 
-        _ = try await loader.load(fullName: "a/b")
-        _ = try await loader.load(fullName: "a/b", cursor: next)
+        _ = try await loader.load(fullName: "a/b", state: .open)
+        _ = try await loader.load(fullName: "a/b", state: .open, cursor: next)
 
         #expect(await source.cursors == [nil, next])
     }
@@ -108,7 +120,7 @@ struct RepoIssuesTests {
     func fullNameIsSplit() async throws {
         let source = ScriptedIssuesSource(pages: [Page(items: [], nextCursor: nil)])
 
-        _ = try await LoadRepoIssues(source: source).load(fullName: "rust-lang/rust")
+        _ = try await LoadRepoIssues(source: source).load(fullName: "rust-lang/rust", state: .open)
 
         #expect(await source.owners == ["rust-lang/rust"])
     }
@@ -121,7 +133,7 @@ struct RepoIssuesTests {
         let source = ScriptedIssuesSource(pages: [])
         var threw = false
         do {
-            _ = try await LoadRepoIssues(source: source).load(fullName: fullName)
+            _ = try await LoadRepoIssues(source: source).load(fullName: fullName, state: .open)
         } catch let error as RepositoryMappingError {
             #expect(error == .malformedFullName(fullName))
             threw = true
@@ -231,5 +243,50 @@ struct RepoIssuesTests {
     func emptyCopyIsNotOneSentence() {
         #expect(OpenIssueIndicator.emptyTitle != OpenIssueIndicator.emptyHint)
         #expect(!OpenIssueIndicator.emptyHint.contains(OpenIssueIndicator.emptyTitle))
+    }
+
+    // MARK: - 切片 7：状态与标签（决策 #56 / #61）
+
+    @Test("⚠️ 请求的那一档必须**逐档传下去**（传错档会静默给出另一批数据）")
+    func stateIsForwardedVerbatim() async throws {
+        let source = ScriptedIssuesSource(pages: [Page(items: [], nextCursor: nil)])
+
+        _ = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .closed)
+
+        #expect(await source.states == ["closed"])
+        // `.all` 是**服务端的"不筛"**，不是第三种状态 —— 它也得原样发出去
+        _ = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .all)
+        #expect(await source.states == ["closed", "all"])
+    }
+
+    @Test("⚠️ 标签筛选走**服务端**（决策 #56）：名字逐字传下去，不做本地过滤")
+    func labelFilterIsForwardedToServer() async throws {
+        let source = ScriptedIssuesSource(pages: [Page(items: [], nextCursor: nil)])
+
+        _ = try await LoadRepoIssues(source: source)
+            .load(fullName: "a/b", state: .open, labels: ["bug", "good first issue"])
+
+        #expect(await source.labelFilters == [["bug", "good first issue"]])
+    }
+
+    @Test("不筛标签时传的是**空数组**（数据层据此不带 `labels` 参数，而不是发一个空串）")
+    func emptyLabelFilterIsEmptyArray() async throws {
+        let source = ScriptedIssuesSource(pages: [Page(items: [], nextCursor: nil)])
+
+        _ = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .open)
+
+        #expect(await source.labelFilters == [[]])
+    }
+
+    @Test("⚠️ 取「已关闭」那一档时，行上的 isOpen 真的是 false（不许按「请求的是 open」写死）")
+    func closedStateIsReflectedInRow() async throws {
+        let source = ScriptedIssuesSource(pages: [
+            Page(items: [dto(1, title: "还开着", state: "open"), dto(2, title: "关掉了", state: "closed")],
+                 nextCursor: nil)
+        ])
+
+        let page = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .closed)
+
+        #expect(page.items.map(\.isOpen) == [true, false])
     }
 }
