@@ -75,7 +75,11 @@ struct GitHubRepoInsightsEndpointTests {
         #expect(repo.defaultBranch == "main", "分支解析规则的输入（§9.4.1）")
         #expect(repo.starCount == 2341)
         #expect(repo.forkCount == 88)
-        #expect(repo.pushedAt == (try #require(GitHubDate.parse("2026-10-06T10:00:00Z"))))
+        // ⚠️ `try #require` **写在 `#expect` 外面**：放里面会让 swift-testing 的宏
+        //    报一条"`#require` 是多余的"假警告（它以为 `parse` 不返回 `nil`）。
+        //    这不是风格问题 —— 本项目要求零编译警告，而这条警告只在全量重编时才会出现。
+        let pushedAt = try #require(GitHubDate.parse("2026-10-06T10:00:00Z"))
+        #expect(repo.pushedAt == pushedAt)
         #expect(repo.permissions?.push == false, "可写性判定的唯一来源（§9.11）")
     }
 
@@ -168,7 +172,9 @@ struct GitHubRepoInsightsEndpointTests {
         let unwrapped = try #require(release)
         #expect(unwrapped.tagName == "v2.1.0")
         #expect(unwrapped.body == "新增 Hinge 感知布局容器")
-        #expect(unwrapped.publishedAt == (try #require(GitHubDate.parse("2026-10-03T08:00:00Z"))))
+        // 同上：`#require` 必须在 `#expect` 外面（见本条的第一个用例）
+        let publishedAt = try #require(GitHubDate.parse("2026-10-03T08:00:00Z"))
+        #expect(unwrapped.publishedAt == publishedAt)
         #expect(unwrapped.assetCount == 3, "「资产 (3)」按钮只关心个数，所以资产条目故意不声明字段")
     }
 

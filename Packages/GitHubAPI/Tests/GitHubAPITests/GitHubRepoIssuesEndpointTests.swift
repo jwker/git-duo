@@ -244,7 +244,10 @@ struct GitHubRepoIssuesEndpointTests {
         #expect(detail.title == "登录按钮在真机上不可点")
         #expect(detail.state == "closed")
         #expect(detail.user?.login == "reviewer-a")
-        #expect(detail.closedAt == (try #require(GitHubDate.parse("2026-10-09T08:00:00Z"))))
+        // ⚠️ `try #require` 要写在 `#expect` **外面**：放里面会让 swift-testing 的宏
+        //    报一条"`#require` 是多余的"假警告，而本项目要求零编译警告。
+        let closedAt = try #require(GitHubDate.parse("2026-10-09T08:00:00Z"))
+        #expect(detail.closedAt == closedAt)
     }
 
     @Test("详情：只写标题（body 为 null）⇒ 不崩")

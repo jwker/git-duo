@@ -3,15 +3,16 @@ import Testing
 
 @testable import GitHubAPI
 
-/// 切片 6 / 7 数据层的**配额桶守卫**（TECH_SPEC §4.5、§13.2）。
+/// 切片 6 / 7 / 8 数据层的**配额桶守卫**（TECH_SPEC §4.5、§13.2）。
 ///
 /// ## 为什么需要这一套
 ///
 /// `HTTPRequest.rateLimitResource` 的默认值是 `.core`，而 `.core` 是**不限速**的
 /// （间隔 0）—— 于是"本该声明成 `.search` 却忘了"这种事**不会有任何提示**：
 /// 编译过得去、测试过得去、跑起来也正常，直到某天配额被打爆。
-/// 反过来，切片 6 的这 14 条路由**全部在主桶上**（5,000/小时，靠 ETag 压住），
+/// 反过来，切片 6 起这些路由**全部在主桶上**（5,000/小时，靠 ETag 压住），
 /// 一条都不该落到搜索桶 —— 而这个"全都不是搜索"的事实同样不会自己说话。
+/// 切片 8 的三条写（`PUT` / `DELETE contents`、`POST pulls`）同样在主桶。
 ///
 /// ## 怎么验（这里有意绕开"默认值"
 ///
@@ -22,7 +23,7 @@ import Testing
 /// - `.search` / `.codeSearch` **从没被写过** ⇒ 它没有误用搜索桶。
 ///
 /// 比"断言它没被限速"强：后者对 `.core` 与"压根没声明"这两种情况给出同一个结果。
-@Suite("切片 6/7 数据层 · 配额桶守卫")
+@Suite("切片 6/7/8 数据层 · 配额桶守卫")
 struct RepoEndpointQuotaTests {
 
     private let credentials = GitHubAppCredentials(
@@ -97,6 +98,11 @@ struct RepoEndpointQuotaTests {
     private static let singleBranchJSON = StubURLProtocol.Response.json(
         #"{"name":"main","commit":{"sha":"s"},"protected":false}"#
     )
+    /// `PUT /contents` 的响应 —— 两个 `sha` 有意写成不同的值（见 `FileWriteResultDTO`）。
+    private static let fileWriteResultJSON = StubURLProtocol.Response.json(
+        #"{"content":{"name":"f","path":"f","sha":"blob","size":2,"type":"file"},"commit":{"sha":"commit","message":"m"}}"#,
+        status: 201
+    )
     private static let compareJSON = StubURLProtocol.Response.json(
         #"{"status":"ahead","ahead_by":1,"behind_by":0,"total_commits":1}"#
     )
@@ -129,7 +135,7 @@ struct RepoEndpointQuotaTests {
 
     // MARK: - 代码浏览（5 条）
 
-    @Test("代码浏览 5 条路由 —— 全部主桶（**一条都不能落到搜索桶**）")
+    @Test("代码浏览 7 条路由 —— 全部主桶（**一条都不能落到搜索桶**；含切片 8 的两条写）")
     func contentRoutesAreCore() async {
         await assertCoreBucket("contents（目录）", stub: Self.emptyPage) { client in
             _ = try await GitHubRepoContentEndpoint(client: client).contents(owner: "o", repo: "r")
@@ -147,6 +153,20 @@ struct RepoEndpointQuotaTests {
         }
         await assertCoreBucket("readme（404 ⇒ nil）", stub: .json("{}", status: 404)) { client in
             _ = try await GitHubRepoContentEndpoint(client: client).readme(owner: "o", repo: "r")
+        }
+        // ⚠️ 写操作**同样占主桶**（`PUT` / `DELETE /contents` 不是搜索端点）。
+        //    这里最容易发生的错是"新写的端点忘了声明" —— 而它的表现是"静默多用主桶"，
+        //    不会报错，只会在某天配额打爆时才发现。
+        await assertCoreBucket("contents（PUT 写）", stub: Self.fileWriteResultJSON) { client in
+            _ = try await GitHubRepoContentEndpoint(client: client).putFile(
+                owner: "o", repo: "r", path: "f", message: "m",
+                content: Data("hi".utf8), sha: nil, branch: "main"
+            )
+        }
+        await assertCoreBucket("contents（DELETE 删）", stub: Self.noContent) { client in
+            try await GitHubRepoContentEndpoint(client: client).deleteFile(
+                owner: "o", repo: "r", path: "f", message: "m", sha: "s", branch: "main"
+            )
         }
     }
 
@@ -193,9 +213,9 @@ struct RepoEndpointQuotaTests {
         }
     }
 
-    // MARK: - 切片 7：Issues / PR 共 13 条路由
+    // MARK: - 切片 7：Issues / PR 共 14 条路由（+ 切片 8 追加的 1 条建 PR）
     //
-    // ⚠️ 这 13 条**全在主桶**（`.core`）—— 与 §4.14 / §4.15 的探索两页同一个桶（§9.8.1）。
+    // ⚠️ 这 15 条**全在主桶**（`.core`）—— 与 §4.14 / §4.15 的探索两页同一个桶（§9.8.1）。
     //    一条都不能落到搜索桶：Search 桶只有 30/分钟，而这些路由是**点进一页就会连发几条**
     //    （详情 = 正文 + 评论两条），落错桶的表现是"翻两个 PR 就 403"，而单看代码看不出来。
 
@@ -255,7 +275,7 @@ struct RepoEndpointQuotaTests {
         }
     }
 
-    @Test("PR 7 条路由 —— 全部主桶（列表 / 详情 / 文件 / Commits / 评审 / 合并 / 改状态）")
+    @Test("PR 8 条路由 —— 全部主桶（列表 / 详情 / 文件 / Commits / 评审 / 合并 / 改状态 / **切片 8 的建 PR**）")
     func pullRoutesAreCore() async {
         await assertCoreBucket("pulls（列表）", stub: Self.emptyPage) { client in
             _ = try await GitHubRepoPullsEndpoint(client: client)
@@ -284,6 +304,10 @@ struct RepoEndpointQuotaTests {
         await assertCoreBucket("pulls/{n}（改状态）", stub: Self.pullDetailJSON) { client in
             _ = try await GitHubRepoPullsEndpoint(client: client)
                 .updatePullState(owner: "o", repo: "r", number: 57, state: "closed")
+        }
+        await assertCoreBucket("pulls（建）", stub: Self.pullDetailJSON) { client in
+            _ = try await GitHubRepoPullsEndpoint(client: client)
+                .createPull(owner: "o", repo: "r", title: "t", head: "topic", base: "main")
         }
     }
 

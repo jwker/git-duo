@@ -12,10 +12,19 @@
 **8.1 领域层已落地**（2026-10-08）：`GitDuoKit/Files/` 的写通道编排与判定 —— `FileWriteTarget`（两档 + 预填分支名）· `CommitDraft`（+ `CommitSource` 四档）·
 `FileWriteFailure`（409 与 422 的分类）· `SaveFile`（**三步**：建分支 → 提交 → 建 PR，**四种结局**）· `RenameFile`（**两步串行** + 四种结局）· `DeleteFile` ·
 `RepoPath` 的**重命名目标路径判据** · 三个文案命名空间（`EditorCopy` / `CommitSheetCopy` + `FileCopy` 新增三节）· `EditorMode` **从 App 层搬进领域层**。
-⚠️ **两条新接缝的扩展体有意不存在**（`RepoFileWriteDataSource` / `RepoPullCreationDataSource` 在 8.1 立协议、**端点方法在 8.2 才接**）。
-⚠️ **8.2–8.6 待做**（施工图见下）。
-`make verify` = **五包单测 1405 项 + 模拟器构建**，一条命令，**零编译警告**。
-（**GitHubAPI 362** · GitDuoAuth 57 · GitDuoCore 50 · **GitDuoDesign 79** · **GitDuoKit 857**）
+**8.2 数据层已落地**（2026-10-08）：`GitHubRepoContentEndpoint` 加**写** —— `putFile(owner:repo:path:message:content:sha:branch:)`
+与 `deleteFile(owner:repo:path:message:sha:branch:)`，**`branch` 是必传参数（无默认值 ⇒ 少传编译不过**，决策 #65：官方默认值 = 仓库默认分支，
+不显式传 ⇒ 在 `feature/x` 上编辑却提交到 `main`，**全程无错误信号**）；`sha` 用 `String?`，**为 `nil` 时整条键不写**（不是写 `null`）；
+内容 `base64EncodedString()`（**不带换行**）。`GitHubRepoPullsEndpoint` 加 `createPull(owner:repo:title:head:base:)`（三必填，决策 #67；
+`head` 同仓库时**只写分支名**）。**写后缓存失效**：`HTTPRequest.invalidatesPathPrefixes` ⇒ 三条路径前缀
+（`contents` / `commits` / `branches`）走 `cache.invalidate(pathPrefix:)`（按 URL **path** 匹配 ⇒ 只清本仓库、清掉所有分支）。
+✅ **两条接缝已接上**（8.1 立协议、8.2 接端点）：`extension GitHubRepoContentEndpoint: RepoFileWriteDataSource {}` 与
+`extension GitHubRepoPullsEndpoint: RepoPullCreationDataSource {}` —— 扩展体**仍是空的**，但**不再是"有意不存在"**。
+⚠️ 空扩展体被整条删掉时**编译与其余测试都不会有反应** ⇒ 新套件 `RepoEndpointsContractTests`（**16 条接缝全清点**，每条当协议用一次）
+把"某天有人顺手删掉一个"从**静默**变成**当场红**；**新增接缝时要在那边也加一行**（已写进 `RepoEndpoints.swift` 抬头当维护规矩）。
+⚠️ **8.3–8.6 待做**（施工图见下）。
+`make verify` = **五包单测 1424 项 + 模拟器构建**，一条命令，**零编译警告**。
+（**GitHubAPI 377** · GitDuoAuth 57 · GitDuoCore 50 · **GitDuoDesign 79** · **GitDuoKit 861**）
 
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
@@ -94,7 +103,7 @@
 |---|---|---|
 | 8.0 | 文档先行：决策 **#64–#70**（编辑器自己取 sha / **`branch` 恒传 + 写后失效** / 重命名与删除 + **串行** / 「新分支 + PR」两行输入 / **多步操作的部分失败** / 409 两出口 / 上传两个出口的落点）+ `TECH_SPEC §9.6` **重写为五个子节**（写通道 / 两条不能省的参数 / 三步与部分失败 / 409 / 「更多」）· `§4.6.2` 端点表补全（PUT 的 `branch` 默认值 · 新增 `DELETE contents` 与「重命名 = PUT+DELETE」· 建 PR 三必填 · 上传图片的 PhotosPicker 口径）· `§8.4` 弹层表 14 → **17 类** · `§13.2` 配额表补 6 行 + `PRD §4.5 / §4.6 / §5.8 / §5.9` 补口径 + **新增 `§5.15–§5.17`** + `REVIEW-CHECKLIST §1/§6` | ✅ |
 | 8.1 | 领域层（`GitDuoKit/Files/`）：✅ **已落地**（2026-10-08）—— **写通道的编排与判定**，五个新类型 + 一个判据补口 + 三个文案命名空间：`FileWriteTarget`（`.currentBranch` / `.newBranch(name:prTitle:)` + `isNewBranch` / `newBranchName` / `newBranchPRTitle` 三个派生属性 + `defaultNewBranchName(now:timeZone:)` 预填 `gitduo/yyyyMMdd-HHmmss`）· `CommitDraft`（`message` **原样存**（打字过程不吃空格）+ **两条回落**：trim 后为空 ⇒ `CommitSheetCopy.defaultMessage`、PR 标题为空 ⇒ 回落生效后的提交信息）+ `CommitSource` 四档（新建 / 编辑 / 上传文件 / 上传图片；**只有后两个的 `pathIsAutomatic` 为真**）· `FileWriteFailure`（409 / 422 / 404 / 其余，**只有前两档给话** + `offersConflictExits`）· `SaveFile`（**三步**顺序固定：建分支 → 提交 → 建 PR；`FileSaveReceipt` 里 **`blobSHA` 与 `commitSHA` 是两个 sha**；四种结局 = 落当前分支 / 建分支 + 建 PR / **建了分支但没提交成** / **提交了但没建 PR 成**；手上没有 headSHA 时补一次 `GET /branches/{branch}`）· `RenameFile`（**两步串行** + 四种结局：`.renamed` / `.destinationExists` / **`.movedButOldRemains`（两步之间断掉 ⇒ 仓库里两个文件都在）** / `.sourceUnavailable(.gone / .notWritable)`）· `DeleteFile`（**现取 sha** + 404 不抛 ⇒ `.alreadyGone`）· `RepoPath.resolveRenameDestination`（前导 `/` 宽容剥一次；空 / 与源相同 / 非法字符三档）· `CommitMessageDefaults`（两个用例共用的默认信息）· 文案 `EditorCopy`（§4.6）+ `CommitSheetCopy`（§5.9）+ `FileCopy` **新增三节**（§5.15–§5.17）· `EditorMode` **迁入本包**（正本在领域层，`TECH_SPEC §8.2` 已改为"只描述形状"）。⚠️ **成果验收**：`FileWriteTargetTests` / `FileWriteTests` / `FileOperationCopyTests` 三套共 **+77 项**（GitDuoKit 780 → 857），其中把"**两步必须串行**""**422 不发 DELETE**（不然两个都丢）""**页脚点名的两颗按钮真的存在**"都做成了正面断言 | ✅ |
-| 8.2 | 数据层（`GitHubAPI`）：`GitHubRepoContentEndpoint` 加**写**（`PUT` / `DELETE`，**`branch` 恒传**、`sha` 更新与删除时必传、base64 编码）· `GitHubRepoPullsEndpoint` 加 `createPull(title:head:base:)` · **写后缓存失效**（该仓库的 contents / commits / branches）· 配额桶逐个显式声明 + 单测（含"**不带 `branch` 的请求发不出去**"这条正面断言） | ⬜ |
+| 8.2 | 数据层（`GitHubAPI`）：✅ **已落地**（2026-10-08）—— `GitHubRepoContentEndpoint` 加**写**（`putFile` / `deleteFile`，**`branch` 必传无默认值**、`sha` 为 `nil` 时**整条键不写**、base64 不带换行）· `GitHubRepoPullsEndpoint` 加 `createPull(title:head:base:)` · **写后缓存失效**（`invalidatesPathPrefixes` ⇒ 本仓库的 contents / commits / branches，按 URL **path** 匹配 ⇒ 只清本仓库、所有分支一起清）· 配额桶逐个显式声明（`RepoEndpointQuotaTests` 代码浏览 **5 → 7 条**、PR **7 → 8 条**）。⚠️ 本轮**两条空扩展体已接上**（`RepoFileWriteDataSource` / `RepoPullCreationDataSource`）—— 不再是"有意不存在"的中间状态。⚠️ 三条"静默"性质本轮被钉成断言：① **写不重试**（`HTTPMethod.isSafelyRetryable` 只认 GET ⇒ 重放 PUT 会因 sha 过期回 409 而第一次其实已成功 ⇒ "假失败"）—— 断言带**对照组**（同桩件下 GET 重试、PUT 不重试）；② **`FileWriteResultDTO` 的两个 sha 不能混**（`content.sha` = 新 blob 基准 / `commit.sha` = 这次提交；混了 ⇒ 第二次编辑必 409）；③ **缓存失效不误伤别的仓库**（缓存里放另一个仓库一条，断言写后只剩它）。⚠️ 本片**新套件两个**：`GitHubRepoFileWriteEndpointTests`（**+15 项**）· `RepoEndpointsContractTests`（接缝清点）。⚠️ **"不带 `branch` 的请求发不出去"这条按施工图要求做了**，但**一半是编译期事实、写不出运行时断言**（`branch: String` 无默认值）⇒ 测试注释里把这句**拆成两半**讲清，运行时断言只覆盖下半句（"值真的是 `feature/x` 且 `!= "main"`"）。⚠️ **顺带修掉 4 处编译警告**（3 处 `try #require` 写在 `#expect` 里的假警告 + 1 处 8.1 遗留的 `putFile` 未使用返回值）—— 共同成因是**增量构建会吞掉警告**，第一次 `make verify` 报"零警告"其实是假象，**强制全量重编**（`find ... -xargs touch`）才抓出来 | ✅ |
 | 8.3 | 设计系统（`GitDuoDesign`）：✅ **预计零新增** —— 编辑器用现成的 `CodeTextArea`（`minLines: 13`，切片 7 就为它留好了）· 路径 / 分支名 / PR 标题用 `SheetField` · 三个新弹层用 `SheetTitle` / `SheetRow` / `SheetHint` · 危险色用 `ActionButton.Style.destructive`。⚠️ 若真发现要造新件，先按判据 **#43** 过一遍（只收基础类型才进设计包） | ⬜ |
 | 8.4 | 表现层（`GitDuo/Features/Repo/`）：`Views/EditorView` + `ViewModels/EditorViewModel`（§4.6 两模式）· `Views/Sheets/CommitSheet` + VM（§5.9，含两行输入与 409 两出口）· `AddFileSheet` **三行接通**（§5.8，含两个系统选择器）· `Views/Sheets/FileOperationsSheet` / `RenameFileSheet` / `DeleteFileSheet`（§5.15–§5.17，形态照 §5.12 / §5.14 两条先例）· `FileView` 的「编辑」「更多」接通 + **>1MB 时「编辑」不可点**（偏差 32） | ⬜ |
 | 8.5 | 装配与路由：`AppEnvironment` 接新用例 + `RouteView` 的 `.editor` **从骨架屏换真件**（§8.3 那张表里它是最后一条占位）· `SkeletonPlaceholders.registry` 消解（只剩「我的」旗下三页） | ⬜ |

@@ -260,6 +260,57 @@ public struct GitHubRepoPullsEndpoint: Sendable {
         return try response.decode(PullDetailDTO.self)
     }
 
+    // MARK: - 写：新建 PR
+
+    /// 新建 PR —— `POST /repos/{o}/{r}/pulls`（TECH_SPEC §9.6.3 的第三步、PRD §5.9）。
+    ///
+    /// ## ⚠️ 三个必填参数，一个都不能少
+    ///
+    /// 官方原文：`title` — *"Required unless issue is specified"*；
+    /// `head` / `base` — 两条都标 `(required)`。
+    /// 而原型与 PRD §5.9 的提交弹层里**原本只有一个 commit message 输入框** ——
+    /// 那两个必填值没有任何来源，这正是决策 #67（弹层多出两行输入）要补的缺口。
+    /// ⇒ 本方法三个都**没有默认值**，`title` 为空也该由调用方挡住
+    /// （领域层 `CommitDraft.effectivePRTitle` 的回落链保证它非空）。
+    ///
+    /// ## ⚠️ `head` 在同仓库时**只写分支名**
+    ///
+    /// `owner:branch` 是**跨仓库 fork** 的写法。本期"新分支 + PR"的分支恒在同一个仓库里
+    /// ⇒ 传 `name` 即可。传成 `owner:name` 在官方文档下也合法（同一个 owner），
+    /// 但那会让"这条调用的前提是就在本仓库"从代码里消失 —— 而跨仓库那件事
+    /// 本项目**根本没做**，留一个看起来支持的写法只会让人以为做过。
+    ///
+    /// - Returns: 服务端回的那条 PR。**编号只能用这一份** ——
+    ///   不能靠本地"列表长度 + 1"去猜（同 `CreatedIssue.number` 的理由：
+    ///   猜错的表现是"点进去是另一个 PR"）。
+    ///
+    /// ⚠️ **不自动重试**：`POST /pulls` 不幂等，重放会真的开出第二个 PR。
+    ///
+    /// ⚠️ 建完 PR 会改变仓库的 PR 列表 ⇒ 失效 `/pulls` 整棵子树。
+    /// 「新分支 + PR」的**前两步**（建分支、提交）各自的失效由那两个端点负责，
+    /// 这里只管第三步自己动了什么。
+    public func createPull(
+        owner: String,
+        repo: String,
+        title: String,
+        head: String,
+        base: String
+    ) async throws -> PullDetailDTO {
+        let body = try JSONSerialization.data(
+            withJSONObject: ["title": title, "head": head, "base": base],
+            options: [.sortedKeys]
+        )
+        let response = try await client.send(
+            .sending(
+                .post,
+                to: client.url("repos/\(owner)/\(repo)/pulls"),
+                body: body,
+                invalidating: [Self.pullsPrefix(owner: owner, repo: repo)]
+            )
+        )
+        return try response.decode(PullDetailDTO.self)
+    }
+
     // MARK: - 缓存前缀
 
     /// PR 的**整棵子树**：列表 / 详情 / 文件 / Commits / 评审都在 `/pulls` 下面。

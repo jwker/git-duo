@@ -22,7 +22,10 @@ struct GitHubRepoPullsEndpointTests {
 
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
-    private func makeEndpoint(harness: StubURLProtocol.Harness) -> GitHubRepoPullsEndpoint {
+    private func makeEndpoint(
+        harness: StubURLProtocol.Harness,
+        cache: HTTPResponseCache = HTTPResponseCache(configuration: .memoryOnly())
+    ) -> GitHubRepoPullsEndpoint {
         let clock = now
         return GitHubRepoPullsEndpoint(
             client: GitHubRESTClient(
@@ -30,7 +33,7 @@ struct GitHubRepoPullsEndpointTests {
                 transport: HTTPTransport(
                     credentials: credentials,
                     session: harness.makeSession(),
-                    cache: HTTPResponseCache(configuration: .memoryOnly()),
+                    cache: cache,
                     retryPolicy: .none,
                     clock: { clock },
                     sleeper: { _ in }
@@ -393,5 +396,84 @@ struct GitHubRepoPullsEndpointTests {
             #expect(json == ["state": state])
             #expect(detail.state == state)
         }
+    }
+
+    // MARK: - 切片 8：新建 PR（「新分支 + PR」的第三步）
+
+    @Test("建 PR：`POST /pulls` + 请求体**恰好**三个键，head 只写分支名（不是 owner:branch）")
+    func createPullRequestShape() async throws {
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(.json(detailJSON, status: 201))
+
+        let detail = try await makeEndpoint(harness: harness).createPull(
+            owner: "misoge",
+            repo: "paneltkit",
+            title: "feat: 仓库详情四分区导航",
+            head: "gitduo/20261008-120000",
+            base: "main"
+        )
+
+        #expect(harness.lastRequest?.httpMethod == "POST")
+        #expect(harness.lastRequest?.url?.path == "/repos/misoge/paneltkit/pulls")
+
+        let body = try #require(harness.lastBody)
+        let json = try #require(
+            try JSONSerialization.jsonObject(with: body) as? [String: String]
+        )
+        // 官方三个都是必填（`title` 除 issue 之外必填、`head` / `base` 标 (required)）——
+        // 原型与 PRD §5.9 原本只有一个 commit message 输入框，决策 #67 才补出这两行
+        #expect(
+            json == [
+                "title": "feat: 仓库详情四分区导航",
+                "head": "gitduo/20261008-120000",
+                "base": "main",
+            ]
+        )
+        // ⚠️ `owner:branch` 是**跨仓库 fork** 的写法；本期分支恒在同仓库里
+        #expect(json["head"]?.contains(":") == false)
+
+        // ⚠️ 编号**只用服务端那一份** —— 靠本地"列表长度 + 1"去猜的表现是"点进去是另一个 PR"
+        #expect(detail.number == 57)
+    }
+
+    @Test("建 PR 422 ⇒ `validation`（**原样抛出**：多步操作说清做到哪一步是领域层的事）")
+    func createPullSurfaces422() async throws {
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(
+            .json(
+                #"{"message":"Validation Failed","errors":[{"resource":"PullRequest","code":"custom"}]}"#,
+                status: 422
+            )
+        )
+
+        do {
+            _ = try await makeEndpoint(harness: harness).createPull(
+                owner: "o", repo: "r", title: "t", head: "topic", base: "main"
+            )
+            Issue.record("422 应当抛错")
+        } catch let error as GitHubError {
+            guard case .validation = error else {
+                Issue.record("422 应当归成 `.validation`，实际是 \(error)")
+                return
+            }
+        }
+    }
+
+    @Test("建 PR 成功后失效 `/pulls` 整棵子树（列表里要多出这一条）")
+    func createPullInvalidatesPullPaths() async throws {
+        let harness = StubURLProtocol.makeHarness()
+        let cache = HTTPResponseCache(configuration: .memoryOnly())
+        let endpoint = makeEndpoint(harness: harness, cache: cache)
+
+        harness.stub(.json("[]"))
+        _ = try await endpoint.pullRequests(owner: "o", repo: "r", state: "open")
+        #expect(await cache.memoryEntryCount == 1)
+
+        harness.stub(.json(detailJSON, status: 201))
+        _ = try await endpoint.createPull(
+            owner: "o", repo: "r", title: "t", head: "topic", base: "main"
+        )
+
+        #expect(await cache.memoryEntryCount == 0)
     }
 }

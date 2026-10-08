@@ -80,7 +80,13 @@ public struct RenameFile: Sendable {
         //    路径上已有文件 ⇒ 服务端 422（决策 #70⑤）；那一档要单独说，
         //    因为 422 的原文解释不了"我明明只是想改个名字"（§9.6.5）。
         do {
-            try await files.putFile(
+            // ⚠️ **有意丢掉返回值**：`putFile` 回的是"新 blob SHA + 这次提交 SHA"，
+            //    而重命名**不需要新基准** —— 新路径是刚建出来的，用户并没有"读到过的那一版"；
+            //    下一次编辑会重新读一次，那时拿到的才是基准。
+            //    写 `_ =` 而不是让编译器静默忽略（`putFile` 故意没有 `@discardableResult`）：
+            //    那条规则在**编辑器**那个调用点上是一条真缺陷（丢掉新 sha ⇒ 第二次提交必 409），
+            //    所以这里的"不要它"必须是一句显式的话，而不是无声的默认。
+            _ = try await files.putFile(
                 owner: owner,
                 repo: repo,
                 path: destination.raw,

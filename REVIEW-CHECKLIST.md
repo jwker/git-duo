@@ -615,6 +615,36 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
       - ▶ **下一步**：**8.2 数据层** —— `GitHubRepoContentEndpoint` 加 `PUT` / `DELETE`（**`branch` 恒传**、base64 编码）·
         `createPull(title:head:base:)` · **写后缓存失效**（该仓库的 contents / commits / branches）· 配额桶逐个显式声明
         （含"**不带 `branch` 的请求发不出去**"这条正面断言），并把上面那两个空扩展体**接上**。
+    - ✅ **8.2 数据层已交付**（2026-10-08）。本片第一次**真的往 URL 上挂写方法** ⇒ 三条"错了都不报错"的性质全部做成了断言。
+      - **端点**：`GitHubRepoContentEndpoint.putFile(owner:repo:path:message:content:sha:branch:)` / `deleteFile(owner:repo:path:message:sha:branch:)`，
+        **`branch` 是 `String`（无默认值）** —— 决策 #65 那条"静默进默认分支"在签名上就传不进来；`sha` 是 `String?`，**为 `nil` 时整条键不写**
+        （不是写 `null`；`body["sha"] == nil` 有正面断言）；`base64EncodedString()` 且**不含换行**（中文 + 换行、PNG 魔数字节两组逐字节还原）。
+        `GitHubRepoPullsEndpoint.createPull(title:head:base:)` 三必填（决策 #67），`head` **不含 `:`**（同仓库只写分支名）。
+      - **写后缓存失效**：`HTTPRequest.invalidatesPathPrefixes` 接 `HTTPResponseCache.invalidate(pathPrefix:)`，三条前缀
+        `contents` / `commits` / `branches`。⚠️ 它按 URL **path** 匹配、**不看查询串** ⇒ 是**粗粒度**的：一条 `contents` 前缀会带走该仓库**所有分支**的缓存，
+        且**碰不到别的仓库**（测试里放了一条 `/repos/o/other/...` 当对照，断言写后只剩它）。
+      - **三条"静默"性质**（本片最值钱的三个断言）：① **写永不自动重试**（`HTTPMethod.isSafelyRetryable` 只认 GET；重放 PUT 会因 sha 过期回 409，
+        而第一次其实已经写成功 ⇒ 用户看到"假失败"）—— 断言**带对照组**（同一套桩件下 GET `requestCount == 2`、PUT `== 1`），
+        没有对照组那条正面断言说明不了什么；② **`FileWriteResultDTO` 两个 sha 不能混**（`content.sha` = 新 blob 基准 / `commit.sha` = 这次提交，
+        混了 ⇒ 第二次编辑必 409）；③ **缓存失效不误伤别的仓库**（见上）。
+      - **失败分类**照旧**只断言分类、不断言文案**：409 ⇒ `.conflict` · 422 ⇒ `.validation`（`errors[]` 形状不固定、服务端措辞会漂移，
+        给用户看什么话由领域层 `FileWriteFailure` 决定）· 404 照抛 `.notFound`。
+      - **两条空扩展体已接上**：`extension GitHubRepoContentEndpoint: RepoFileWriteDataSource {}` · `extension GitHubRepoPullsEndpoint: RepoPullCreationDataSource {}`。
+        8.1 那一步留下的"有意不存在"的中间状态**到此结束**。
+      - ⚠️ **新规律：空扩展体被整条删掉是静默的**（编译过、其余测试全绿，没有任何反应）⇒ 新套件 `RepoEndpointsContractTests`
+        把**全部 16 条接缝**当协议用一次（`let _: any RepoYDataSource = ...`；仓库读 4 条 / 切片 6+7 十条 / 切片 8 两条写 / 切片 3-5 五条）。
+        **新增接缝时要在那边也加一行**（已写进 `RepoEndpoints.swift` 抬头当维护规矩）。⚠️ 清点时抓到一处记错：置顶走的是
+        `GitHubPinnedItemsEndpoint(client: graphQLClient)` —— **GraphQL 客户端，不是 REST**。
+      - ⚠️ **一条新纪律（本片首次撞上）**：`make verify` 走**增量构建** ⇒ **编译警告可能被吞掉**。本轮第一次 `make verify` 报"零警告"是**假象** ——
+        `find Packages GitDuo -name '*.swift' -print0 | xargs -0 touch` **强制全量重编**才抓出 **4 处**：
+        3 处 `try #require` 写在 `#expect` 里面（swift-testing 报「`#require` 是多余的」假警告 ⇒ 把 `try #require` 提到 `#expect` 外面）+
+        1 处 **8.1 遗留**的 `putFile` 未使用返回值（`putFile` 有意没有 `@discardableResult` ⇒ `RenameFile` 里写 `_ =`，
+        因为那条规则在编辑器那个调用点上是一条**真缺陷**）。⇒ **宣布"零警告"前先强制全量重编**。
+      - **成果验收**：GitHubAPI **362 → 377**（+15）· GitDuoKit **857 → 861**（+4，接缝清点）⇒ 五包 **1405 → 1424 项 / 119 套件**，
+        `make verify` 通过、**零编译警告**（已按上面那条新纪律全量重编确认）。
+      - ▶ **下一步**：**8.3 设计系统** —— 施工图原文是「✅ **预计零新增**」（编辑器用现成的 `CodeTextArea`（`minLines: 13`）·
+        路径 / 分支名 / PR 标题用 `SheetField` · 三个新弹层用 `SheetTitle` / `SheetRow` / `SheetHint` · 危险色用 `ActionButton.Style.destructive`）。
+        ⚠️ 若真发现要造新件，先按判据 **#43** 过一遍（只收基础类型才进设计包）。
 
 **⚠️ 完成定义第 3 条「与原型逐屏对照」—— 待对照清单（正本）**
 

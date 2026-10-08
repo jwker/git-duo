@@ -149,6 +149,152 @@ public struct GitHubRepoContentEndpoint: Sendable {
         return text
     }
 
+    // MARK: - 写：新建 / 更新一个文件
+
+    /// 新建或更新一个文件 —— `PUT /repos/{owner}/{repo}/contents/{path}`
+    /// （TECH_SPEC §9.6.1 的 ①②③④ 四条写通道都走它、§9.6.2）。
+    ///
+    /// ## ⚠️ 这条请求有两处"错了都不报错"，两处都在签名里挡掉
+    ///
+    /// 1. **`branch` 没有默认值**：官方原文是 *"The branch name.
+    ///    **Default: the repository's default branch.**"* ⇒ 不传的后果是
+    ///    **用户在 `feature/x` 上编辑、提交却落到 `main`**，而全过程**没有任何错误信号**
+    ///    （界面显示"已提交"、分支也对，只是提交去了别处）—— 决策 #65。
+    ///    所以它不是可选参数：**这一层不允许"忘了传"这件事发生**。
+    ///    有一条正面断言钉住它的值真的是调用方那一版（不是仓库默认分支）。
+    /// 2. **`sha` 也没有默认值**，而且它的值必须是**用户读到的那一版**（乐观锁，决策 #64）。
+    ///    在提交时刻现取一个新 `sha` 会让并发改动**永远撞不上 409** ⇒ 静默丢掉远端改动。
+    ///    `nil` 是**有含义的**：表示"新建"（路径已存在 ⇒ 服务端 422，**不静默覆盖**）。
+    ///
+    /// ## ⚠️ `content` 是原始字节，base64 在这里编
+    ///
+    /// 领域层（`SaveFile`）交过来的是 `Data`。官方要的是 base64 字符串。
+    /// 这一步放在数据层的理由与"图片不重编码"同源：它错了的表现是**内容损坏**，
+    /// 而不是"少了一个字段" —— 离网络最近的那一层做它，可被单测直接钉住。
+    ///
+    /// - Parameters:
+    ///   - path: 仓库内相对路径（**不带前导 `/`**，由 `route(...)` 统一处理）。
+    ///   - message: 提交信息。空串不该走到这里 —— 「空则用默认信息」在领域层
+    ///     （`CommitDraft.effectiveMessage`）。
+    ///   - sha: 见上（`nil` = 新建）。
+    ///
+    /// - Returns: 新 blob SHA 与这次提交 SHA（**两个不是一回事**，见 `FileWriteResultDTO`）。
+    ///
+    /// ⚠️ **不自动重试**（`HTTPMethod.isSafelyRetryable` 只认 GET）：带过期 `sha` 的重复 PUT
+    /// 会回 409，自动重试会让用户看到"提交失败"而第一次其实已经成功 —— 这种"假失败"比不重试危险。
+    public func putFile(
+        owner: String,
+        repo: String,
+        path: String,
+        message: String,
+        content: Data,
+        sha: String?,
+        branch: String
+    ) async throws -> FileWriteResultDTO {
+        let response = try await client.send(
+            .sending(
+                .put,
+                to: client.url(route(owner: owner, repo: repo, path: path)),
+                body: try Self.writeBody(
+                    message: message,
+                    content: content,
+                    sha: sha,
+                    branch: branch
+                ),
+                invalidating: Self.headDependentPrefixes(owner: owner, repo: repo)
+            )
+        )
+        return try response.decode(FileWriteResultDTO.self)
+    }
+
+    // MARK: - 写：删除一个文件
+
+    /// 删除一个文件 —— `DELETE /repos/{owner}/{repo}/contents/{path}`（§9.6.5）。
+    ///
+    /// ## ⚠️ 它不能与 `putFile` 并行
+    ///
+    /// 官方 NOTE 原文：这两个端点并行会冲突，*"You must use these endpoints serially instead."*
+    /// ⇒ 「重命名 = `PUT` 新路径 + `DELETE` 旧路径」**必须顺序两步**（决策 #66）。
+    /// 串行的编排在领域层 `RenameFile` —— 数据层只提供两个各自独立的动作，
+    /// 因为"这两步之间断了怎么办"是**产品口径**（要告诉用户"新旧两个文件都在"），不是协议细节。
+    ///
+    /// ## ⚠️ `message` 与 `sha` 都是必填（官方原文两条 `(required)`）
+    ///
+    /// `sha` 是**现取**的（`DELETE` 前补一次 `GET contents`）—— 删除没有
+    /// "用户手上读过的那一版"这回事，见 `DeleteFile`。这与 `putFile` 的语义**相反**，
+    /// 两者在类型上都是 `String`，所以这一句必须写在这里。
+    ///
+    /// - Returns: 无返回值 —— 成功是 **204 No Content**，**没有响应体**
+    ///   （所以它天然没有"返回值必须被消费"那个问题，与 `putFile` 不同）。
+    public func deleteFile(
+        owner: String,
+        repo: String,
+        path: String,
+        message: String,
+        sha: String,
+        branch: String
+    ) async throws {
+        let body = try JSONSerialization.data(
+            withJSONObject: ["message": message, "sha": sha, "branch": branch],
+            options: [.sortedKeys]
+        )
+        _ = try await client.send(
+            .sending(
+                .delete,
+                to: client.url(route(owner: owner, repo: repo, path: path)),
+                body: body,
+                invalidating: Self.headDependentPrefixes(owner: owner, repo: repo)
+            )
+        )
+    }
+
+    // MARK: - 请求体
+
+    /// `PUT /contents` 的请求体 —— `{message, content, sha?, branch}`。
+    ///
+    /// ⚠️ `branch` 是**非可选且无默认值**的形参：这是"不带 `branch` 的请求发不出去"
+    /// 那条要求的落点。它只在这里被拼进请求体一次，没有第二条路径。
+    ///
+    /// ⚠️ `sha` 为空时**整条键不写**，不是写 `null` —— 官方对 `"sha": null` 的行为没有文档保证，
+    /// 而"不带这个键 = 新建"是文档里写明的（与 `refQuery` 那条同一个道理：不要发明空值语义）。
+    ///
+    /// ⚠️ **`content` 必须是 base64 的字符串**。`Data.base64EncodedString()` 不带换行；
+    /// GitHub 也接受带换行的（MIME）形式，但不带是唯一没有歧义的一种。
+    private static func writeBody(
+        message: String,
+        content: Data,
+        sha: String?,
+        branch: String
+    ) throws -> Data {
+        var payload: [String: String] = [
+            "message": message,
+            "content": content.base64EncodedString(),
+            "branch": branch,
+        ]
+        if let sha { payload["sha"] = sha }
+        return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    }
+
+    // MARK: - 缓存前缀
+
+    /// 写成功后必须失效的三条路径 —— contents / commits / branches。
+    ///
+    /// 一次 `PUT` / `DELETE` 会同时改变三件事：那个路径的**内容**、仓库多出**一条提交**、
+    /// 以及所在分支的 **HEAD**。任何一条没清，都会在"提交完直接返回上一页"这条路上显形
+    /// （而**下拉刷新走 `forcesReload` 绕过缓存，看不出问题**）。
+    ///
+    /// ⚠️ 按**路径前缀**匹配、不看查询串 ⇒ 会把**所有分支**的 contents / commits 一起清掉。
+    /// 这是有意的粗粒度，理由同 `GitHubRepoBranchEndpoint.deleteBranch`：
+    /// 分清 `?ref=main` 与 `?ref=feature` 需要把查询串纳入键的语义，
+    /// 而"多几个请求"比"改完之后一直看到旧内容"轻得多。
+    private static func headDependentPrefixes(owner: String, repo: String) -> [String] {
+        [
+            "/repos/\(owner)/\(repo)/contents",
+            "/repos/\(owner)/\(repo)/commits",
+            "/repos/\(owner)/\(repo)/branches",
+        ]
+    }
+
     // MARK: - 内部
 
     /// `repos/{owner}/{repo}/contents` 或 `.../contents/{path}`。

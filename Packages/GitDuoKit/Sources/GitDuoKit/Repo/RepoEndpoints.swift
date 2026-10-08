@@ -22,7 +22,11 @@ import GitHubAPI
 /// ⚠️ 扩展体可以是**空的** —— 条件是真实端点的**方法签名逐字一致**（含默认值参数：
 /// 默认值不参与签名比对）。任何一处参数名改了，这里会**编译不过**，
 /// 那正是我们想要的：接缝断开要当场可见，而不是等到运行时才发现调错了。
-/// （有一条测试用 `RepoEndpointsContractTests` 钉住四种载荷的类型，见该文件。）
+///
+/// ⚠️ 但**编译期保证只覆盖"签名改了"**：一个空的扩展体被**整条删掉**时，
+/// 编译、其余测试**全都不会有反应** —— 那也是一种"静默"。所以另有一条测试
+/// （`RepoEndpointsContractTests`）把每条接缝**当作协议用一次**，专钉这一种情形。
+/// **新增接缝时记得在那边也加一行**，否则它保护的名单会慢慢落后于现实。
 
 // MARK: - ① 仓库详情头部
 
@@ -165,11 +169,14 @@ extension GitHubRepoBranchEndpoint: RepoBranchDataSource {}
 /// 换掉手上的基准，否则连续两次编辑的第二次必然 409（看起来像"刚提交完就说被人改过"）。
 /// `deleteFile` 返回 `Void`（成功是 204、无响应体），所以它天然没有这个问题。
 ///
-/// ## ⚠️ 扩展体尚未接上（切片 8.2）
+/// ## ⚠️ 扩展体在 8.2 已接上
 ///
-/// 本协议在 8.1（领域层）落地，而 `GitHubRepoContentEndpoint` 的写方法在 8.2 才加
-/// ⇒ **空扩展体现阶段不存在**（写了会编译不过）。这一档是**有意的中间状态**，
-/// 与切片 7 的 `PullActionDataSource` 同一分工：协议先立，端点随后接上。
+/// 本协议在 8.1（领域层）落地，`GitHubRepoContentEndpoint` 的两个写方法在 **8.2** 补上
+/// ⇒ 扩展体现在存在。中间那一版之所以是空的，是因为**协议先立、端点的实现随后跟上**
+/// 是这片接缝的固定分工（与切片 7 的 `PullActionDataSource` 同一先例）——
+/// 它与类型顶部那条"扩展体可以是空的"是同一件事的两面。
+/// ⚠️ 它不再空也是一个信号：`GitHubRepoContentEndpoint` 的方法**签名一旦改动**，
+/// 这里会**当场编译不过**，而不是等到调用时才炸。
 public protocol RepoFileWriteDataSource: Sendable {
 
     /// 新建 / 更新一个文件（`PUT /repos/{o}/{r}/contents/{path}`）。
@@ -211,6 +218,8 @@ public protocol RepoFileWriteDataSource: Sendable {
     ) async throws
 }
 
+extension GitHubRepoContentEndpoint: RepoFileWriteDataSource {}
+
 // MARK: - ⑥ 建 PR（切片 8，「新分支 + PR」的第三步）
 
 /// `POST /repos/{o}/{r}/pulls` —— §9.6.3 的第三步。
@@ -228,9 +237,11 @@ public protocol RepoFileWriteDataSource: Sendable {
 /// ⇒ 传 `name` 即可；传成 `owner:name` 在官方文档下也是合法的（同一个 owner），
 /// 但那会让这条调用的前提（"就在本仓库"）从代码里消失。
 ///
-/// ## ⚠️ 扩展体同样尚未接上（切片 8.2）
+/// ## ⚠️ 扩展体同样在 8.2 已接上
 ///
 /// 与 `RepoFileWriteDataSource` 同一条：协议在 8.1、端点方法在 8.2。
+/// 这一条比那一条更值得留意 —— `head` / `base` 两个参数**在别处都以 `String` 出现**
+/// （分支名到处都是 `String`），签名错位一对调不动编译器，只会发出一次参数对调的请求。
 public protocol RepoPullCreationDataSource: Sendable {
 
     /// 开一个 PR。
@@ -250,4 +261,6 @@ public protocol RepoPullCreationDataSource: Sendable {
         base: String
     ) async throws -> PullDetailDTO
 }
+
+extension GitHubRepoPullsEndpoint: RepoPullCreationDataSource {}
 
