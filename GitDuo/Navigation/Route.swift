@@ -12,14 +12,16 @@ import GitDuoKit
 /// 现在**唯一来源 = `GitDuoKit.RepoSection`**（有单测，且 `allCases` 顺序即
 /// 分段条上从左到右的顺序）。§8.2 已同步改写。
 ///
-/// 编辑器打开模式（新建 / 编辑既有文件）。
-/// 依据：TECH_SPEC §8.2（2026-10-05 已补入文档）。
-enum EditorMode: Hashable, Sendable {
-    /// 新建文件（需输入路径）
-    case create
-    /// 编辑既有文件
-    case edit
-}
+/// ⚠️ **本文件原来还有一个本地 `EditorMode`，切片 8.1 删掉了。**
+///
+/// 它曾是 `Route.editor` 那个参数的唯一来源（`TECH_SPEC §8.2` 逐字记的就是那两档）。
+/// 8.1 在领域层建了**同名同取值**的 `GitDuoKit.EditorMode`（多了
+/// `loadsExistingContent` 与单测），因为 8.1 起它多了两个用户 ——
+/// `SaveFile`（`sha` 带不带由模式决定）与 `EditorCopy`（说明行与标题各说一句）。
+///
+/// 两份定义在同一模块里共存时，**同模块的类型会遮蔽 import 进来的那个** ⇒
+/// 报错会指向一行完全正常的代码（与上面 `RepoSection` 那次同一个坑）。
+/// 现在**唯一来源 = `GitDuoKit.EditorMode`**；§8.2 已同步改写。
 
 /// 全部推入页的路由。
 ///

@@ -1,9 +1,10 @@
 import Foundation
 import GitHubAPI
 
-/// 仓库详情 / 代码浏览 / 提交 / 分支四条链路在**领域层与网络层之间的接缝**。
+/// 仓库详情 / 代码浏览 / 提交 / 分支 / **文件写** / **建 PR** 六条链路在
+/// **领域层与网络层之间的接缝**。
 ///
-/// 依据：TECH_SPEC §9.4 / §9.5 / §9.7 / §9.7.1。
+/// 依据：TECH_SPEC §9.4 / §9.5 / §9.6 / §9.7 / §9.7.1。
 /// 先例：`RepositoryDataSource`（切片 3）、`RepoInsightsDataSource`（切片 4）。
 ///
 /// ## 为什么每个端点一个协议、而不是"一个大协议"
@@ -134,3 +135,119 @@ public protocol RepoBranchDataSource: Sendable {
 }
 
 extension GitHubRepoBranchEndpoint: RepoBranchDataSource {}
+
+// MARK: - ⑤ 文件写（切片 8）
+
+/// 写文件的两条动作：`PUT`（新建 / 更新）与 `DELETE`（删除）—— §9.6.1、§9.6.5。
+///
+/// ## ⚠️ `branch` 是**必传参数**，不是可选
+///
+/// 官方原文：`branch` — *"The branch name. **Default: the repository's default branch.**"*
+/// ⇒ 不传的后果是**用户在 `feature/x` 上编辑、提交却落到 `main`**，
+/// 而全过程没有错误信号（界面显示"已提交"，分支也对，只是提交去了别处）——
+/// 决策 #65，性质同 #47 / #53 那些"外部事实逼出来的"条目。
+///
+/// 所以它在签名里**没有默认值**：接缝这一层不允许"忘了传"这件事发生。
+/// 有一条正面断言钉住它（`make test` 里的请求构造测试，见切片 8.2）。
+///
+/// ## ⚠️ `sha` 的两个含义（同一个参数，两种语义）
+///
+/// - `putFile`：`nil` = **新建**（路径已存在 ⇒ 服务端 422，**不静默覆盖**，决策 #70⑤）；
+///   非 `nil` = **更新**，而那个值必须是**用户读到的那一版**（乐观锁，见 `SaveFile`）；
+/// - `deleteFile`：**必填**（官方要求 `message` 与 `sha` 都必填），且它是**现取**的
+///   （删除没有"用户手上的那一版"这回事，见 `DeleteFile`）。
+///
+/// 类型上无法把这两种语义分开（同一个 `String?` / `String`），所以两条说明写在这里。
+///
+/// ## ⚠️ 为什么不做 `@discardableResult`
+///
+/// `putFile` 的返回值（新 `sha` + 提交 `sha`）**必须被消费**：编辑器要靠新 `sha`
+/// 换掉手上的基准，否则连续两次编辑的第二次必然 409（看起来像"刚提交完就说被人改过"）。
+/// `deleteFile` 返回 `Void`（成功是 204、无响应体），所以它天然没有这个问题。
+///
+/// ## ⚠️ 扩展体尚未接上（切片 8.2）
+///
+/// 本协议在 8.1（领域层）落地，而 `GitHubRepoContentEndpoint` 的写方法在 8.2 才加
+/// ⇒ **空扩展体现阶段不存在**（写了会编译不过）。这一档是**有意的中间状态**，
+/// 与切片 7 的 `PullActionDataSource` 同一分工：协议先立，端点随后接上。
+public protocol RepoFileWriteDataSource: Sendable {
+
+    /// 新建 / 更新一个文件（`PUT /repos/{o}/{r}/contents/{path}`）。
+    ///
+    /// - Parameters:
+    ///   - path: 仓库内相对路径（`RepoPath.raw`），**不带前导 `/`**。
+    ///   - message: 提交信息。**空串不该走到这里** —— 「空则用默认信息」那条规则
+    ///     在领域层（`CommitDraft.effectiveMessage` / `CommitMessageDefaults`）。
+    ///   - content: **原始字节**；base64 编码是数据层的事（§4.6.2）。
+    ///     放数据层的理由与图片不重编码同源：那一步错了的表现是"内容损坏"。
+    ///   - sha: 见类型说明（`nil` = 新建）。
+    ///   - branch: **必传**，见类型说明。
+    ///
+    /// - Returns: 新 blob SHA 与提交 SHA。
+    func putFile(
+        owner: String,
+        repo: String,
+        path: String,
+        message: String,
+        content: Data,
+        sha: String?,
+        branch: String
+    ) async throws -> FileWriteResultDTO
+
+    /// 删除一个文件（`DELETE /repos/{o}/{r}/contents/{path}`）。
+    ///
+    /// ⚠️ 官方 NOTE：它**不能与 `putFile` 并行**（会冲突），必须 serially ——
+    /// 这正是「重命名 = PUT 新 + DELETE 旧」要顺序两步的原因（决策 #66）。
+    /// 串行的编排在 `RenameFile` 里，本层只是两个各自独立的动作。
+    ///
+    /// - Parameter sha: **必填**（官方要求）。取法见 `DeleteFile`（现取）。
+    func deleteFile(
+        owner: String,
+        repo: String,
+        path: String,
+        message: String,
+        sha: String,
+        branch: String
+    ) async throws
+}
+
+// MARK: - ⑥ 建 PR（切片 8，「新分支 + PR」的第三步）
+
+/// `POST /repos/{o}/{r}/pulls` —— §9.6.3 的第三步。
+///
+/// ## ⚠️ 三个必填，一个都不能少
+///
+/// 官方原文：`title` — *"Required unless issue is specified"*；
+/// `head` / `base` — `(required)`。
+/// 而原型与 PRD §5.9 的提交弹层里**原本只有一个 commit message 输入框** ——
+/// 那两个必填值没有任何来源，这正是决策 #67（弹出两行输入）要补的缺口。
+///
+/// ## ⚠️ `head` 在同仓库时**只写分支名**
+///
+/// `owner:branch` 是**跨仓库 fork** 的写法。本期"新分支 + PR"的分支恒在同一个仓库里
+/// ⇒ 传 `name` 即可；传成 `owner:name` 在官方文档下也是合法的（同一个 owner），
+/// 但那会让这条调用的前提（"就在本仓库"）从代码里消失。
+///
+/// ## ⚠️ 扩展体同样尚未接上（切片 8.2）
+///
+/// 与 `RepoFileWriteDataSource` 同一条：协议在 8.1、端点方法在 8.2。
+public protocol RepoPullCreationDataSource: Sendable {
+
+    /// 开一个 PR。
+    ///
+    /// - Parameters:
+    ///   - title: **必填**。领域层保证它非空（`CommitDraft.effectivePRTitle` 的回落链）。
+    ///   - head: 源分支 —— 「新分支 + PR」里刚建成的那条（只写分支名，见类型说明）。
+    ///   - base: 目标分支 —— 提交弹层里那个"当前分支"。
+    ///
+    /// - Returns: 服务端回的那条 PR（**编号只能用这一份**，
+    ///   同 `CreatedIssue.number` 的理由：不能靠本地猜）。
+    func createPull(
+        owner: String,
+        repo: String,
+        title: String,
+        head: String,
+        base: String
+    ) async throws -> PullDetailDTO
+}
+

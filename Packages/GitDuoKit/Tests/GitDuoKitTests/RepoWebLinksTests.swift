@@ -90,4 +90,33 @@ struct RepoWebLinksTests {
         #expect(RepoWebLinks.commit(fullName: "", sha: "abc123") == nil)
         #expect(RepoWebLinks.commit(fullName: "octocat/hello-world", sha: "") == nil)
     }
+
+    // MARK: - compare（切片 8：「PR 未创建」的出口）
+
+    @Test("⚠️ 比较页地址带 `?expand=1`（少了它用户到了比较页还得自己找建 PR 的按钮）")
+    func compareShape() throws {
+        let url = try #require(
+            RepoWebLinks.compare(fullName: "octocat/hello-world", base: "main", head: "gitduo/x")
+        )
+
+        #expect(url.absoluteString
+            == "https://github.com/octocat/hello-world/compare/main...gitduo/x?expand=1")
+    }
+
+    @Test("⚠️ 分隔符是**三个点** —— 两个点是「比较两个提交」那个完全不同的页面，不报错也不明显")
+    func compareUsesTripleDot() throws {
+        let url = try #require(
+            RepoWebLinks.compare(fullName: "octocat/hello-world", base: "main", head: "feature")
+        )
+
+        #expect(url.absoluteString.contains("main...feature"))
+        #expect(!url.absoluteString.contains("main..feature?"))
+    }
+
+    @Test("三段任一为空 ⇒ `nil`（宁可不出这个按钮，也不要一个落空的地址）")
+    func compareRejectsEmptyParts() {
+        #expect(RepoWebLinks.compare(fullName: "", base: "main", head: "x") == nil)
+        #expect(RepoWebLinks.compare(fullName: "octocat/hello-world", base: "", head: "x") == nil)
+        #expect(RepoWebLinks.compare(fullName: "octocat/hello-world", base: "main", head: "") == nil)
+    }
 }

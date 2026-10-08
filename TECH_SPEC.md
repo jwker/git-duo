@@ -824,6 +824,14 @@ enum EditorMode: Hashable, Sendable {
     /// 编辑既有文件
     case edit
 }
+```
+
+⚠️ **`EditorMode` 的落点已于切片 8.1 变更（2026-10-08）：它是 `GitDuoKit` 的公开类型**
+（`GitDuoKit/Sources/GitDuoKit/Files/EditorMode.swift`），不再是 App 层 `Route.swift` 里的一份。
+理由：8.1 起它多了两个**领域层**的读者 —— `SaveFile` 的 `sha` 判断、`EditorCopy` 的两句模式文案；
+留在 App 层就等于让领域包反向依赖宿主。上面这段定义**只描述形状、不再描述落点**，正本在包内。
+⚠️ 别再在 App 层另写一份同名的：**同模块类型遮蔽**会把 `Route.editor` 的 `mode:` 悄悄绑到本地那份上，
+报错会指向一行完全正常的代码（`Route.swift` 抬头留了这条坑的记录）。
 
 enum Route: Hashable {
     case search

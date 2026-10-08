@@ -8,9 +8,14 @@
 **切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已**陪跑目视修复（6.7 起，现已到 6.9 —— 完成定义第 3 条「与原型逐屏对照」12 项于 2026-10-07 全部走完）**；**切片 7（Issues / PR）2026-10-08 开工、当天走完：7.0 文档先行（决策 #56–#63）· 7.1 领域层 · 7.2 数据层 · 7.3 设计系统 · 7.4 表现层 · 7.5 装配与路由**全部落地并提交（`0b963df`）；**7.6 收尾三件事也已齐** —— `make verify` 已过 · 文档同步已做 · **逐屏对照 13–17 五项同日走完**（用户回"看过了没啥问题"）⇒ **切片 7 的 4 条完成定义全部满足**。**
 **切片 8（编辑器与提交）已于 2026-10-08 开工：8.0 文档先行（决策 #64–#70）已落地** —— 本片把决策 #51 里"画出但不可点"的那批按钮（`编辑` / `更多` / 「＋ 添加」）**全部接通**，
 并**新扩出三件事**（用户 2026-10-08 拍板）：**「更多」= 重命名 + 删除文件**（原先连规格都没有，本次补出 `PRD §5.15–§5.17`）·
-**上传文件 / 上传图片两个出口**（`.fileImporter` / `PhotosPicker`，都不需要权限声明）· **提交弹层「新分支 + PR」的两行输入与 409 两出口**。⚠️ **8.1–8.6 待做**（施工图见下）。*
-`make verify` = **五包单测 1328 项 + 模拟器构建**，一条命令，**零编译警告**。
-（**GitHubAPI 362** · GitDuoAuth 57 · GitDuoCore 50 · **GitDuoDesign 79** · **GitDuoKit 780**）
+**上传文件 / 上传图片两个出口**（`.fileImporter` / `PhotosPicker`，都不需要权限声明）· **提交弹层「新分支 + PR」的两行输入与 409 两出口**。
+**8.1 领域层已落地**（2026-10-08）：`GitDuoKit/Files/` 的写通道编排与判定 —— `FileWriteTarget`（两档 + 预填分支名）· `CommitDraft`（+ `CommitSource` 四档）·
+`FileWriteFailure`（409 与 422 的分类）· `SaveFile`（**三步**：建分支 → 提交 → 建 PR，**四种结局**）· `RenameFile`（**两步串行** + 四种结局）· `DeleteFile` ·
+`RepoPath` 的**重命名目标路径判据** · 三个文案命名空间（`EditorCopy` / `CommitSheetCopy` + `FileCopy` 新增三节）· `EditorMode` **从 App 层搬进领域层**。
+⚠️ **两条新接缝的扩展体有意不存在**（`RepoFileWriteDataSource` / `RepoPullCreationDataSource` 在 8.1 立协议、**端点方法在 8.2 才接**）。
+⚠️ **8.2–8.6 待做**（施工图见下）。
+`make verify` = **五包单测 1405 项 + 模拟器构建**，一条命令，**零编译警告**。
+（**GitHubAPI 362** · GitDuoAuth 57 · GitDuoCore 50 · **GitDuoDesign 79** · **GitDuoKit 857**）
 
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
@@ -30,7 +35,7 @@
 ⇒ **切片 6 的 4 条完成定义首次全部满足**（此前只有切片 1 走到过"4 条齐全"）。
 ✅ **切片 7 那批（13–17：Issue 详情 / 新建 Issue / PR 详情 / 仓库详情两段 / 两个弹层）2026-10-08 走完**
 （落地当天就走，没有往后拖）⇒ **切片 7 的 4 条完成定义也全部满足** —— 目前达到这个状态的只有切片 1、6、7。
-**清单正本 = `REVIEW-CHECKLIST §6` 末尾**（页级 **21 项** —— 切片 6 那 12 项各带逐项细则、共 82 条；已知有意偏差 **32 条**；已完成 6.7 / 6.8 / 6.9 / **6.10**）；
+**清单正本 = `REVIEW-CHECKLIST §6` 末尾**（页级 **21 项** —— 切片 6 那 12 项各带逐项细则、共 82 条；已知有意偏差 **33 条**（现行 **32**，第 3 条已作废）；已完成 6.7 / 6.8 / 6.9 / **6.10**）；
 **该表的状态列是唯一记录处**。⚠️ ②④ 两批是**口述未报问题**（没有逐条点名）⇒ 按"看过且未报问题 = 过"记的，
 **若哪一页其实有问题，说一声就改回 ⬜**。⚠️ 第 ④ 批里 **§5.8 添加文件弹层在 App 里打不开**
 （唯一入口「＋ 添加」按决策 #51 不可点）⇒ 那一项只有**代码核对**这一层证据、没有真机目视。
@@ -57,7 +62,7 @@
 
 ⇒ **目视这笔账没有往后拖**：切片 6 的清单当天跑完，**切片 7 那批（13–17）也在落地当天走完**（2026-10-08，用户回"看过了没啥问题"）。
 ⚠️ 走"会改真实仓库"的页面时（删除 / 合并分支 / **合并 PR** / **创建标签**这类）**只看形态、别真删真合真建**；
-看到"不一样"**先翻 `REVIEW-CHECKLIST §6` 末尾那张有意偏差表**（**32** 个编号，其中第 3 条已于 2026-10-08 作废 ⇒ 现行有效 **31** 条）—— 拍过板的不算缺陷。
+看到"不一样"**先翻 `REVIEW-CHECKLIST §6` 末尾那张有意偏差表**（**33** 个编号，其中第 3 条已于 2026-10-08 作废 ⇒ 现行有效 **32** 条）—— 拍过板的不算缺陷。
 ⚠️ 走这一批之前给过的提醒（**别真删真合真建** · "看到不一样先翻偏差表"）与走完的结果，**一并留档在 `REVIEW-CHECKLIST` 6.10**。
 
 > **切片 7 施工图（2026-10-08 起）**：Issues / PR —— Issue 详情 + 新建 Issue + PR 详情，
@@ -87,13 +92,22 @@
 
 | # | 内容 | 状态 |
 |---|---|---|
-| 8.0 | 文档先行：决策 **#64–#70**（编辑器自己取 sha / **`branch` 恒传 + 写后失效** / 重命名与删除 + **串行** / 「新分支 + PR」两行输入 / **多步操作的部分失败** / 409 两出口 / 上传两个出口的落点）+ `TECH_SPEC §9.6` **重写为五个子节**（写通道 / 两条不能省的参数 / 三步与部分失败 / 409 / 「更多」）· `§4.6.2` 端点表补全（PUT 的 `branch` 默认值 · 新增 `DELETE contents` 与「重命名 = PUT+DELETE」· 建 PR 三必填 · 上传图片的 PhotosPicker 口径）· `§8.4` 弹层表 14 → **17 类** · `§13.2` 配额表补 6 行 + `PRD §4.5 / §4.6 / §5.8 / §5.9` 补口径 + **新增 `§5.15–§5.17`** + `REVIEW-CHECKLIST §1/§6` | 🔄 |
-| 8.1 | 领域层（`GitDuoKit/Files/`）：**写通道的编排与判定** —— `FileWriteTarget`（`.currentBranch` / `.newBranch(name:prTitle:)`）· `CommitDraft`（提交信息 / 目标 / 分支名 / PR 标题；**空提交信息 ⇒ 默认信息**）· `SaveFile`（取 sha → base64 → 发；`mode` 决定带不带 sha）· `RenameFile`（**两步串行** + 部分失败的**结果类型**—— 不是 `Result`，因为"第一步成了第二步没成"是一个**要报给用户的正常结局**）· `DeleteFile` · `RepoPath` 补**重命名目标路径**的判据（空 / 与源相同 / 目标已存在 ⇒ 客户端拦）· `CommitCopy` / `EditorCopy` 文案 · 409 的分类（与合并分支的 409 **不共用常量**，见 §9.6.4） | ⬜ |
+| 8.0 | 文档先行：决策 **#64–#70**（编辑器自己取 sha / **`branch` 恒传 + 写后失效** / 重命名与删除 + **串行** / 「新分支 + PR」两行输入 / **多步操作的部分失败** / 409 两出口 / 上传两个出口的落点）+ `TECH_SPEC §9.6` **重写为五个子节**（写通道 / 两条不能省的参数 / 三步与部分失败 / 409 / 「更多」）· `§4.6.2` 端点表补全（PUT 的 `branch` 默认值 · 新增 `DELETE contents` 与「重命名 = PUT+DELETE」· 建 PR 三必填 · 上传图片的 PhotosPicker 口径）· `§8.4` 弹层表 14 → **17 类** · `§13.2` 配额表补 6 行 + `PRD §4.5 / §4.6 / §5.8 / §5.9` 补口径 + **新增 `§5.15–§5.17`** + `REVIEW-CHECKLIST §1/§6` | ✅ |
+| 8.1 | 领域层（`GitDuoKit/Files/`）：✅ **已落地**（2026-10-08）—— **写通道的编排与判定**，五个新类型 + 一个判据补口 + 三个文案命名空间：`FileWriteTarget`（`.currentBranch` / `.newBranch(name:prTitle:)` + `isNewBranch` / `newBranchName` / `newBranchPRTitle` 三个派生属性 + `defaultNewBranchName(now:timeZone:)` 预填 `gitduo/yyyyMMdd-HHmmss`）· `CommitDraft`（`message` **原样存**（打字过程不吃空格）+ **两条回落**：trim 后为空 ⇒ `CommitSheetCopy.defaultMessage`、PR 标题为空 ⇒ 回落生效后的提交信息）+ `CommitSource` 四档（新建 / 编辑 / 上传文件 / 上传图片；**只有后两个的 `pathIsAutomatic` 为真**）· `FileWriteFailure`（409 / 422 / 404 / 其余，**只有前两档给话** + `offersConflictExits`）· `SaveFile`（**三步**顺序固定：建分支 → 提交 → 建 PR；`FileSaveReceipt` 里 **`blobSHA` 与 `commitSHA` 是两个 sha**；四种结局 = 落当前分支 / 建分支 + 建 PR / **建了分支但没提交成** / **提交了但没建 PR 成**；手上没有 headSHA 时补一次 `GET /branches/{branch}`）· `RenameFile`（**两步串行** + 四种结局：`.renamed` / `.destinationExists` / **`.movedButOldRemains`（两步之间断掉 ⇒ 仓库里两个文件都在）** / `.sourceUnavailable(.gone / .notWritable)`）· `DeleteFile`（**现取 sha** + 404 不抛 ⇒ `.alreadyGone`）· `RepoPath.resolveRenameDestination`（前导 `/` 宽容剥一次；空 / 与源相同 / 非法字符三档）· `CommitMessageDefaults`（两个用例共用的默认信息）· 文案 `EditorCopy`（§4.6）+ `CommitSheetCopy`（§5.9）+ `FileCopy` **新增三节**（§5.15–§5.17）· `EditorMode` **迁入本包**（正本在领域层，`TECH_SPEC §8.2` 已改为"只描述形状"）。⚠️ **成果验收**：`FileWriteTargetTests` / `FileWriteTests` / `FileOperationCopyTests` 三套共 **+77 项**（GitDuoKit 780 → 857），其中把"**两步必须串行**""**422 不发 DELETE**（不然两个都丢）""**页脚点名的两颗按钮真的存在**"都做成了正面断言 | ✅ |
 | 8.2 | 数据层（`GitHubAPI`）：`GitHubRepoContentEndpoint` 加**写**（`PUT` / `DELETE`，**`branch` 恒传**、`sha` 更新与删除时必传、base64 编码）· `GitHubRepoPullsEndpoint` 加 `createPull(title:head:base:)` · **写后缓存失效**（该仓库的 contents / commits / branches）· 配额桶逐个显式声明 + 单测（含"**不带 `branch` 的请求发不出去**"这条正面断言） | ⬜ |
 | 8.3 | 设计系统（`GitDuoDesign`）：✅ **预计零新增** —— 编辑器用现成的 `CodeTextArea`（`minLines: 13`，切片 7 就为它留好了）· 路径 / 分支名 / PR 标题用 `SheetField` · 三个新弹层用 `SheetTitle` / `SheetRow` / `SheetHint` · 危险色用 `ActionButton.Style.destructive`。⚠️ 若真发现要造新件，先按判据 **#43** 过一遍（只收基础类型才进设计包） | ⬜ |
 | 8.4 | 表现层（`GitDuo/Features/Repo/`）：`Views/EditorView` + `ViewModels/EditorViewModel`（§4.6 两模式）· `Views/Sheets/CommitSheet` + VM（§5.9，含两行输入与 409 两出口）· `AddFileSheet` **三行接通**（§5.8，含两个系统选择器）· `Views/Sheets/FileOperationsSheet` / `RenameFileSheet` / `DeleteFileSheet`（§5.15–§5.17，形态照 §5.12 / §5.14 两条先例）· `FileView` 的「编辑」「更多」接通 + **>1MB 时「编辑」不可点**（偏差 32） | ⬜ |
 | 8.5 | 装配与路由：`AppEnvironment` 接新用例 + `RouteView` 的 `.editor` **从骨架屏换真件**（§8.3 那张表里它是最后一条占位）· `SkeletonPlaceholders.registry` 消解（只剩「我的」旗下三页） | ⬜ |
 | 8.6 | 收尾：`make verify` · 文档同步 · **逐屏对照 18–21**（编辑器 / 提交弹层 / 添加文件三出口 / 文件操作三件）—— ⚠️ **别真写**，见上面那条 | ⬜ |
+
+> ⚠️ **8.1 对施工图措辞的三处有意偏离**（2026-10-08，逐条记下免得下一片照着旧措辞做）：
+> ① 施工图原文写「`SaveFile`（**取 sha** → base64 → 发；`mode` 决定带不带 sha）」，实际落地**把"取 sha"排除在 `SaveFile` 之外** ——
+> 它只收「**用户读到的那一版**」这个 sha，**不收取法**。理由是决策 **#64**：在提交时刻现取新 sha ⇒ 并发改动**永远撞不上 409** ⇒ **静默丢掉远端改动**。
+> ⇒ 「取 sha」归编辑器页（8.4）、「base64」归数据层（8.2，§4.6.2），`SaveFile` 只留编排。
+> ② 施工图里 `mode` 决定带不带 sha —— 落到代码上是**两条用例的两种语义**：`SaveFile` 收「读到的那一版」（乐观锁），
+> `DeleteFile` **现取**。两者在类型上无法区分（同一个 `String?`）⇒ 已写进协议文档。
+> ③ 施工图那一行的 `CommitCopy` 实际落成 **`CommitSheetCopy`**（§5.9 提交弹层）+ **`EditorCopy`**（§4.6 编辑器）两个命名空间，名字与 PRD 章节对齐。
+> ⚠️ 三条都是**措辞没跟上实现**那一类，不是漏做；但下一片（8.2）若照原文找 `SaveFile` 里的 `Data` 参数会找不到。
 
 > **切片 6 施工图（2026-10-07 起）**：文件查看 + 提交详情 + 分支管理 **+ 仓库详情外壳（PRD §4.4）**。
 > 对应 PRD **§4.4 / §4.5 / §4.7 / §4.8**（+ §5.7 切换分支弹层 / §5.8 添加文件弹层 / §3.10 分支）。

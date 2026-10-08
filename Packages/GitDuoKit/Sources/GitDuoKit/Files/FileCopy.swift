@@ -35,7 +35,11 @@ public enum FileCopy {
     /// 零请求：正文已经在手上（`FileContent.text`），复制是纯本地操作。
     public static let rawAction = "Raw"
 
-    /// `更多`（重命名 / 删除，原型逐字）——属切片 8，画出但不可点。
+    /// `更多`（重命名 / 删除，原型逐字）。
+    ///
+    /// ⚠️ **切片 8 起它可点了**（用户 2026-10-08 裁定「一起做」）——
+    /// 三个弹层规格见 §5.15–§5.17，本文件下面那三节就是它们的文案。
+    /// 8.4 接线之前，`FileView` 仍然按 `moreUnavailableHint` 画出不可点的形态。
     public static let moreAction = "更多"
 
     // MARK: - 不可点按钮的读屏提示（决策 #51）
@@ -46,6 +50,10 @@ public enum FileCopy {
     /// 每一条都必须说**为什么**点不了，且**四条各不相同** ——
     /// 合成一句"暂不可用"会让"下一片就做"与"本期根本不做"看起来是同一件事，
     /// 而这两者对用户该有的期待完全不同。
+    /// ⚠️ 8.4 起这一条**只用于"文件 >1MB"那一档**（决策 #54 的边界、
+    /// `REVIEW-CHECKLIST` 偏差 32）—— 普通文件上它可点了。
+    /// 那句话改由 `EditorCopy.editTooLargeHint` 说（它说的是"太大"，不是"还没做"）。
+    /// **8.4 接线时这张常量连同本行说明一起删掉。**
     public static let editUnavailableHint = "编辑在切片 8 落地，当前版本暂不可用"
 
     /// ⚠️ `Fork 后可编辑` 的障碍**不是**这个按钮本身没做，而是 Fork 没做
@@ -55,6 +63,9 @@ public enum FileCopy {
     /// 历史指向"这个文件的提交历史"这一独立页面，PRD §4.5 标 ⏳ ⇒ 没有切片认领它。
     public static let historyUnavailableHint = "这个文件的提交历史尚未落地，当前版本暂不可用"
 
+    /// ⚠️ **8.4 起它变成一条死常量**（「更多」成为了可点按钮，没有"不可点"这一档了）
+    /// —— 接线时**连同本行说明一起删掉**。留着它会让"这颗按钮还不能点"
+    /// 在代码里看起来仍然成立。
     public static let moreUnavailableHint = "重命名与删除在切片 8 落地，当前版本暂不可用"
 
     // MARK: - 底部说明（PRD §4.5 表）
@@ -64,6 +75,120 @@ public enum FileCopy {
 
     /// 他人仓库的页脚（原型逐字）。
     public static let readOnlyFooter = "只读浏览 · 他人仓库文件"
+
+    // MARK: - §5.15 文件操作菜单（切片 8 新增，决策 #66）
+
+    /// 弹层标题：`文件操作 · {文件名}`（PRD §5.15 逐字）。
+    ///
+    /// ⚠️ 带**文件名**而不是完整路径：这一屏的上下文是"我正在看哪个文件"，
+    /// 而路径可能很长（`Sources/GitDuoKit/Features/Repo/Views/FileView.swift`）——
+    /// 标题放不下它，且用户此刻不需要在两级目录之间做区分。
+    public static func fileOperationsSheetTitle(fileName: String) -> String {
+        "文件操作 · \(fileName)"
+    }
+
+    /// `重命名`（PRD §5.15 逐字）。
+    public static let renameAction = "重命名"
+
+    /// `删除文件`（PRD §5.15 逐字）。⚠️ 危险色（`ActionButton.Style.destructive`）。
+    public static let deleteAction = "删除文件"
+
+    // MARK: - §5.16 重命名弹层（切片 8 新增，决策 #66）
+
+    /// 弹层标题（PRD §5.16 逐字）。
+    public static let renameSheetTitle = "重命名文件"
+
+    /// 说明行（PRD §5.16 逐字）。
+    ///
+    /// ⚠️ 它承诺"原路径将不再存在" —— 而两步里的第二步（删旧路径）**可能失败**
+    /// （那时两个都在）。这句话不是假话（正常路径下它成立），但接口失败时
+    /// 必须由 `renamePartiallyMovedToast` 主动纠正，不能只靠这一句。
+    public static let renameSheetHint = "重命名会移动文件 · 原路径将不再存在"
+
+    /// 确认按钮（PRD §5.16 逐字）。
+    public static let renameConfirmAction = "保存"
+
+    /// 路径为空（PRD §5.16 逐字）。
+    public static let renameEmptyHint = "先输入文件路径"
+
+    /// 目标路径上已有文件（PRD §5.16 逐字）。
+    ///
+    /// ⚠️ 与 `CommitSheetCopy.destinationExistsHint`（上传那一侧）**措辞不同**，
+    /// 这是有意的 —— 两句话分别由 §5.16 与 §5.8 定，各自带着自己的下一步。
+    public static let renameDestinationExistsHint = "该路径上已有文件"
+
+    /// 某一级路径不合法（**规格未给**，自拟）。
+    ///
+    /// 它拦的是 `.` / `..` 与空段（`a//b`）—— 那一串在服务端是**另一条路径**，
+    /// 而界面上看起来只是想改个名（判据见 `RepoPath.resolveRenameDestination`）。
+    /// 提示里点名那一级：用户需要知道改哪里。
+    public static func renameInvalidPathHint(component: String) -> String {
+        "路径里的「\(component)」不是有效的一级，请去掉它"
+    }
+
+    /// 两步都成了（PRD §5.16 逐字）。
+    public static func renamedToast(newPath: String) -> String {
+        "已重命名为 \(newPath)"
+    }
+
+    /// ⚠️ **第一步成了、第二步失败**（PRD §5.16 逐字）—— 这一刻仓库里**两个文件都在**。
+    ///
+    /// 含糊成"重命名失败"会让用户以为什么都没变（他可能就此不管，
+    /// 而仓库里多了一份副本）—— 决策 #68② 点名的正是这一处。
+    public static let renamePartiallyMovedToast = "新路径已写入，原路径仍在"
+
+    /// 源文件已经不在了（**规格未给**，自拟）。
+    ///
+    /// ⚠️ 与 `.notWritable` 分开：一个说"它没了"，一个说"它在，但这条通道做不了"。
+    /// 合成一句会把一个**还在那里**的文件说成"已不存在"，用户会以为数据没了。
+    public static let renameSourceGoneHint = "这个文件已经不在了，请刷新后重试"
+
+    /// 源文件的内容拿不到 ⇒ 写不出新路径（>1MB / 二进制 / 解不出编码）。
+    ///
+    /// ⚠️ **规格未给**（自拟）。必须说清"它还在、只是这里做不了"，
+    /// 并给网页端出口 —— 否则用户会以为这个文件坏了。
+    public static let renameSourceNotWritableHint =
+        "这个文件太大或格式不支持，App 内无法重命名，请到 GitHub 网页端处理"
+
+    // MARK: - §5.17 删除文件确认（切片 8 新增，决策 #66）
+
+    /// 弹层标题：`删除「{文件名}」？`（PRD §5.17 逐字）。
+    public static func deleteSheetTitle(fileName: String) -> String {
+        "删除「\(fileName)」？"
+    }
+
+    /// 说明（PRD §5.17 逐字）。
+    ///
+    /// ⚠️ 它先说"会立即生成一次提交" —— 这不是修辞：Contents 的删除**就是一次提交**，
+    /// 所以"本机不做二次备份"这句才有意义（用户可以在网页端的提交历史里找回）。
+    public static func deleteSheetHint(branch: String) -> String {
+        "删除会立即在 \(branch) 上生成一次提交，本机不做二次备份。"
+    }
+
+    /// 确认按钮（PRD §5.17 逐字）。⚠️ 红底。
+    public static let deleteConfirmAction = "删除文件"
+
+    /// 警告行（PRD §5.17 逐字）。
+    public static let deleteWarning = "此操作不可撤销（可在 GitHub 网页端的提交历史里找回）"
+
+    /// 删除成功（PRD §5.17 逐字）。
+    public static func deletedToast(fileName: String) -> String {
+        "已删除 \(fileName)"
+    }
+
+    /// ⚠️ 现取版本标识时发现文件已不在（PRD §5.17 逐字）。
+    ///
+    /// **不报"删除失败"** —— 用户想要的结果本来就已经成立了。
+    public static let alreadyGoneHint = "该文件已不存在"
+
+    // MARK: - 通用取消
+
+    /// `取消`（PRD §5.16 / §5.17 逐字）。
+    ///
+    /// ⚠️ 它与 `BranchCopy.cancelAction` **是同一个词、两个落点** ——
+    /// 这里不跨命名空间引用（那样会让"文件操作的取消"悄悄跟着分支页的改动走）。
+    /// 一个词的两个落点不会漂（它没有别的说法），而**跨模块的隐式依赖会**。
+    public static let cancelAction = "取消"
 
     // MARK: - 提示
 

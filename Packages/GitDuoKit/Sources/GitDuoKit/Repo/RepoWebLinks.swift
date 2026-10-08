@@ -44,4 +44,19 @@ public enum RepoWebLinks {
         guard !fullName.isEmpty, !sha.isEmpty else { return nil }
         return URL(string: "https://github.com/\(fullName)/commit/\(sha)")
     }
+
+    /// 从一个分支到另一个分支的**比较页**（切片 8，「PR 未创建」的出口）。
+    ///
+    /// ⚠️ **`?expand=1` 不能省**：`compare/{base}...{head}` 本身是"看差异"，
+    /// 而带 `expand=1` 才是**直接展开建 PR 的表单**。
+    /// 少了它用户到了比较页还得自己找「Create pull request」那颗按钮 ——
+    /// 而他刚刚才因为 PR 没建起来被送到这里（§5.9④ 要求的正是"给出口"）。
+    ///
+    /// ⚠️ 三个点的分隔符是 GitHub 的写法（`base...head`），
+    /// 写成两个点会正常返回一个**完全不同**的页面（那是"比较两个提交"），
+    /// 不报错、也不明显。
+    public static func compare(fullName: String, base: String, head: String) -> URL? {
+        guard !fullName.isEmpty, !base.isEmpty, !head.isEmpty else { return nil }
+        return URL(string: "https://github.com/\(fullName)/compare/\(base)...\(head)?expand=1")
+    }
 }
