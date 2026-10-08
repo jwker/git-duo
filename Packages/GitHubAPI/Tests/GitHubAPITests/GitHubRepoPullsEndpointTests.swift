@@ -167,7 +167,8 @@ struct GitHubRepoPullsEndpointTests {
     private let detailJSON = """
     {"number":57,"title":"feat: 仓库详情四分区导航","state":"open","merged_at":null,
      "head":{"ref":"feature/repo-hub"},"base":{"ref":"main"},
-     "user":{"login":"dev-j"},"updated_at":"2026-10-06T09:00:00Z","body":"正文",
+     "user":{"login":"dev-j"},"updated_at":"2026-10-06T09:00:00Z","created_at":"2026-10-05T08:00:00Z",
+     "body":"正文",
      "additions":842,"deletions":156,"changed_files":12}
     """
 
@@ -186,6 +187,22 @@ struct GitHubRepoPullsEndpointTests {
         #expect(detail.changedFiles == 12, "「{N} 个文件」用这个，不是文件那一页的条数")
         #expect(detail.user?.login == "dev-j")
         #expect(detail.base.ref == "main")
+    }
+
+    @Test("⚠️ 详情：`created_at` 与 `updated_at` **是两个字段**（原型正文气泡那个时间是创建时刻）")
+    func detailKeepsCreatedAndUpdatedApart() async throws {
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(.json(detailJSON))
+
+        let detail = try await makeEndpoint(harness: harness)
+            .pullRequest(owner: "o", repo: "r", number: 57)
+
+        let created = try #require(detail.createdAt)
+        let updated = try #require(detail.updatedAt)
+        // 头部那句是「更新于」、正文气泡那个时间是创建时刻 —— 用错会让
+        // 一段三个月前写的描述显示成"刚刚更新"，而屏幕上看起来完全正常。
+        #expect(created < updated)
+        #expect(updated.timeIntervalSince(created) == 90_000)
     }
 
     @Test("详情：作者被删号（user 为 null）⇒ 不崩，作者留 nil")

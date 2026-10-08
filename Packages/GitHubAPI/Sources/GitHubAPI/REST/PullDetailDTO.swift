@@ -48,6 +48,20 @@ public struct PullDetailDTO: Sendable, Equatable, Decodable {
     /// ⚠️ **可选**，理由同 `PullRequestDTO.updatedAt`：少一个时间不该让整页打不开。
     public let updatedAt: Date?
 
+    /// 创建时刻（切片 7 补）。
+    ///
+    /// ## 为什么头部不用它、却仍然要收
+    ///
+    /// 头部那句是 `更新于 {时间}`（PRD §4.11，与 Issue 的 `创建于` **有意不同**）⇒
+    /// 头部确实用不上 `created_at`。但**正文气泡**用得上：
+    /// 原型把 PR 正文画成作者发的**第一条评论**（`08-pr.js:33-39`，带 `2 小时前`），
+    /// 而那一条的时间只能是**创建时刻** —— 用 `updated_at` 会随每次改动而变，
+    /// 读起来像"这段描述是刚刚写的"。
+    ///
+    /// ⚠️ 声明成**可选**：官方 schema 里 nullable，而它只影响一个气泡上的一小截时间，
+    /// 为它把整页变成"打不开"是不划算的（同 `updatedAt` 的取舍）。
+    public let createdAt: Date?
+
     /// 正文（Markdown 源文）。**可以是 `null`**。
     ///
     /// 与 Issue 详情同理（`IssueDetailDTO.body`）：原型把 PR 正文画成**作者发的第一条评论**，
@@ -78,6 +92,7 @@ public struct PullDetailDTO: Sendable, Equatable, Decodable {
         base: PullRefDTO,
         user: AuthorDTO? = nil,
         updatedAt: Date? = nil,
+        createdAt: Date? = nil,
         body: String? = nil,
         additions: Int,
         deletions: Int,
@@ -91,6 +106,7 @@ public struct PullDetailDTO: Sendable, Equatable, Decodable {
         self.base = base
         self.user = user
         self.updatedAt = updatedAt
+        self.createdAt = createdAt
         self.body = body
         self.additions = additions
         self.deletions = deletions
@@ -106,6 +122,7 @@ public struct PullDetailDTO: Sendable, Equatable, Decodable {
         case base
         case user
         case updatedAt = "updated_at"
+        case createdAt = "created_at"
         case body
         case additions
         case deletions
