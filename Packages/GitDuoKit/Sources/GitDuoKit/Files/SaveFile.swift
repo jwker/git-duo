@@ -269,4 +269,51 @@ public enum FileSaveOutcome: Sendable, Equatable {
             false
         }
     }
+
+    /// 这一次操作**整个完成了**（三步都成 / 一次 `PUT` 就成）。
+    ///
+    /// ⚠️ 它**不是** `didWrite`：`committedButPullCreationFailed` 的改动确实进去了，
+    /// 但 PR 没建起来 —— 用户还有下一步（去网页端建 PR），所以界面**不该离开**
+    /// （PRD §4.6 明写"「新分支 + PR」失败或建 PR 失败时**不返回**"）。
+    /// 这一处漏判的表现是"页面在用户还需要它的时候自己退走了"。
+    public var isComplete: Bool {
+        switch self {
+        case .committedToCurrentBranch, .createdBranchAndPull: true
+        case .branchCreatedButCommitFailed, .committedButPullCreationFailed: false
+        }
+    }
+
+    /// 这次写操作的**收据**（`.branchCreatedButCommitFailed` 那一档为 `nil`）。
+    ///
+    /// ⚠️ 它与 `didWrite` 说的是同一件事，但**用途不同**：`didWrite` 给"要不要提示成功"，
+    /// 本属性给"要不要把提交后的**新基准**写回编辑器"（`FileSaveReceipt.blobSHA`）——
+    /// 那一处的形式是"拿到收据就更新"，而不是"判一个布尔再看能不能取到收据"。
+    public var receipt: FileSaveReceipt? {
+        switch self {
+        case let .committedToCurrentBranch(receipt):
+            receipt
+        case let .createdBranchAndPull(_, receipt, _):
+            receipt
+        case .branchCreatedButCommitFailed:
+            nil
+        case let .committedButPullCreationFailed(_, receipt, _):
+            receipt
+        }
+    }
+
+    /// 那一步**为什么**失败（只有两个"做到一半"的档有；两个成功档为 `nil`）。
+    ///
+    /// ⚠️ 界面文案**不随它变**（`CommitSheetCopy` 那两句固定，PRD §5.9④ 逐字）——
+    /// 它存在的意义是让调用方**能把它写进日志**：否则"这一步为什么失败"
+    /// 在现场无从复盘，而那个失败已经留下了既成事实（一条分支 / 一次提交）。
+    public var failureReason: GitHubError? {
+        switch self {
+        case .committedToCurrentBranch, .createdBranchAndPull:
+            nil
+        case let .branchCreatedButCommitFailed(_, reason):
+            reason
+        case let .committedButPullCreationFailed(_, _, reason):
+            reason
+        }
+    }
 }

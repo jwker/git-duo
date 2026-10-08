@@ -48,6 +48,8 @@ struct RouteView: View {
                 issues: env.repoIssues,
                 pulls: env.repoPulls,
                 starToggle: env.starToggle,
+                // 切片 8.4：§5.8 后两个上传出口的写通道（§4.4 的「＋ 添加」）。
+                saver: env.saveFile,
                 memory: env.branchMemory,
                 visits: env.recentVisits,
                 toast: env.toast
@@ -71,6 +73,9 @@ struct RouteView: View {
             // PRD §4.5。⚠️ `detail` 与 `memory` 是**为分支解析**要的，不是为文件内容：
             //    路由只带 `fullName` / `path` / `readOnly`（§8.2 正本），而"这个文件属于
             //    哪个分支"要靠决策 #55 的两段式解析拿到（先读记忆、再回落默认分支）。
+            //
+            // ⚠️ `renameFile` / `deleteFile` 是切片 8.4 的「更多」那条路（§5.15–§5.17）——
+            //    两条写通道传组合根里那**同一个**端点实例（见 `AppEnvironment` 的说明）。
             FileView(
                 fullName: fullName,
                 path: RepoPath(path: path),
@@ -78,10 +83,26 @@ struct RouteView: View {
                 loader: env.fileContent,
                 detail: env.repoDetail,
                 memory: env.branchMemory,
+                renameFile: env.renameFile,
+                deleteFile: env.deleteFile,
                 toast: env.toast
             )
         case let .editor(fullName, path, mode):
-            SkeletonScreen(title: "编辑器 · \(path ?? "新文件")", slice: "切片 8 落地", reference: "PRD §4.6 · \(fullName) · 模式=\(mode)")
+            // PRD §4.6。**切片 8.4 起是真页面**（此前是骨架屏）。
+            //
+            // ⚠️ `path` 是 `String?`，`nil` = 新建模式（§8.2 正本）——
+            //    这里转成 `RepoPath?` 而不是给个空路径：`RepoPath.root` 是一个**真实的
+            //    根目录路径**，而"新建文件"没有当前路径这回事，两者不能互相顶替。
+            EditorView(
+                fullName: fullName,
+                mode: mode,
+                path: path.map { RepoPath(path: $0) },
+                loader: env.fileContent,
+                detail: env.repoDetail,
+                memory: env.branchMemory,
+                saver: env.saveFile,
+                toast: env.toast
+            )
         case let .commitDetail(fullName, sha, readOnly):
             // PRD §4.7。`sha` 是**全哈希**（列表行上显示的短哈希只是显示形态）——
             // 路由里存全的、显示时才截，否则"从提交详情再点进去"就没有更细的地址可用了。

@@ -91,6 +91,9 @@ final class RepoDetailViewModel {
     private let visits: any RecentVisitStore
     private let toast: ToastCenter
 
+    /// 上传出口的写通道（§5.8 的后两行 —— 切片 8.4）。
+    private let saver: SaveFile
+
     let fullName: String
 
     init(
@@ -104,6 +107,7 @@ final class RepoDetailViewModel {
         issues: LoadRepoIssues,
         pulls: LoadRepoPulls,
         starToggle: ToggleStar,
+        saver: SaveFile,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
@@ -115,6 +119,7 @@ final class RepoDetailViewModel {
         self.issuesLoader = issues
         self.pullsLoader = pulls
         self.starToggle = starToggle
+        self.saver = saver
         self.visits = visits
         self.toast = toast
         self.tree = RepoTreeSession(
@@ -424,6 +429,66 @@ final class RepoDetailViewModel {
         _ list: RepoSubListViewModel<Item>
     ) -> Int? {
         list.hasLoaded ? list.loadedCount : nil
+    }
+
+    // MARK: - 切片 8.4：上传文件 / 图片（§5.8 的后两个出口）
+
+    /// 把一份**已经在手上**的字节提交到仓库根（`sha` 恒为 `nil` —— 这是一次新建）。
+    ///
+    /// - Parameters:
+    ///   - draft: 选中那一刻拿到的文件名与原始字节（`UploadDraft`，§5.8）。
+    ///   - commit: 提交弹层里那一份草稿（提交信息 + 目标两档）。
+    ///
+    /// - Returns: 与编辑器共用同一个 `CommitAttempt`（提交弹层只认它）。
+    ///
+    /// ## ⚠️ 它**不复用** `EditorViewModel.submit`
+    ///
+    /// 两处的差别不是"路径从哪来"这一件事：那里是**文本**（要 UTF-8 编码、
+    /// 要判 1MB）、这里是**原始字节**（§5.8 明写不重编码）；那里有"编辑模式 ⇒ 带 sha"
+    /// 那一档、这里恒为新建。合成一处要加两三个开关，而每一个开关在两个调用点里
+    /// 总有一处是错的。
+    ///
+    /// ⚠️ 与 `EditorViewModel.submit` **可能撞上同一条 409**：上传不带 `sha`，
+    /// 失败只可能是 422（同名已存在）—— 而那一档的文案由 `FileWriteFailure` 给
+    ///（`CommitSheetCopy.destinationExistsHint`，§5.8 明写"重名不静默覆盖"）。
+    func upload(_ draft: UploadDraft, commit: CommitDraft) async -> CommitAttempt {
+        // 这一屏取内容时一定解析过分支（`tree.load` 先定 ref、再取目录）——
+        // 拿不到时说明目录还没加载出来，而那时也不该有「＋ 添加」可点。
+        guard let branch = tree.branch else { return .rejected(ActionCopy.failed) }
+
+        // ⚠️ 文件名虽然来自系统选择器，仍然过一遍**与新建文件同一套**判据：
+        //    它是一串会变成路径的字节，而"界面看起来正常、路径不对"正是那套判据拦的东西。
+        let path: RepoPath
+        switch RepoPath.resolveNewFile(input: draft.fileName) {
+        case let .acceptable(resolved): path = resolved
+        case .rejected: return .rejected(ActionCopy.failed)
+        }
+
+        do {
+            let outcome = try await saver.run(
+                fullName: fullName,
+                path: path,
+                content: draft.data,
+                draft: commit,
+                // 新建：**不带 `sha`**（决策 #70⑤：路径已存在时服务端回 422，不静默覆盖）。
+                sha: nil,
+                currentBranch: branch
+            )
+            // 完全成功 ⇒ 目录与提交列表都变了（多了一个文件、多了一次提交）。
+            // ⚠️ 两档"做到一半"**不刷新**：那一刻用户还在结果屏上读那句话，
+            //    而列表在他背后换一次内容只会让人怀疑"我到底提交成功没有"。
+            if outcome.isComplete {
+                await tree.reload()
+                if commits.hasLoaded { await loadCommits(reset: true) }
+            }
+            return .settled(outcome)
+        } catch let error as BranchCreationError {
+            // 新分支名不合法 —— 与编辑器同一条处置（表单校验，不是网络错误）。
+            return .rejected(error.message)
+        } catch {
+            let failure = FileWriteFailure(Self.failure(from: error))
+            return .rejected(failure.message ?? ActionCopy.failed)
+        }
     }
 
     // MARK: - 错误归一化 / 文案

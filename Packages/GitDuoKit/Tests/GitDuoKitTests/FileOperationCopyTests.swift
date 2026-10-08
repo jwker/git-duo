@@ -55,6 +55,23 @@ struct FileOperationCopyTests {
         #expect(EditorCopy.footer.contains("网页端"))
     }
 
+    @Test("⚠️「编辑」的判据只有 `.text` 可点，不可点的两档是**两句不同的话**")
+    func editHintFollowsPreviewKind() {
+        // 正路上唯一可编辑的一档（≤1MB 的文本）。
+        #expect(EditorCopy.editHint(for: .text) == nil)
+        #expect(EditorCopy.editHint(for: .largeText) == EditorCopy.editTooLargeHint)
+        #expect(EditorCopy.editHint(for: .image) == EditorCopy.editImageHint)
+
+        // ⚠️ 两句话必须不同：把图片说成"超过 1MB"，用户会去网页端找一个
+        //    "压缩一下就能编辑"的办法 —— 而那个办法不存在。
+        #expect(EditorCopy.editImageHint != EditorCopy.editTooLargeHint)
+        #expect(EditorCopy.editImageHint.contains("图片"))
+        #expect(!EditorCopy.editImageHint.contains("1MB"),
+                "图片的问题**不是大小** —— 一张 3KB 的图标同样编辑不了")
+        #expect(!EditorCopy.editImageHint.contains("网页端"),
+                "图片在网页端也编辑不了 ⇒ 不能给一个到不了的出口")
+    }
+
     // MARK: - 提交弹层（§5.9）
 
     @Test("⚠️ 页脚点名的两个出口**必须真的存在**（决策 #69 的意义就在这一句）")

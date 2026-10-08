@@ -60,6 +60,38 @@ public enum EditorCopy {
         mode == .create ? defaultNewFilePath : fileName
     }
 
+    // MARK: - 路径框的校验（**规格未给**，切片 8.4 自拟）
+
+    /// 路径为空（或全空白）。
+    ///
+    /// ⚠️ **规格未给**：PRD §4.6 只写了"预填 `NewFile.swift`、可改成任意相对路径"，
+    /// 没有覆盖"用户把它清空之后点提交"。加这一句是因为服务端对这一档只回一个 **422**
+    /// —— 而那句话（"服务器验证失败"）解释不了"我忘了填路径"。
+    ///
+    /// ⚠️ 它与 `FileCopy.renameEmptyHint` **是同一个词、两个落点**（这里不跨命名空间引用）：
+    /// 一个是"新建文件时没填路径"、一个是"重命名时没填路径"，两句将来各有各的改法。
+    public static let emptyPathHint = "先输入文件路径"
+
+    /// 某一级路径不合法（`.` / `..` / 空段）。
+    ///
+    /// ⚠️ **规格未给**（与 `FileCopy.renameInvalidPathHint` 同一条判据、同一个理由）：
+    /// 那一串在服务端是**另一条路径**，而界面上看起来只是想建一个文件。
+    /// 提示里点名那一级 —— 用户需要知道改哪里。
+    public static func invalidPathHint(component: String) -> String {
+        "路径里的「\(component)」不是有效的一级，请去掉它"
+    }
+
+    /// 把 `NewFileDestinationIssue` 翻成一句话（**唯一落点**）。
+    ///
+    /// ⚠️ 收成一处而不是让编辑器页 `switch` 一次：那一句要显示在输入框下方，
+    /// 而"哪一档说哪句话"是文案（领域层的事），不是布局。
+    public static func pathHint(for issue: NewFileDestinationIssue) -> String {
+        switch issue {
+        case .empty: emptyPathHint
+        case let .invalidComponent(component): invalidPathHint(component: component)
+        }
+    }
+
     // MARK: - 「编辑」不可点的那一档
 
     /// 文件超过 1MB ⇒「编辑」按钮**不可点**（决策 #54 的边界、`REVIEW-CHECKLIST` 偏差 32）。
@@ -71,4 +103,37 @@ public enum EditorCopy {
     /// 大文件**能看**（走 raw），不能的只是"在 App 里改它"。
     /// 合成一句会让用户以为连预览都被禁了。
     public static let editTooLargeHint = "这个文件超过 1MB，App 内无法编辑，请到 GitHub 网页端处理"
+
+    /// 图片 ⇒「编辑」按钮**不可点**（**规格未给**，切片 8.4 自拟）。
+    ///
+    /// ⚠️ 为什么要有这一档：编辑器是一个**文本**编辑器（§4.6 的编辑区、§9.6 的
+    /// `PUT contents` 都只处理文本）。一张 `.png` 被点开之后，编辑器只能给出
+    /// `EditorContentIssue.notText` 那个失败态 —— 而用户一路点下来什么都没做错。
+    ///
+    /// ⚠️ 与 `editTooLargeHint` **必须分开**：那句说的是"太大"，
+    /// 而图片的问题**不是大小**（一张 3KB 的图标同样编辑不了）。
+    /// 照那句说就是**假话**，且用户会去网页端找一个"压缩一下就能编辑"的办法。
+    public static let editImageHint = "这个文件是图片，App 内无法编辑"
+
+    // MARK: - `FilePreviewKind` → 那一句提示（**唯一落点**）
+
+    /// 「编辑」按钮在这一档上不可点吗？不可点的话，那句话是什么。
+    ///
+    /// - Returns: `nil` = **可以点**（`.text`：≤1MB 的文本，正路上唯一可编辑的一档）。
+    ///
+    /// ⚠️ 收成一处而不是让 `FileView` 自己 `switch`：两档的理由不同（太大 / 不是文本），
+    /// 而"哪一档说哪句话"是**文案**（领域层的事），不是布局。
+    /// 写成两处之后，加第三档时只会更新其中一处。
+    ///
+    /// ⚠️ `.unsupported` 这一档返回 `nil`，因为**它根本不画操作行**
+    /// （`FileView` 类型说明第 1 条「规格未给」：看不了的文件上没有"编辑"这一说）。
+    /// 这里的 `nil` 是"没有人会来问"，不是"它可以点"。
+    public static func editHint(for preview: FilePreviewKind) -> String? {
+        switch preview {
+        case .text: nil
+        case .largeText: editTooLargeHint
+        case .image: editImageHint
+        case .unsupported: nil
+        }
+    }
 }

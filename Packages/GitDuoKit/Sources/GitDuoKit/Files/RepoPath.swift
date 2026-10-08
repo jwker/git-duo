@@ -118,29 +118,77 @@ public struct RepoPath: Sendable, Hashable {
         from source: RepoPath,
         input: String
     ) -> RenameDestination {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = normalizeUserInput(input) else { return .rejected(.empty) }
+        if let bad = parsed.badComponent { return .rejected(.invalidComponent(bad)) }
+        // 与当前路径相同 ⇒ 那一档**直接关掉弹层、什么都不说**（`RenameDestination` 的说明）。
+        guard parsed.path != source else { return .rejected(.unchanged) }
+        return .acceptable(parsed.path)
+    }
 
-        guard !trimmed.isEmpty else { return .rejected(.empty) }
+    // MARK: - 新建文件的路径（§4.6，切片 8.4）
+
+    /// 把编辑器（新建模式）路径框里那串字解析成目标路径；不合法时说清是哪一条。
+    ///
+    /// ## ⚠️ 与 `resolveRenameDestination` 共用同一套判据
+    ///
+    /// 两处的差异只有一处：新建模式没有"当前路径"可比，所以少了 `.unchanged`。
+    /// 其余（trim / 剥前导 `/` / 空段当错误 / 逐级校验）**只有一份实现** ——
+    /// 分开写的那天，"`a//b` 算不算合法"会在两条通道上给出不同答案，
+    /// 而那两条路的用户输入框长得一模一样。
+    ///
+    /// ⚠️ 客户端先拦的理由与重命名同源（详见 `resolveRenameDestination`）：
+    /// 服务端对不合法的路径只回一个 422，而那句话读起来像"服务器坏了"。
+    public static func resolveNewFile(input: String) -> NewFileDestination {
+        guard let parsed = normalizeUserInput(input) else { return .rejected(.empty) }
+        if let bad = parsed.badComponent { return .rejected(.invalidComponent(bad)) }
+        return .acceptable(parsed.path)
+    }
+
+    /// 用户输入的一串路径 → 规范化结果。**两条通道（新建 / 重命名）唯一的一处解析。**
+    ///
+    /// - Returns: `nil` = 空（或全空白）。
+    ///   `badComponent` 非 `nil` = 某一级不合法，那一段就是它；
+    ///   `badComponent` 为 `nil` = 路径可用。
+    private static func normalizeUserInput(_ input: String) -> (path: RepoPath, badComponent: String?)? {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
 
         // ⚠️ 前导 `/` 剥掉**一次** —— 与 `RepoPath.init(path:)` 同一条宽容。
         //    不剥的话它会在下面 split 出一个空的首段、被当成"非法的一级"，
         //    而用户只是照着网页端那个路径（`/docs/a.md`）抄了一遍。
         let body = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
-        guard !body.isEmpty else { return .rejected(.empty) }
+        guard !body.isEmpty else { return nil }
 
         // ⚠️ `omittingEmptySubsequences: false` —— 默认会**丢掉空段**，
-        //    于是 `a//b` 被静默当成 `a/b`（一次"完全合法"的改名，
+        //    于是 `a//b` 被静默当成 `a/b`（一次"完全合法"的提交，
         //    而用户以为自己在建两级目录）。这里把空段留下来当错误。
         let components = body.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
-        if let bad = components.first(where: { !isValidComponent($0) }) {
-            return .rejected(.invalidComponent(bad))
-        }
-
-        let destination = RepoPath(path: body)
-        guard destination != source else { return .rejected(.unchanged) }
-
-        return .acceptable(destination)
+        let bad = components.first { !isValidComponent($0) }
+        return (RepoPath(path: body), bad)
     }
+}
+
+/// 新建文件的目标路径（§4.6、切片 8.4）。
+///
+/// ⚠️ 与 `RenameDestination` **有意不合并**：那一档要区分 `.unchanged`（直接关掉不提示），
+/// 而新建模式没有"当前路径"可比。合成一个类型就会多出一档永远到不了的 case，
+/// 而"这一档到不到得了"正是下一个读代码的人要花时间判断的事。
+public enum NewFileDestination: Sendable, Equatable {
+
+    /// 可以用。带上解析好的目标路径（**已经 trim**）。
+    case acceptable(RepoPath)
+
+    case rejected(NewFileDestinationIssue)
+}
+
+/// 新建文件的路径不合法 —— 两档各对应 `EditorCopy` 里一句可显示的话。
+public enum NewFileDestinationIssue: Sendable, Equatable {
+
+    /// 空（或全空白）。
+    case empty
+
+    /// 某一级不合法（空段 / `.` / `..`）—— 带上那一级，提示里要指名道姓。
+    case invalidComponent(String)
 }
 
 /// 重命名目标路径的校验结果。

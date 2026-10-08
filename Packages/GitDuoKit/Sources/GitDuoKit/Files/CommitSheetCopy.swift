@@ -161,6 +161,13 @@ public enum CommitSheetCopy {
     /// 而它只能去网页端的提交历史里找回（与 `FileCopy.deleteWarning` 同一句式）。
     public static let forceOverwriteConfirmHint = "远端那一版会被丢弃，且无法从 App 里找回"
 
+    /// 结果屏上关闭弹层的按钮（两档"做到一半"用）。
+    ///
+    /// ⚠️ **规格未给**（自拟，PRD §5.9④ 只写了"必须说出哪一步成了"）。
+    /// 不用 `FileCopy.cancelAction`（"取消"）：这一屏上**没有可取消的东西**，
+    /// 那两件事都已经在仓库里了 —— 说"取消"会让用户以为按下去能撤销它。
+    public static let partialDoneAction = "知道了"
+
     // MARK: - 写失败的那几句（与 `FileWriteFailure` 一一对应）
 
     /// 422：目标路径上已经有文件了。
@@ -186,5 +193,44 @@ public enum CommitSheetCopy {
     /// 说"几 MB"（向上取整，说"4.7MB"对用户没有意义 —— 同 `FileCopy` 那句的取舍）。
     private static func megabytes(_ bytes: Int) -> Int {
         max(1, Int((Double(bytes) / 1_000_000).rounded(.up)))
+    }
+
+    // MARK: - 结局 → 提示条上那句话（**唯一落点**）
+
+    /// 一次提交的四种结局 → 提示条上那一句话。
+    ///
+    /// ## ⚠️ 为什么必须收在一处
+    ///
+    /// 提交这条路有**两个入口**：编辑器页（§4.6）与 §5.8 的两个上传出口。
+    /// 两处各写一遍 `switch outcome` 的后果不是多几行 —— 而是同一个结局
+    /// 在两个入口下弹出**不同的话**，而那种不一致只在用户换一条路走时才看得到。
+    ///
+    /// ⚠️ 两个成功档的文案里要**分支名与提交信息**，而它们不在 `FileSaveOutcome` 里
+    /// （`.committedToCurrentBranch` 只带收据）⇒ 由调用方补两个参数进来。
+    /// 「新分支」那两档用的是 `outcome` 里那个分支（**不是** `currentBranch`：
+    /// 用户填的那条新分支名才该出现在提示里）。
+    ///
+    /// - Parameters:
+    ///   - currentBranch: 进弹层时的那条分支（只给"提交到当前分支"那一档用）。
+    ///   - message: **真正发出去**的那条提交信息（`CommitDraft.effectiveMessage`）——
+    ///     不是用户输入框里的原文（空的时候它会回落成默认信息）。
+    public static func toast(
+        for outcome: FileSaveOutcome,
+        currentBranch: String,
+        message: String
+    ) -> String {
+        switch outcome {
+        case .committedToCurrentBranch:
+            committedToast(branch: currentBranch, message: message)
+
+        case let .createdBranchAndPull(_, _, number):
+            committedWithPullToast(number: number, message: message)
+
+        case let .branchCreatedButCommitFailed(branch, _):
+            branchCreatedNotCommittedToast(branch: branch)
+
+        case let .committedButPullCreationFailed(branch, _, _):
+            committedButNoPullToast(branch: branch)
+        }
     }
 }

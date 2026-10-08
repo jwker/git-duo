@@ -47,14 +47,28 @@ struct RepoDetailView: View {
     /// 本页的弹层路由。
     ///
     /// ⚠️ 用 `Identifiable` 枚举驱动 `.sheet(item:)`，**不用 `isPresented` 布尔量**
-    /// （同 `ExploreView`）：切片 8 的「＋ 添加」落地后会多出第二张弹层，
-    /// 两个布尔量同时为真时"哪一张盖在上面"就变成了呈现顺序问题，
-    /// 而那种 bug 只在特定点击序列下出现。一个枚举天然只有一张。
-    private enum RepoSheet: String, Identifiable {
+    /// （同 `ExploreView`）：本页有四张弹层，两个布尔量同时为真时"哪一张盖在上面"
+    /// 就变成了呈现顺序问题，而那种 bug 只在特定点击序列下出现。一个枚举天然只有一张。
+    ///
+    /// ⚠️ 从 8.4 起它**带上了关联值**（`.upload` 要拿着选中的字节）⇒ 不再能靠
+    /// `String` 原始值当 `id`，改成手写（与 `BranchesViewModel.SheetRoute` 同形）。
+    private enum RepoSheet: Identifiable {
         case branch
         /// §4.4 分区二「筛选」—— 与 §4.10 新建 Issue 页**同一个**弹层（决策 #56）。
         case labelPicker
-        var id: String { rawValue }
+        /// §5.8 添加文件（三行出口）。
+        case addFile
+        /// §5.8 后两个出口选中之后：§5.9 的提交弹层，落点是**仓库根 + 那个文件名**。
+        case upload(UploadDraft)
+
+        var id: String {
+            switch self {
+            case .branch: "branch"
+            case .labelPicker: "labelPicker"
+            case .addFile: "addFile"
+            case let .upload(draft): "upload-\(draft.fileName)-\(draft.data.count)"
+            }
+        }
     }
 
     init(
@@ -68,6 +82,7 @@ struct RepoDetailView: View {
         issues: LoadRepoIssues,
         pulls: LoadRepoPulls,
         starToggle: ToggleStar,
+        saver: SaveFile,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
@@ -84,6 +99,7 @@ struct RepoDetailView: View {
             issues: issues,
             pulls: pulls,
             starToggle: starToggle,
+            saver: saver,
             memory: memory,
             visits: visits,
             toast: toast
@@ -172,12 +188,81 @@ struct RepoDetailView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+
+            case .addFile:
+                // §5.8。⚠️ 三个出口**都是"换成另一张"**（编辑器 / 提交弹层），
+                //    所以这里每一处都先把 `sheet` 置成下一个值 ——
+                //    直接 `dismiss()` 会先关掉这张、再开下一张，中间那一帧是空屏。
+                AddFileSheet(
+                    branch: model.tree.branch ?? "",
+                    onNewFile: {
+                        sheet = nil
+                        // 新建模式的路径由**编辑器里的输入框**定（§4.6），
+                        // 所以这里不带路径、不带文件名。
+                        env.router.push(.editor(
+                            fullName: fullName, path: nil, mode: .create
+                        ))
+                    },
+                    onPicked: { draft in
+                        // 选中那一刻字节已经在手上（`UploadDraft` 的说明）——
+                        // 这里只把它交给下一张弹层。
+                        sheet = .upload(draft)
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+
+            case let .upload(draft):
+                // §5.8 的后两个出口 → §5.9 的提交弹层（**同一个** `CommitSheet`，
+                // 与编辑器那条路共用；差别只在标题来源与多一行只读的落点）。
+                uploadCommitSheet(draft)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
 
     private var name: String {
         (try? RepositoryMapper.splitFullName(fullName))?.name ?? fullName
+    }
+
+    // MARK: - §5.8 两个上传出口的提交弹层
+
+    /// 上传出口的「提交更改」（§5.8 → §5.9）。
+    ///
+    /// ⚠️ 用的是**与编辑器同一个** `CommitSheet`。差别只有三处：
+    /// 标题来源（`draft.source`）、多一行只读的「将写入 `{路径}`」、
+    /// 以及这一条路**恒为新建**（`sha` 由 `model.upload` 写死 `nil`）。
+    /// 另做一张弹层会让 §5.9 那两行输入 / 409 两个出口 / 两档结果屏各抄一份。
+    ///
+    /// ⚠️ `defaultBranchName` 在**呈现这一刻**算：`FileWriteTarget.defaultNewBranchName(now:)`
+    /// 的 `now` 必传（同 `EditorView`），在这里取 `Date()` 与在那里取是同一件事 ——
+    /// 关键是它只在弹层出现时算一次，而不是每次重绘都变。
+    private func uploadCommitSheet(_ draft: UploadDraft) -> some View {
+        CommitSheet(
+            source: draft.source,
+            fullName: fullName,
+            branch: model.tree.branch ?? "",
+            // ⚠️ 上传出口**必须露出落点**：路径是 App 定的（§5.8 / 决策 #70②），
+            //    不露出来用户就只能靠猜 —— 而"东西存到哪"是这一步唯一可能搞错的事。
+            destinationPath: RepoPath(path: draft.fileName),
+            defaultBranchName: FileWriteTarget.defaultNewBranchName(now: Date()),
+            onSubmit: { commit, _ in
+                // ⚠️ 那个 `sha` 参数在这里**有意丢掉**：上传恒为新建
+                //    （`RepoDetailViewModel.upload` 里写死 `nil`），不存在"基准过期"这一档。
+                await model.upload(draft, commit: commit)
+            },
+            onSettled: { outcome, commit in
+                env.toast.show(CommitSheetCopy.toast(
+                    for: outcome,
+                    currentBranch: model.tree.branch ?? "",
+                    message: commit.effectiveMessage
+                ))
+                // ⚠️ **这里不 pop**：用户是从**这一页**点「＋ 添加」进来的，
+                //    提交完该留在这儿看那个新文件（列表已经由 `model.upload` 刷过）。
+                //    「提交完返回上一页」是**编辑器**那条路的规定（§4.6），不是这一条。
+            }
+        )
     }
 
     // MARK: - 主区域
@@ -314,16 +399,18 @@ struct RepoDetailView: View {
         }
     }
 
-    /// 「＋ 添加」—— **画出但不可点**（决策 #51：三个出口全属切片 8）。
+    /// 「＋ 添加」—— **切片 8.4 起可点**，打开 §5.8 的添加文件弹层。
     ///
-    /// 用 `allowsHitTesting(false)` + 一句 hint，**不是** `.disabled`：
-    /// 后者会把它变灰、看起来像"暂时不可用"，而这一处是"这一版就不做"。
-    /// 形态与原型一致，且不冒充成品。
+    /// ⚠️ 它此前那套"画出但不可点"（`allowsHitTesting(false)` + 读屏 hint +
+    /// 一个真的什么都不做的闭包）连同 `RepoCopy.addFileUnavailableHint` 一起删掉了。
+    /// 留着那句 hint，"这三个出口还不能用"在代码里就仍然看起来成立 ——
+    /// 而它们现在**都能用**。
     ///
-    /// ⚠️ 闭包必须是**真的什么都不做** —— `allowsHitTesting(false)` 挡的是触摸，
-    /// 读屏的激活动作绕过命中测试（`UserProfileSheet` 的同一处置）。
+    /// ⚠️ 形态一个像素都没动：这一片改的是**行为**，不是版式。
     private var addFileButton: some View {
-        Button(action: {}) {
+        Button {
+            sheet = .addFile
+        } label: {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: GitHubIcon.plus)
                     .font(.system(size: 13, weight: .semibold))
@@ -341,9 +428,6 @@ struct RepoDetailView: View {
             )
         }
         .buttonStyle(.plain)
-        .allowsHitTesting(false)
-        .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(RepoCopy.addFileUnavailableHint)
     }
 
     /// 点面包屑的某一层 —— 原型是**推入一层新页面**（`navToSub`），不是原地替换。

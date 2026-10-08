@@ -129,6 +129,22 @@ final class AppEnvironment {
     /// PR 的三个操作：合并（三方式）/ 关闭 / 重新打开（§4.11 操作区、§5.3）。
     let pullAction: PullAction
 
+    // MARK: - 领域用例（切片 8）
+
+    /// 提交一个文件 —— §9.6.1 的四条写通道 + §9.6.3 的「新分支 + PR」三步（决策 #64 / #68）。
+    ///
+    /// ⚠️ **它是本 App 第一条会往真实仓库写东西的通道**。
+    /// 三条写用例（本条 / `renameFile` / `deleteFile`）**共用同一个
+    /// `GitHubRepoContentEndpoint` 实例** —— 分开 new 不报错，但缓存会分成几份、
+    /// 配额各算各的（同上面 `contentEndpoint` 那条），而出问题时表现是"偶发 403"。
+    let saveFile: SaveFile
+
+    /// 重命名（移动）文件 —— §9.6.5，**两步串行**：先 `PUT` 新路径，再 `DELETE` 旧路径（决策 #66②）。
+    let renameFile: RenameFile
+
+    /// 删除文件 —— §9.6.5。`sha` **现取**（用户手上没有"那一版"这回事，见 `DeleteFile` 的类型说明）。
+    let deleteFile: DeleteFile
+
     // MARK: - 本地存储
 
     /// 最近访问（落盘实现见 `UserDefaultsRecentVisitStore`）。
@@ -298,6 +314,22 @@ final class AppEnvironment {
         let pullsEndpoint = GitHubRepoPullsEndpoint(client: client)
         self.pullDetail = LoadPullDetail(detail: pullsEndpoint, comments: issuesEndpoint)
         self.pullAction = PullAction(source: pullsEndpoint)
+
+        // ── 切片 8：编辑器与提交（三条写通道）。
+        //
+        // ⚠️ 这一段在 `init` 的**最后**，不是随手放的：`SaveFile` 的「新分支 + PR」
+        //    那一档要用 `pullsEndpoint` 建 PR，而它上面才刚造出来（切片 7 那一段）。
+        //    往上挪一格就编不过 —— 而那种错看起来像"顺序写错了"，
+        //    实际是"这一步确实依赖上一步"。
+        //
+        // ⚠️ 三个 `files:` 参数都是**同一个** `contentEndpoint`（见上面那条说明）。
+        self.saveFile = SaveFile(
+            files: contentEndpoint,
+            branches: branchEndpoint,
+            pulls: pullsEndpoint
+        )
+        self.renameFile = RenameFile(contents: contentEndpoint, files: contentEndpoint)
+        self.deleteFile = DeleteFile(contents: contentEndpoint, files: contentEndpoint)
     }
 
     /// 接口缓存（§5.1 的 L2：内存 + 磁盘，**自建**，绝不启用系统 `URLCache` —— 决策 #32）。
@@ -449,10 +481,11 @@ enum AuthNotice: Equatable {
 /// 已消解：`RouteView` 的 `.issueDetail` / `.newIssue` / `.prDetail`
 ///        （切片 7.5 → 三个真页面 + `issueDetail` / `postIssueComment` / `createIssue` /
 ///        `pullDetail` / `pullAction` 五条用例与 `commentDrafts` 的装配）。
+/// 已消解：`RouteView` 的 `.editor`（切片 8.4 → `EditorView` + `saveFile` / `renameFile` /
+///        `deleteFile` 三条写用例的装配）。
 enum SkeletonPlaceholders {
     static let registry: [String] = [
         "「我的」Tab 根页（`ProfileView` 仍是骨架屏，切片 9）",
-        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：编辑器（8）· "
-            + "我的 Star / 我的收藏 / 设置（9）"
+        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：我的 Star / 我的收藏 / 设置（9）"
     ]
 }

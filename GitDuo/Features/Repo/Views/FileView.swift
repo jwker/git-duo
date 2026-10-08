@@ -24,12 +24,28 @@ import UIKit
 /// 见 `FileViewModel` 的类型说明。视图这里只把解析出来的分支画在面包屑上，
 /// **不参与**"该用哪条 ref"的判定。
 ///
-/// ## ⚠️ 操作行里只有 `Raw` 是真做的（决策 #51）
+/// ## ⚠️ 操作行的四个按钮从切片 8.4 起**各自不同**
 ///
-/// `编辑` / `历史` / `更多` / `⑂ Fork 后可编辑` 全属后续切片 ⇒ 画出但不可点
-/// （`allowsHitTesting(false)` + 读屏 hint，**不是** `.disabled` —— 后者会变灰，
-/// 看起来像"暂时不可用"，而这一处是"这一版就不做"）。
-/// `Raw` 是两处例外之一：它复制原文到剪贴板，**零请求**（正文已经在手上）。
+/// | 按钮 | 8.4 之后 |
+/// |---|---|
+/// | `编辑` | **真做** —— 推入编辑器（§4.6 编辑模式）；**超过 1MB 的文本**与**图片**上不可点 |
+/// | `历史` | 仍不可点（它指向"这个文件的提交历史"这一独立页面，PRD §4.5 标 ⏳） |
+/// | `Raw` | 真做（决策 #51 的两处例外之一：复制原文，**零请求**） |
+/// | `更多` | **真做** —— 打开 §5.15 文件操作菜单（重命名 / 删除） |
+/// | `⑂ Fork 后可编辑` | 仍不可点（他人仓库那一档，Fork 本身没做） |
+///
+/// ⚠️ 「不可点」一律是 `allowsHitTesting(false)` + 读屏 hint，**不是** `.disabled`
+/// —— 后者会变灰、看起来像"暂时不可用"，而那三个是"这一版就不做"。
+/// 8.4 之后仍然不可点的只剩 `历史` / `Fork` 两颗。
+///
+/// ## ⚠️ 「编辑」不可点的那两档，理由是**不同的两句话**
+///
+/// - **超过 1MB 的文本**（决策 #54 的边界、`REVIEW-CHECKLIST` 偏差 32）：
+///   文件**能看**（走 raw），不能的只是"在 App 里改它"；
+/// - **图片**：编辑器是**文本**编辑器，一张 png 在哪儿都编辑不了。
+///
+/// 合成一句"暂不可编辑"会让其中一档说出**假话**（用户会去网页端找一个
+/// "压缩一下就能编辑"的办法）。两句话的落点收在 `EditorCopy.editHint(for:)` 一处。
 ///
 /// ## ⚠️ 两处「规格未给，待评审」（本片新增，已登记）
 ///
@@ -42,12 +58,24 @@ import UIKit
 struct FileView: View {
 
     let fullName: String
-    let path: RepoPath
     let readOnly: Bool
 
     @Environment(\.openURL) private var openURL
 
+    /// 导航（推入编辑器）与弹层的宿主。
+    ///
+    /// ⚠️ 本页的**依赖**（取数 / 写通道 / 记忆 / 提示）仍然由调用方逐条传进来，
+    /// 这里只取 UI 通道 —— 与 `RepoDetailView` 的分工逐字相同（AGENTS.md §3 的铁律）。
+    @Environment(AppEnvironment.self) private var env
+
     @State private var model: FileViewModel
+
+    /// ⚠️ **不是在弹层的回调里直接 `pop()`**。
+    ///
+    /// 弹层正挂在**本页**身上，而本页就是栈顶 —— 先把栈顶弹掉，弹层会被一起掀掉
+    /// （没有下滑动画、导航栏闪一下）。所以这个标记只是"记下要往回走"，
+    /// 真正的 `pop()` 放在 `.sheet(onDismiss:)` 里：那一刻弹层已经关完了。
+    @State private var popsAfterDismissal = false
 
     init(
         fullName: String,
@@ -56,10 +84,11 @@ struct FileView: View {
         loader: LoadFileContent,
         detail: LoadRepoDetail,
         memory: any BranchMemoryStore,
+        renameFile: RenameFile,
+        deleteFile: DeleteFile,
         toast: ToastCenter
     ) {
         self.fullName = fullName
-        self.path = path
         self.readOnly = readOnly
         _model = State(initialValue: FileViewModel(
             fullName: fullName,
@@ -75,6 +104,8 @@ struct FileView: View {
             loader: loader,
             detail: detail,
             memory: memory,
+            renameFile: renameFile,
+            deleteFile: deleteFile,
             toast: toast
         ))
     }
@@ -88,10 +119,71 @@ struct FileView: View {
         }
         .background(Theme.Palette.background)
         // 标题就是文件名（原型这一屏的导航栏没有别的写法）。
-        .navigationTitle(path.displayName)
+        //
+        // ⚠️ 取 `model.path` 而**不是**构造时传进来的那个路由参数：重命名成功之后
+        //    这一页的路径会变（§5.16「返回文件查看页（该页路径跟着变）」），
+        //    而路由上那一份是**进来时**的参数、不会跟着动。
+        .navigationTitle(model.path.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.refresh() }
         .task { await model.start() }
+        // 三张弹层由一个枚举驱动（同 `BranchesView`）—— 文件操作菜单里的两个动作
+        // 各自要**换成**另一张弹层，用布尔量表达就是"关一张、开一张"，而它中间的一帧是空屏。
+        .sheet(item: $model.sheet, onDismiss: handleSheetDismissal) { route in
+            presented(route)
+                // ⚠️ 原型所有弹层都是**内容高度**（`.sheet{bottom:10px}` 自适应），
+                //    而本仓从切片 1 起统一用 `.medium`（`ClearRecentSheet` 那张
+                //    "标题 + 说明 + 两个整宽按钮"的卡片就是先例）。
+                //    这一片三张都小，`.medium` 会留下半屏空白 —— 属既有偏差的延续，
+                //    已登记到逐屏对照 21 里一起看（收口要一套"内容高度"约定，不由本片拍板）。
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    /// 弹层关完之后才做的事。
+    ///
+    /// ⚠️ 目前只有一件：**删除办妥之后往回走一层**（PRD §5.17「返回上一级目录列表」）。
+    /// 重命名**不在这里** —— 它的"路径跟着变"落在 `model.path` 上，不换路由。
+    private func handleSheetDismissal() {
+        guard popsAfterDismissal else { return }
+        popsAfterDismissal = false
+        env.router.pop()
+    }
+
+    // MARK: - 弹层
+
+    @ViewBuilder
+    private func presented(_ route: FileViewModel.SheetRoute) -> some View {
+        switch route {
+        case .operations:
+            FileOperationsSheet(
+                fileName: model.path.displayName,
+                // 两个动作各自把 `sheet` 换成另一张 —— **不经过 nil**
+                // （见 `FileOperationsSheet` 的说明：关一次再开一次会在中间空一帧）。
+                onRename: { model.sheet = .rename },
+                onDelete: { model.sheet = .delete }
+            )
+
+        case .rename:
+            RenameFileSheet(source: model.path, isWorking: model.isWorking) { input in
+                await model.rename(input: input)
+            }
+
+        case .delete:
+            DeleteFileSheet(
+                fileName: model.path.displayName,
+                // 说明里那句 `在 {分支} 上`。`branch` 在能预览的文件上必定有值
+                // （`FileViewModel.load()` 先定 ref、再取内容），而这一屏只有能预览才进得来。
+                branch: model.branch ?? "",
+                isWorking: model.isWorking
+            ) {
+                // ⚠️ 标记要在 `await` **之后**才写对：失败（403 / 断网）时
+                //    `confirmDelete()` 回 `false`，用户留在原地（文件还在，
+                //    弹回目录列表会让他以为什么都没发生过）。
+                popsAfterDismissal = await model.confirmDelete()
+            }
+        }
     }
 
     // MARK: - 主区域
@@ -135,8 +227,11 @@ struct FileView: View {
     /// ⚠️ 分支名 `lineLimit(1)`：分支名可以很长（`feature/客户XX-报价单改版`），
     /// 而文件名通常更长、更需要完整显示。
     private func crumb(branch: String) -> some View {
-        HStack(spacing: 0) {
-            Text(path.displayName)
+        // ⚠️ 与导航标题同源（`model.path`）—— 重命名之后两处一起跟着变。
+        let display = model.path.displayName
+
+        return HStack(spacing: 0) {
+            Text(display)
                 .font(Theme.Font.breadcrumb.weight(.semibold))
                 .foregroundStyle(Theme.Palette.accent)
 
@@ -163,7 +258,7 @@ struct FileView: View {
         )
         // 拼出来的那一串在读屏里是"文件名 空格 点 空格 分支"，粘在一起听不出层次。
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(path.displayName)，当前分支 \(branch)")
+        .accessibilityLabel("\(display)，当前分支 \(branch)")
     }
 
     // MARK: - 三档结局
@@ -214,7 +309,9 @@ struct FileView: View {
                 FileContent.lines(of: text),
                 // 语言按**当前路径的扩展名**认。原型这一屏是硬编码的 Swift 演示数据，
                 // 认不出的语言由 `CodeSurface` 走纯文本降级（不去猜，见 `CodeLanguage.named`）。
-                language: CodeLanguage.named(FilePreviewKind.extensionOf(path.displayName))
+                // ⚠️ 取 `file.path`（这一份内容自己的路径）而不是 `model.path`：
+                //    重命名之后两者会短暂不同 —— 内容还没重取，而路径已经换新了。
+                language: CodeLanguage.named(FilePreviewKind.extensionOf(file.path.displayName))
             ))
             // 只读浏览里"把这一段复制走"是正常需求，而原型的 `<pre>` 本来就是可选的
             // （浏览器默认行为）⇒ 取原型。`DiffCard` 里 PRD §4.7 有明写，这一页没有。
@@ -262,17 +359,32 @@ struct FileView: View {
                 stubAction(FileCopy.forkToEditAction,
                            hint: FileCopy.forkToEditUnavailableHint,
                            horizontalPadding: 22)
-            } else {
+            } else if let hint = model.editHint {
+                // ⚠️ 「编辑」**画出来但不可点**的那两档（超过 1MB 的文本 / 图片）。
+                //    形态与真按钮逐字相同（同一个 `ActionButton` + `.primary` + 22），
+                //    差别只在按不动 —— 这正是决策 #51 要的效果："不冒充成品"。
                 stubAction(FileCopy.editAction,
                            style: .primary,
-                           hint: FileCopy.editUnavailableHint,
+                           hint: hint,
                            horizontalPadding: 22)
+            } else {
+                ActionButton(
+                    title: FileCopy.editAction,
+                    style: .primary,
+                    horizontalPadding: 22,
+                    fillsWidth: false
+                ) {
+                    // §4.6 编辑模式：路由只带仓库全名与路径 ——
+                    // "哪条分支"由编辑器页自己按 §9.4.1 解析（同本页，同一份判据）。
+                    env.router.push(.editor(
+                        fullName: fullName, path: model.path.raw, mode: .edit
+                    ))
+                }
             }
 
             stubAction(FileCopy.historyAction, hint: FileCopy.historyUnavailableHint)
 
-            // ⚠️ `Raw` **当真做**（决策 #51 的两处例外之一）——
-            //    它是这一行里唯一一个 `allowsHitTesting` 为真的按钮。
+            // ⚠️ `Raw` **当真做**（决策 #51 的两处例外之一）。
             //    图片与不支持预览的文件没有"原文可复制" ⇒ 那个按钮**不出现**（§4.5）。
             if model.canCopyRaw {
                 ActionButton(
@@ -285,7 +397,15 @@ struct FileView: View {
             }
 
             if !readOnly {
-                stubAction(FileCopy.moreAction, hint: FileCopy.moreUnavailableHint)
+                // §5.15 文件操作菜单（重命名 / 删除）。⚠️ 它**只把弹层换出来**，
+                //    两个动作各自的确认层是另外两张（§5.16 / §5.17）。
+                ActionButton(
+                    title: FileCopy.moreAction,
+                    style: .ghost,
+                    fillsWidth: false
+                ) {
+                    model.sheet = .operations
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -449,6 +569,8 @@ struct FileView: View {
             loader: environment.fileContent,
             detail: environment.repoDetail,
             memory: environment.branchMemory,
+            renameFile: environment.renameFile,
+            deleteFile: environment.deleteFile,
             toast: environment.toast
         )
     }
