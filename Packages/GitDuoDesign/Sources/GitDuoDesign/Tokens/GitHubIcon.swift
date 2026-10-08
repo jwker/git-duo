@@ -63,10 +63,26 @@ public enum GitHubIcon {
     /// 比通用警告三角更贴（这既不是错误、也不是警告，只是**看不了**）。
     public static let unsupportedFile = "doc.questionmark"
 
+    // MARK: - 弹层动作行图标（切片 8.3）
+
+    /// 「重命名」动作行 —— 原型 `I.pencil`（`11-favorites.js:93` 收藏夹操作菜单）。
+    ///
+    /// 切片 8 的 §5.16 重命名文件弹层也用它（同一件事：改一个路径）。
+    public static let pencil = "pencil"
+
+    /// 「删除」动作行 —— 原型 `I.trash`（`11-favorites.js:94` 收藏夹操作菜单）。
+    ///
+    /// 切片 8 的 §5.15 `删除文件`（PRD 明写**危险色**）与 §5.17 删除确认共用它。
+    public static let trash = "trash"
+
     // ⚠️ **有意没有** `history` / `more` / `openInBrowser` 三个常量。
     //    切片 6.4 起草时曾按"每个操作按钮配一个图标"补过它们，落地时发现
     //    `SCR.fileView` 的 `历史` / `更多` 与那两处"跳网页端"的出口**都是纯文字**
     //    （原型的 `<button>` 里没有任何 `svg(...)`）⇒ 补的三个名字一个都用不上。
     //    留着的名字不是"以后可能用得上"，而是下一个读这份表的人要先判断
     //    "它是不是还在用"（`GitHubIcon` 的类型说明点名的正是这件事）。
+    //
+    //    ⚠️ 反过来说，`pencil` / `trash` 两个是**查过原型的**才加的：
+    //    `11-favorites.js` 那两行 `.sheet-row` 里明明白白写着 `svg(I.pencil)` / `svg(I.trash)`。
+    //    "切片 8 的弹层会不会也用图标"这件事不靠猜 —— §5.15 明写形态照 §5.12。
 }

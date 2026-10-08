@@ -645,6 +645,41 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
       - ▶ **下一步**：**8.3 设计系统** —— 施工图原文是「✅ **预计零新增**」（编辑器用现成的 `CodeTextArea`（`minLines: 13`）·
         路径 / 分支名 / PR 标题用 `SheetField` · 三个新弹层用 `SheetTitle` / `SheetRow` / `SheetHint` · 危险色用 `ActionButton.Style.destructive`）。
         ⚠️ 若真发现要造新件，先按判据 **#43** 过一遍（只收基础类型才进设计包）。
+    - ✅ **8.3 设计系统已交付**（2026-10-08）。**施工图的「预计零新增」经逐条核实后成立** ——
+      但"零新增"要说成**零新增组件**：三件既有组件各缺一个参数，缺了它们 8.4 只能各抄一份，而抄出来的那份会漂移。
+      - **施工图点名的四件全部在位**：`CodeTextArea`（签名 `minLines: Int = 6`，切片 6 就为编辑器留好了 13 那一档）·
+        `SheetField` · `SheetTitle` / `SheetRow` / `SheetHint`（`SheetPrimitives.swift`）·
+        `ActionButton.Style.destructive`（`0xCF222E`，与原型 `--closed-p` 同值）。
+      - **三处真缺口**（都是"**加参数、不抄第二份**"，三个默认值一律保持原行为 ⇒ 既有 **12 处生产调用点
+        （`SheetField` 4 · `SheetRow` 6 · `NoticeBar` 2）一个字都没改** —— ⚠️ 这 12 是实测的，起稿时先写成 14、复核时改掉）：
+        1. **`NoticeBar.tone`**（`.danger` 默认 / `.add`）—— 它原先把底 / 字色**写死**成 diff 的**删除**那一对；
+           而 §5.9「新分支 + PR」那条提示在原型里是 `--add-bg` / `--add-tx`。
+           ⚠️ **值已逐字核对**：`01-base.css` 第 8 行 `--add-bg:#dafbe1; --add-tx:#116329; --del-bg:#ffebe9; --del-tx:#cf222e;`
+           与 `diffAddedSurface` / `diffAddedText` / `diffDeletedSurface` / `diffDeletedText` 两两同值。
+           ⚠️ 色调名取**视觉词**（`danger` / `add`）而不是业务词（`sendFailure` / `newBranchPrompt`）—— 判据 #43。
+        2. **`SheetRow.titleTone`**（`.normal` 默认 / `.destructive`）—— 它原先标题色写死 `textPrimary`；
+           而 §5.15「删除文件」明写**危险色**、§5.12 原型里就是 `<div class="sheet-row" style="color:var(--closed-p)">`。
+           少了这一档，"这是破坏性操作"这条信息在**画面上完全消失**（点进去才知道）。
+           ⚠️ **只改标题、不改图标**：原型 `.sheet-row svg{stroke:var(--text2)}` 是写死的 ⇒ 那一行的图标仍是灰的（查过 CSS 才敢这么写）。
+        3. **`SheetField.minLines`**（默认 `1`）—— §5.9 的提交信息框在原型里是
+           `<textarea class="sheet-input" id="cmsg" rows="2">` ⇒ 保底 2 行。
+           ⚠️ **不能**改用 `CodeTextArea`：那是**另一个类**（等宽 + `--card` 底），混用会让「提交信息」与「分支名」
+           在同屏内长得像两种东西。⚠️ `minLines == 1` 走的仍是**原来那一行** `TextField(placeholder:text:)`，
+           而**不是** `axis: .vertical` + `lineLimit(1...)` —— 后者会让单行框随长文本长高，那是另一种行为
+           （写"加个参数就行"的时候最容易在这里出错）。
+      - 另补 **`GitHubIcon.pencil` / `trash`** 两个常量：原型 `11-favorites.js:93/94` 那两行 `.sheet-row` 里
+        写着 `svg(I.pencil)` / `svg(I.trash)`，而本表原先没有这两个名字（切片 6.4 只补过 `history` / `more` / `openInBrowser`，
+        后来发现用不上又删了）。§5.15 明写"形态照 §5.12" ⇒ 切片 8 的文件操作菜单 / 重命名 / 删除确认三处都要用。
+        ⚠️ 这一条**只能靠真机/模拟器看一眼**才算验过（名字写错不报错，表现为图标凭空消失）⇒ **并入 8.6 的逐屏对照 18–21**。
+      - ⚠️ **一处经核实"不是缺口"（记下来免得 8.4 又去找一遍）**：§5.9 那行只读的「将写入 `{path}`」
+        在 App 里**已有先例** —— `MergeSheet.targetSection` 就是**手写的只读行**（图标 + 值 + 下方一句 caption），
+        不依赖任何设计包组件 ⇒ 8.4 照它写即可。若 8.4 落地时发现两处真的逐字相同，
+        按 6.4 收拢 `SHABadge` 的先例提一件出来（判据不变：只收基础类型）。
+      - **成果验收**：新增 `Slice8ComponentTests`（**+9 项**，Design **79 → 88**）⇒ 五包 **1424 → 1433 项 / 120 套件**，
+        `make verify` 通过、零编译警告（已按 8.2 那条新纪律**强制全量重编**确认）。
+      - ▶ **下一步**：**8.4 表现层** —— `EditorView` + VM（§4.6 两模式）· `CommitSheet` + VM（§5.9 两行输入与 409 两出口）·
+        `AddFileSheet` 三行接通（§5.8 两个系统选择器）· `FileOperationsSheet` / `RenameFileSheet` / `DeleteFileSheet`（§5.15–§5.17）·
+        `FileView` 的「编辑」「更多」接通 + **>1MB 时「编辑」不可点**（偏差 32）。
 
 **⚠️ 完成定义第 3 条「与原型逐屏对照」—— 待对照清单（正本）**
 
