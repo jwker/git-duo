@@ -9,7 +9,15 @@ import Foundation
 /// 完整递归解析要引入一棵行内树，而 §11.1 列出的支持范围（标题、段落、列表、
 /// 引用、行内代码、代码块、链接、粗斜体、分隔线、任务列表）**没有要求嵌套**。
 /// 少做一层递归换来的是"解析结果是一维数组"，视图一个 `Text` 拼接就能渲染。
-public struct MarkdownSpan: Equatable, Sendable {
+/// ## ⚠️ `Hashable` 是给**评论**要的（切片 7.4）
+///
+/// `IssueComment` / `PullTimelineItem` 是 `Hashable`，而它们从 7.4 起各自带着
+/// 一份解析好的 `[MarkdownBlock]`（见那两个类型的说明）。合成 `Hashable` 会把
+/// 每个存储属性都算进去 ⇒ 这里必须是 `Hashable`，否则那两个类型编译不过。
+///
+/// 让它 `Hashable` 是**纯扩张**：`Hashable` 是 `Equatable` 的子集关系里的超集，
+/// 既有代码一句都不用改（只是多了一个能力）。
+public struct MarkdownSpan: Equatable, Hashable, Sendable {
 
     /// 可见文字（已去掉标记符号）。
     public let text: String
@@ -21,7 +29,7 @@ public struct MarkdownSpan: Equatable, Sendable {
         self.style = style
     }
 
-    public enum Style: Equatable, Sendable {
+    public enum Style: Equatable, Hashable, Sendable {
 
         /// 普通文字（**兜底**，解析不出任何标记时的默认值）。
         case text
@@ -74,7 +82,8 @@ public struct MarkdownSpan: Equatable, Sendable {
 ///    反而要在视图层按 range 反查块边界、再拆开。
 ///
 /// 所以领域层出结构，视图层出样式。这不是"少做"，是把职责放回各自该在的地方。
-public enum MarkdownBlock: Equatable, Sendable {
+/// ## ⚠️ `Hashable`：理由与 `MarkdownSpan` 同一个（切片 7.4 的评论要用）
+public enum MarkdownBlock: Equatable, Hashable, Sendable {
 
     /// 标题，`level` 为 1–6（`#` 的个数）。
     case heading(level: Int, spans: [MarkdownSpan])

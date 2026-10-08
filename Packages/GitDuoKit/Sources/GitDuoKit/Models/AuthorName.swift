@@ -18,4 +18,28 @@ public enum AuthorName {
 
     /// 账号已删除时的显示名。
     public static let unknown = "已注销账号"
+
+    /// 由登录名得到**显示名** —— 唯一的那个函数。
+    ///
+    /// ## 为什么它不是四个类型各自算一遍
+    ///
+    /// 到切片 7.4 为止，需要它的地方有四处：`IssueComment`（评论作者）、
+    /// `IssueDetail`（正文气泡的作者）、`PullTimelineItem`（对话流的作者）、
+    /// `PullDetail`（三句状态说明里的作者）。四段实现逐字相同：
+    ///
+    /// ```swift
+    /// guard let authorLogin, !authorLogin.isEmpty else { return AuthorName.unknown }
+    /// return authorLogin
+    /// ```
+    ///
+    /// 四份的坏处不是行数，而是**判据会在某一处松动**：漏掉 `!isEmpty` 那一半时，
+    /// 服务端给一个空串（它把"没填"与"填了空"当两种写法）就会渲染出一个空名字 ——
+    /// 屏幕上表现为"作者名那一块莫名其妙地空着"，不像一个 bug。
+    ///
+    /// ⚠️ `nil` 与 `""` 在这里**同一种处理**：它们在服务端是两种写法，在屏幕上是一件事
+    /// （同 `IssueDetail.hasBody` 对 `body` 的口径）。
+    public static func display(_ login: String?) -> String {
+        guard let login, !login.isEmpty else { return unknown }
+        return login
+    }
 }

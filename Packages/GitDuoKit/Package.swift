@@ -42,7 +42,13 @@ let package = Package(
             name: "GitDuoKitTests",
             dependencies: [
                 "GitDuoKit",
-                .product(name: "GitHubAPI", package: "GitHubAPI")
+                .product(name: "GitHubAPI", package: "GitHubAPI"),
+                // ⚠️ 测试也会直接 `import GitDuoCore` —— 断言"某处的相对时间走的是
+                //    `RelativeTime` 那一套分档"时要用它来对表（切片 7.4：
+                //    `IssueComment.timeLabel(now:)` 与 `IssueDetail.bodyTimeLabel(now:)`）。
+                //    不声明的话那个 import 编译不过；而改写成断言字面量
+                //    会把测试与 `RelativeTime` 的措辞绑死。
+                .product(name: "GitDuoCore", package: "GitDuoCore")
             ]
         )
     ]

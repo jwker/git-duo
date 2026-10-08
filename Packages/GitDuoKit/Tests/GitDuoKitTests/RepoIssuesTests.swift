@@ -60,6 +60,7 @@ struct RepoIssuesTests {
         state: String = "open",
         comments: Int = 0,
         author: String? = nil,
+        labels: [LabelDTO]? = nil,
         isPullRequest: Bool = false
     ) -> IssueDTO {
         IssueDTO(
@@ -69,6 +70,7 @@ struct RepoIssuesTests {
             comments: comments,
             createdAt: base,
             user: author.map(AuthorDTO.init(login:)),
+            labels: labels,
             pullRequest: isPullRequest ? IssueDTO.PullRequestMarker() : nil
         )
     }
@@ -288,5 +290,124 @@ struct RepoIssuesTests {
         let page = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .closed)
 
         #expect(page.items.map(\.isOpen) == [true, false])
+    }
+
+    // MARK: - 切片 7：标签进模型（§4.4 分区二要画真实标签色）
+
+    @Test("⚠️ 标签**逐字带进行模型**（名字 + 不带 `#` 的色值）—— 卡片要画的是真实标签色")
+    func labelsAreMappedVerbatim() async throws {
+        let source = ScriptedIssuesSource(pages: [
+            Page(items: [dto(1, labels: [
+                LabelDTO(name: "bug", color: "d73a4a"),
+                LabelDTO(name: "enhancement", color: "a2eeef", description: "新功能"),
+            ])], nextCursor: nil)
+        ])
+
+        let page = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .open)
+
+        // 色值两个方向都**不带 `#`**（发出去时也一样）—— 这里多一个 `#` 不会报错，
+        // 只会让标签颜色悄悄回退成兜底灰（`LabelPill` 拿不到合法色值时的降级）。
+        #expect(page.items.first?.labels == [
+            Label(name: "bug", colorHex: "d73a4a"),
+            Label(name: "enhancement", colorHex: "a2eeef", description: "新功能"),
+        ])
+        #expect(page.items.first?.labels.allSatisfy { !$0.colorHex.contains("#") } == true)
+    }
+
+    @Test("⚠️ 标签顺序**就是服务端给的顺序**（重排会让同一张卡片在网页端与这里长得不一样）")
+    func labelsKeepServerOrder() async throws {
+        // 故意给一个**不是**名字升序的批次 —— 如果实现里顺手 `sorted()` 了，这条会失败。
+        let source = ScriptedIssuesSource(pages: [
+            Page(items: [dto(1, labels: [
+                LabelDTO(name: "zebra", color: "000000"),
+                LabelDTO(name: "alpha", color: "ffffff"),
+                LabelDTO(name: "middle", color: "1f2328"),
+            ])], nextCursor: nil)
+        ])
+
+        let page = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .open)
+
+        #expect(page.items.first?.labels.map(\.name) == ["zebra", "alpha", "middle"])
+    }
+
+    @Test("⚠️ `labels` 整段缺失（`null`）⇒ **空数组**，而不是让这一行炸掉或整页失败")
+    func missingLabelsBecomeEmptyArray() async throws {
+        let source = ScriptedIssuesSource(pages: [
+            Page(items: [dto(1, labels: nil), dto(2, labels: [])], nextCursor: nil)
+        ])
+
+        let page = try await LoadRepoIssues(source: source).load(fullName: "a/b", state: .open)
+
+        // `null` 与 `[]` 在这一层是同一件事：都没有标签。
+        // （⚠️ 与 `authorLogin` 不同 —— 那里 `nil` 是"作者账号没了"，是一个独立事实。）
+        #expect(page.items.map(\.labels.isEmpty) == [true, true])
+    }
+
+    @Test("构造出的行**默认没有标签** —— 老调用点（探索页）不传也不会变")
+    func labelsDefaultToEmpty() {
+        let row = IssueRow(number: 1, title: "t", isOpen: true, comments: 0, createdAt: base)
+
+        #expect(row.labels.isEmpty)
+    }
+
+    // MARK: - 切片 7：§4.4 分区二（仓库详情 Issues 段，决策 #61）
+
+    @Test("⚠️ 三段逐字对齐原型：`开放 (N)` / `已关闭` / `筛选`（`05-repo.js:118-120`）")
+    func sectionSegmentsMatchPrototype() {
+        #expect(RepoIssuesSectionCopy.openSegment(loadedCount: 9, hasMore: false) == "开放 (9)")
+        #expect(RepoIssuesSectionCopy.closedSegment == "已关闭")
+        #expect(RepoIssuesSectionCopy.filterAction == "筛选")
+    }
+
+    @Test("⚠️ 「开放」档的计数与 §4.14 **是同一条规则** —— 两个页面上的数字必须能互相解释")
+    func sectionCountSharesTheSameRuleAsExplore() {
+        for (loaded, more) in [(0, false), (9, false), (30, true), (-3, false)] {
+            #expect(
+                RepoIssuesSectionCopy.openSegment(loadedCount: loaded, hasMore: more)
+                    == "开放 (\(OpenIssueIndicator.countLabel(loadedCount: loaded, hasMore: more)))"
+            )
+        }
+    }
+
+    @Test("⚠️ 只有「开放」那格带计数 —— 原型没给「已关闭」计数，不是漏了")
+    func onlyOpenSegmentCarriesACount() {
+        #expect(!RepoIssuesSectionCopy.closedSegment.contains("("))
+        #expect(RepoIssuesSectionCopy.filterAction == "筛选")
+    }
+
+    @Test("⚠️ 这一档**还没加载过**时只写 `开放`，不写 `开放 (0)`（加载中 ≠ 没有数据）")
+    func openSegmentOmitsCountWhenNotLoadedYet() {
+        #expect(RepoIssuesSectionCopy.openSegment(loadedCount: nil, hasMore: false) == "开放")
+        #expect(RepoIssuesSectionCopy.openSegmentTitle == "开放")
+
+        // 而**真的 0 条**是另一回事：那种情况下括号必须在 —— 它说的是"这个仓库确实没有"。
+        #expect(RepoIssuesSectionCopy.openSegment(loadedCount: 0, hasMore: false) == "开放 (0)")
+    }
+
+    @Test("新建入口文案（图标不在常量里 —— 它是一枚图形，由视图与文案一起排）")
+    func newIssueEntry() {
+        #expect(RepoIssuesSectionCopy.newIssueAction == "新建 Issue")
+        #expect(!RepoIssuesSectionCopy.newIssueAction.contains("＋"))
+    }
+
+    @Test("⚠️ 两档空态：**开放档复用 §4.14 那一对**，已关闭档是自拟的两行（规格未给）")
+    func sectionEmptyCopy() {
+        #expect(RepoIssuesSectionCopy.emptyOpenTitle == OpenIssueIndicator.emptyTitle)
+        #expect(RepoIssuesSectionCopy.emptyOpenHint == OpenIssueIndicator.emptyHint)
+
+        #expect(RepoIssuesSectionCopy.emptyClosedTitle == "暂无已关闭的 Issue")
+        #expect(RepoIssuesSectionCopy.emptyClosedHint == "这个仓库还没有已关闭的 Issue")
+
+        // 形状与全项目一致：标题说**状态**，引导行说**这个仓库的情况** —— 两行不是一件事。
+        #expect(!RepoIssuesSectionCopy.emptyClosedHint.contains(RepoIssuesSectionCopy.emptyClosedTitle))
+        #expect(RepoIssuesSectionCopy.emptyClosedHint != RepoIssuesSectionCopy.emptyClosedTitle)
+    }
+
+    @Test("⚠️ 「已关闭」档的引导行说「还没有」而不是「当前没有」")
+    func closedEmptyHintDoesNotImplyItChanges() {
+        // 已关闭是一个**只增不减**的集合：这一档为空只可能是"从来没关过"。
+        // 写成"当前没有"会暗示它会变（像是筛选的结果），而用户会去怀疑自己筛错了。
+        #expect(!RepoIssuesSectionCopy.emptyClosedHint.contains("当前"))
+        #expect(RepoIssuesSectionCopy.emptyClosedHint.contains("还没有"))
     }
 }

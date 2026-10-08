@@ -65,6 +65,12 @@ final class AppEnvironment {
     /// 探索 PR 列表（切片 4）。
     let repoPulls: LoadRepoPulls
 
+    /// 仓库标签库（切片 7）：**取全部标签 + 新建并选中**（决策 #56）。
+    ///
+    /// ⚠️ 一个实例服务两处：§4.4 分区二的「筛选」与 §4.10 新建 Issue 页的标签行 ——
+    /// 用户裁定这两处**用同一个弹层**（`LabelPickerSheet`），所以底下的用例也是同一个。
+    let labelCatalog: LabelCatalog
+
     /// Star 的领域用例（先确认基准，再幂等切换 —— 决策 #41）。
     let starToggle: ToggleStar
 
@@ -101,6 +107,28 @@ final class AppEnvironment {
     /// 合并分支（决策 #52）。
     let mergeBranch: MergeBranch
 
+    // MARK: - 领域用例（切片 7）
+
+    /// Issue 详情首屏（详情 + 评论两条独立数据 —— 决策 #57）。
+    let issueDetail: LoadIssueDetail
+
+    /// 发一条评论。**Issue 详情与 PR 详情两页共用**（服务端本来就是同一个资源）。
+    let postIssueComment: PostIssueComment
+
+    /// 新建 Issue（§4.10）。
+    let createIssue: CreateIssue
+
+    /// PR 详情首屏 + 两个懒加载分区（详情 / 对话 / Commits / 文件 —— §4.11）。
+    ///
+    /// ⚠️ 它**同时依赖两个端点类**（构造器上就是两个参数）：详情 / 评审 / 文件 / Commits
+    /// 在 `GitHubRepoPullsEndpoint`，而评论在 `GitHubRepoIssuesEndpoint`
+    /// （决策 #60：PR 的时间线就是 issue 评论）。这不是"拆得太碎"，
+    /// 是数据本来就在两个类上。
+    let pullDetail: LoadPullDetail
+
+    /// PR 的三个操作：合并（三方式）/ 关闭 / 重新打开（§4.11 操作区、§5.3）。
+    let pullAction: PullAction
+
     // MARK: - 本地存储
 
     /// 最近访问（落盘实现见 `UserDefaultsRecentVisitStore`）。
@@ -124,6 +152,13 @@ final class AppEnvironment {
     /// ⚠️ 它是**账号数据**：分支名会暴露私有仓库的结构
     /// （`feature/客户XX-报价单改版` 这种名字本身就在泄密）⇒ `signOut()` 必须清掉。
     let branchMemory: any BranchMemoryStore
+
+    /// 评论草稿（决策 #59、PRD §4.9 / §4.11）。
+    ///
+    /// ⚠️ 它同样是**账号数据**：草稿里可能有还没发布的正文（一段私事、
+    /// 一个未公开的漏洞描述）—— 换个人登录还能读出来就是一次真实的泄露
+    /// ⇒ `signOut()` 必须清掉（§3.6 第 ③ 步）。
+    let commentDrafts: any CommentDraftStore
 
     // MARK: - 全局 UI 通道
 
@@ -175,10 +210,12 @@ final class AppEnvironment {
         let snapshots = UserDefaultsStarSnapshotStore()
         let searchHistory = UserDefaultsSearchHistoryStore()
         let branchMemory = UserDefaultsBranchMemoryStore()
+        let commentDrafts = UserDefaultsCommentDraftStore()
         self.recentVisits = visits
         self.starSnapshots = snapshots
         self.searchHistory = searchHistory
         self.branchMemory = branchMemory
+        self.commentDrafts = commentDrafts
 
         self.repositories = LoadRepositoriesPage(
             source: GitHubRepositoryEndpoint(client: client)
@@ -198,6 +235,9 @@ final class AppEnvironment {
         )
         self.repoPulls = LoadRepoPulls(
             source: GitHubRepoPullsEndpoint(client: client)
+        )
+        self.labelCatalog = LabelCatalog(
+            source: GitHubRepoLabelsEndpoint(client: client)
         )
         self.starToggle = ToggleStar(
             source: GitHubStarEndpoint(client: client)
@@ -237,6 +277,27 @@ final class AppEnvironment {
         self.deleteBranch = DeleteBranch(source: branchEndpoint, memory: branchMemory)
         self.createBranch = CreateBranch(source: branchEndpoint, memory: branchMemory)
         self.mergeBranch = MergeBranch(source: branchEndpoint)
+
+        // ── 切片 7：Issues / PR。
+        //
+        // ⚠️ 一个端点实例服务三屏（列表 / 详情+评论 / 新建+发评论），
+        //    三处**必须是同一个 `issuesEndpoint`** —— 分开 new 不报错，
+        //    但缓存会分成几份、配额各算各的（同上面 `contentEndpoint` 那条）。
+        //    `GitHubRepoIssuesEndpoint` 无状态，所以共用它零成本。
+        let issuesEndpoint = GitHubRepoIssuesEndpoint(client: client)
+        self.issueDetail = LoadIssueDetail(source: issuesEndpoint)
+        // ⚠️ Issue 详情页与 PR 详情页**共用这一个实例**：评论是同一个端点
+        //    （PR 在服务端就是一种 Issue），两页各造一个只是把同一份规则抄两遍。
+        self.postIssueComment = PostIssueComment(source: issuesEndpoint)
+        self.createIssue = CreateIssue(source: issuesEndpoint)
+
+        // ⚠️ PR 侧那四条请求全在 `GitHubRepoPullsEndpoint` 上；
+        //    而 `LoadPullDetail` 的**评论那一路仍走上面的 `issuesEndpoint`**
+        //    （决策 #60 的对照表）⇒ 这里同时用到了两个端点实例，这是有意的。
+        //    两者都是同一个 `client` 的薄包装、都无状态 ⇒ 分开 new 零成本。
+        let pullsEndpoint = GitHubRepoPullsEndpoint(client: client)
+        self.pullDetail = LoadPullDetail(detail: pullsEndpoint, comments: issuesEndpoint)
+        self.pullAction = PullAction(source: pullsEndpoint)
     }
 
     /// 接口缓存（§5.1 的 L2：内存 + 磁盘，**自建**，绝不启用系统 `URLCache` —— 决策 #32）。
@@ -330,12 +391,14 @@ final class AppEnvironment {
         //    · Star 基线快照（留着它会拿旧账号的基线算出凭空的增幅）
         //    · 最近搜索（切片的 5 —— 它记的是"这个人在搜什么"）
         //    · 分支记忆（切片 6.4 —— 分支名会暴露私有仓库的结构）
+        //    · 评论草稿（切片 7 —— 草稿里可能有还没发布的正文）
         //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
         //    尚未接入（落地时补在这一处）：收藏夹与归属映射（切片 9）。
         await recentVisits.clear()
         await starSnapshots.clear()
         await searchHistory.clear()
         await branchMemory.clear()
+        await commentDrafts.clear()
         // ⚠️ `LoadSearch` 也是 actor，它缓存的是**上一个账号搜出来的结果**（含私有仓库名）
         //    ⇒ 与接口缓存同一条：不清就会在新账号的界面上露出来。
         await search.invalidateAll()
@@ -383,11 +446,13 @@ enum AuthNotice: Equatable {
 ///        （切片 6.5 → 四个真页面 + `repoDetail` / `repoTree` / `fileContent` /
 ///        `repoCommits` / `branches` / `deleteBranch` / `createBranch` / `mergeBranch`
 ///        八条用例与 `branchMemory` 的装配）。
+/// 已消解：`RouteView` 的 `.issueDetail` / `.newIssue` / `.prDetail`
+///        （切片 7.5 → 三个真页面 + `issueDetail` / `postIssueComment` / `createIssue` /
+///        `pullDetail` / `pullAction` 五条用例与 `commentDrafts` 的装配）。
 enum SkeletonPlaceholders {
     static let registry: [String] = [
         "「我的」Tab 根页（`ProfileView` 仍是骨架屏，切片 9）",
-        "`RouteView` 里仍走 `SkeletonScreen` 的推入页："
-            + "Issue 与 PR 详情 / 新建（7）· 编辑器（8）· "
+        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：编辑器（8）· "
             + "我的 Star / 我的收藏 / 设置（9）"
     ]
 }

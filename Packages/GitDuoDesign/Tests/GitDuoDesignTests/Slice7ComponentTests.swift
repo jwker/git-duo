@@ -168,4 +168,94 @@ struct Slice7ComponentTests {
         // 也不能是浅色 —— 白字会读不出来。
         #expect(Theme.Palette.labelFallbackSurface != Theme.Palette.surfaceSunken)
     }
+
+    // MARK: - `SegmentedBar` 的两个新参数（切片 7 补口，PRD §4.4 分区二）
+
+    @Test("⚠️ 两个新参数**默认都是「保持原样」** —— 既有三处调用点一个字都不用改")
+    func segmentedBarDefaultsPreserveExistingBehaviour() {
+        let segment = SegmentedBar.Segment(id: "open", title: "开放")
+
+        // ① 既有的每一格都是"真分段"，不是动作格。
+        #expect(segment.isAction == false)
+        // ⚠️ 省略与显式传 `false` 必须是**同一个值** —— 否则 `ForEach` 的比对会分叉。
+        #expect(segment == SegmentedBar.Segment(id: "open", title: "开放", isAction: false))
+
+        // ② 顶部那三处（仓库 Tab / 探索页 / 搜索页）的分段条自带页面边距。
+        let bar = SegmentedBar(segments: [segment], selectedID: "open", onSelect: { _ in })
+        #expect(bar.padsHorizontally == true)
+    }
+
+    @Test("§4.4 分区二那一条：两格真分段 + 一格动作，且内容区里不再自带边距")
+    func segmentedBarForRepoDetailSection() {
+        let bar = SegmentedBar(
+            segments: [
+                .init(id: "open", title: "开放 (12)"),
+                .init(id: "closed", title: "已关闭"),
+                // ⚠️ 第三格**不带任何选中态**：它长得像分段，但点它打开的是一个弹层。
+                .init(id: "filter", title: "筛选", isAction: true),
+            ],
+            selectedID: "open",
+            padsHorizontally: false,
+            onSelect: { _ in }
+        )
+
+        #expect(bar.segments.count == 3)
+        #expect(bar.segments.map(\.isAction) == [false, false, true])
+        #expect(bar.padsHorizontally == false)
+    }
+
+    // MARK: - `SheetRow` 的 leading 第二种形态（切片 7 补口，PRD §5.2 标签弹层）
+
+    @Test("⚠️ `leadingDotColorHex` 默认是 `nil` —— 既有的分支 / 管理那一族行一个字都不用改")
+    func sheetRowLeadingDefaultsToIcon() {
+        // 既有调用点（`BranchSheet` 的两处、以及任何传 `systemImage` 的地方）
+        // 都不该因为这一档新形态而改变行为：默认 `nil` ⇒ 走原来的图标分支。
+        let row = SheetRow(systemImage: "folder", title: "管理分支…", action: {})
+        #expect(row.leadingDotColorHex == nil)
+        #expect(row.systemImage == "folder")
+    }
+
+    @Test("§5.2 那一行：leading 给的是标签色块，且**它同时不带图标**")
+    func sheetRowLeadingDotCarriesLabelColour() {
+        // 原型 `07-issues.js:38` 的 `<span class="lbl-dot" style="background:#d73a4a">`
+        // —— 那一行的 leading **只有色块**，没有 svg 图标。
+        // 两个都传时以色块为准（实现里是 `if let leadingDotColorHex { } else if let systemImage`），
+        // 所以这一条同时钉住"两者并存时谁赢"，免得哪天被改成两个都画。
+        let row = SheetRow(
+            systemImage: "tag",
+            leadingDotColorHex: "d73a4a",
+            title: "bug",
+            action: {}
+        )
+        #expect(row.leadingDotColorHex == "d73a4a")
+        #expect(row.title == "bug")
+    }
+
+    // MARK: - 评论输入区两件（切片 7 补口：`CommentComposer` / `NoticeBar`）
+
+    @Test("⚠️ `CommentComposer` 有**三个必需参数**就能建出来 —— 空内容不是「禁用」，所以没有 `canSend` 那道闸")
+    func commentComposerHasNoSendabilityGate() {
+        // PRD §4.11 的口径是「空内容时**提示**先写内容」（原型 `sendPrComment` 也是
+        // `if(!v){ toast('先写点内容再发送'); return; }`），**不是**把按钮画成灰的。
+        // 所以这个 init 只有 text / placeholder / sendTitle 三个必需参数 ——
+        // 一开始就没有 `canSend`：有了它，第一个调用点就会拿它去 `.disabled`，
+        // 而图灰的按钮不会告诉用户"为什么点不动"。
+        let composer = CommentComposer(
+            text: .constant(""),
+            placeholder: "写评论… (Markdown 支持)",
+            sendTitle: "发送"
+        ) {}
+
+        #expect(composer.placeholder == "写评论… (Markdown 支持)")
+        #expect(composer.sendTitle == "发送")
+        // 默认不在途 ⇒ 调用点不传 `isSending` 时按钮可点。
+        #expect(composer.isSending == false)
+    }
+
+    @Test("`NoticeBar` 的文案**原样**呈现（含 `⚠` 与句末句号，一个字符都不由组件改写）")
+    func noticeBarKeepsTextVerbatim() {
+        // 它是一句承诺（"草稿已保留，可重试"）—— 组件不该替它做任何加工。
+        let notice = NoticeBar(text: "⚠ 发送失败：网络不可用。草稿已保留，可重试。")
+        #expect(notice.text == "⚠ 发送失败：网络不可用。草稿已保留，可重试。")
+    }
 }

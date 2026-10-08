@@ -62,7 +62,9 @@ struct RepoPullsTests {
         state: String = "open",
         mergedAt: Date? = nil,
         head: String = "feature/x",
-        base baseRef: String = "main"
+        base baseRef: String = "main",
+        author: String? = nil,
+        updatedAt: Date? = nil
     ) -> PullRequestDTO {
         PullRequestDTO(
             number: number,
@@ -70,7 +72,9 @@ struct RepoPullsTests {
             state: state,
             mergedAt: mergedAt,
             head: .init(ref: head),
-            base: .init(ref: baseRef)
+            base: .init(ref: baseRef),
+            user: author.map(AuthorDTO.init(login:)),
+            updatedAt: updatedAt
         )
     }
 
@@ -305,5 +309,129 @@ struct RepoPullsTests {
 
         let closed = try await LoadRepoPulls(source: makeSource()).load(fullName: "a/b", state: .closed)
         #expect(closed.items.map(\.number) == [2])
+    }
+
+    // MARK: - 切片 7：§4.4 分区三（仓库详情 PR 段，决策 #61）
+
+    /// 造一行"两段都有"的 PR，省掉每个断言里重复五个参数。
+    private func row(
+        authorLogin: String? = "reviewer-a",
+        updatedAt: Date? = nil
+    ) -> PullRow {
+        PullRow(
+            number: 57,
+            title: "标题",
+            state: .open,
+            headRef: "feature/repo-hub",
+            baseRef: "main",
+            authorLogin: authorLogin,
+            updatedAt: updatedAt ?? base
+        )
+    }
+
+    @Test("⚠️ 卡片第三行：`{作者} 更新于 {时间}`（原型 `05-repo.js:140` 逐字）")
+    func updateLineMatchesPrototype() {
+        #expect(row().updateLine(now: base.addingTimeInterval(7_200)) == "reviewer-a 更新于 2 小时前")
+    }
+
+    @Test("⚠️ 拿不到作者 ⇒ **只去掉名字那一截**（时间是真的，整句不说更亏）")
+    func updateLineWithoutAuthorKeepsTheTime() {
+        #expect(row(authorLogin: nil).updateLine(now: base.addingTimeInterval(7_200))
+                == "更新于 2 小时前")
+        // 空串与 `nil` 同一种处置 —— 不然会拼出 ` 更新于 …`（前面多一个空格）。
+        #expect(row(authorLogin: "").updateLine(now: base.addingTimeInterval(7_200))
+                == "更新于 2 小时前")
+    }
+
+    @Test("⚠️ 拿不到更新时间 ⇒ **整行返回 `nil`**（不画那一行，而不是画一行空的）")
+    func updateLineIsNilWithoutUpdatedAt() {
+        let noTime = PullRow(
+            number: 57, title: "标题", state: .open,
+            headRef: "feature/repo-hub", baseRef: "main",
+            authorLogin: "reviewer-a", updatedAt: nil
+        )
+
+        // 空串会被渲染成**一行空白**（高度还在）—— "没有这一行"与"有一行空的"在屏幕上不同。
+        #expect(noTime.updateLine(now: base) == nil)
+    }
+
+    @Test("⚠️ 探索页那行 `metaLabel` **一点都不受影响** —— 仍然不含作者、不含时间（PRD §4.15）")
+    func metaLabelStaysForTheExplorePage() {
+        let line = row().metaLabel
+
+        #expect(line == "#57 · feature/repo-hub → main")
+        #expect(!line.contains("reviewer-a"))
+        #expect(!line.contains("更新于"))
+    }
+
+    @Test("两个字段真的从 DTO 带过来了（列表端点**返回** `updated_at` —— 与增删统计不同）")
+    func authorAndUpdatedAtAreMapped() async throws {
+        let source = ScriptedPullsSource(pages: [
+            Page(items: [dto(1, author: "reviewer-a", updatedAt: base)], nextCursor: nil)
+        ])
+
+        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b", state: .open)
+
+        #expect(page.items.first?.authorLogin == "reviewer-a")
+        #expect(page.items.first?.updatedAt == base)
+    }
+
+    @Test("两个字段都可空 ⇒ 服务端不给时行照样建得出来")
+    func optionalFieldsSurviveMissingValues() async throws {
+        let source = ScriptedPullsSource(pages: [Page(items: [dto(1)], nextCursor: nil)])
+
+        let page = try await LoadRepoPulls(source: source).load(fullName: "a/b", state: .open)
+
+        #expect(page.items.first?.authorLogin == nil)
+        #expect(page.items.first?.updatedAt == nil)
+    }
+
+    @Test("§4.4 分区三分段条：`开放 (N)` / `已合并`（原型 `05-repo.js:132-133` 逐字）")
+    func sectionSegmentsMatchPrototype() {
+        #expect(RepoPullsSectionCopy.openSegment(loadedCount: 5, hasMore: false) == "开放 (5)")
+        #expect(RepoPullsSectionCopy.openSegment(loadedCount: 30, hasMore: true) == "开放 (30+)")
+        #expect(RepoPullsSectionCopy.mergedSegment == "已合并")
+        #expect(!RepoPullsSectionCopy.mergedSegment.contains("("))
+    }
+
+    @Test("⚠️ PR 段的计数与 Issues 那两页**是同一条规则**（`N` 不重复实现一遍）")
+    func sectionCountSharesTheSameRule() {
+        for (loaded, more) in [(0, false), (5, false), (30, true), (-3, false)] {
+            #expect(
+                RepoPullsSectionCopy.openSegment(loadedCount: loaded, hasMore: more)
+                    == "开放 (\(OpenIssueIndicator.countLabel(loadedCount: loaded, hasMore: more)))"
+            )
+        }
+    }
+
+    @Test("⚠️ 这一档**还没加载过**时只写 `开放`，不写 `开放 (0)`（加载中 ≠ 没有数据）")
+    func openSegmentOmitsCountWhenNotLoadedYet() {
+        #expect(RepoPullsSectionCopy.openSegment(loadedCount: nil, hasMore: false) == "开放")
+        #expect(RepoPullsSectionCopy.openSegmentTitle == "开放")
+        #expect(RepoPullsSectionCopy.openSegment(loadedCount: 0, hasMore: false) == "开放 (0)")
+    }
+
+    @Test("⚠️ 两档空态**各说各的**，也不与探索页那一句串用（§4.4 分区三 vs §4.15）")
+    func sectionEmptyCopyIsPerSegment() {
+        #expect(RepoPullsSectionCopy.emptyOpenTitle == "暂无开放的 Pull Request")
+        #expect(RepoPullsSectionCopy.emptyOpenHint == "这个仓库当前没有开放中的 Pull Request")
+        #expect(RepoPullsSectionCopy.emptyMergedTitle == "暂无已合并的 Pull Request")
+        #expect(RepoPullsSectionCopy.emptyMergedHint == "这个仓库还没有已合并的 Pull Request")
+
+        // 探索页说的是"一个 PR 都没有"（那一页开放 + 已合并混排）；这一页的档位是分开的，
+        // 说"没有 PR"会把"已合并的有一堆"也一起否掉。
+        #expect(RepoPullsSectionCopy.emptyOpenTitle != PullListIndicator.emptyTitle)
+        #expect(RepoPullsSectionCopy.emptyMergedTitle != PullListIndicator.emptyTitle)
+        #expect(RepoPullsSectionCopy.emptyOpenTitle != RepoPullsSectionCopy.emptyMergedTitle)
+
+        // 两档的引导行都不是标题的复述。
+        #expect(!RepoPullsSectionCopy.emptyOpenHint.contains(RepoPullsSectionCopy.emptyOpenTitle))
+        #expect(!RepoPullsSectionCopy.emptyMergedHint.contains(RepoPullsSectionCopy.emptyMergedTitle))
+    }
+
+    @Test("⚠️ 「已合并」档的引导行说「还没有」而不是「当前没有」（只增不减的集合）")
+    func mergedEmptyHintDoesNotImplyItChanges() {
+        #expect(!RepoPullsSectionCopy.emptyMergedHint.contains("当前"))
+        #expect(RepoPullsSectionCopy.emptyMergedHint.contains("还没有"))
     }
 }

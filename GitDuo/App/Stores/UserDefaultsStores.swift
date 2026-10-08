@@ -218,6 +218,90 @@ actor UserDefaultsBranchMemoryStore: BranchMemoryStore {
     }
 }
 
+/// 评论草稿的**落盘实现**（决策 #59、TECH_SPEC §7.1 存储表：`UserDefaults` + JSON）。
+///
+/// 与「最近访问」「最近搜索」「Star 基线」三条同一分工：语义在领域包
+/// （`InMemoryCommentDraftStore` —— 含"正文变空即删"那条），编解码走
+/// `CommentDraft.encodeList` / `decodeList`（有往返测试）。本类型只做
+/// "读出来 → 交给它 → 存回去"。
+///
+/// ## ⚠️ 为什么要包一层内存实现，而不是直接维护一个字典
+///
+/// `BranchMemoryStore` 那条**不能**这么做的理由（协议没有"读出全部"的入口）
+/// 在这里不成立：本协议有四个方法，而领域层额外给了 `InMemoryCommentDraftStore.allDrafts()`
+/// 供落盘取整份。既然能借到，就必须借 —— `save` 的那条"空即删"规则
+/// 若在本类型里再实现一遍，就成了第二份实现，而落盘这一份**没有测试**
+/// （App target 没有测试 target），它会成为那个没人看守的分支。
+///
+/// ## 存储形状：整份数组
+///
+/// 同 `UserDefaultsStarSnapshotStore`：草稿天然是一个整体（登出时整份清掉、
+/// 读到坏的整份作废），拆成 N 条键反而要处理"清了一半"的中间态。
+///
+/// ⚠️ 它是**账号绑定数据**：草稿里可能有还没发布的正文（一段私事、
+/// 一个未公开的漏洞描述）⇒ `signOut()` 的 ③ 步必须 `clear()`（§3.6）。
+actor UserDefaultsCommentDraftStore: CommentDraftStore {
+
+    static let keyPrefix = "GitDuo.commentDrafts"
+
+    private let defaults: UserDefaults
+    private let key: String
+    private let backing: InMemoryCommentDraftStore
+
+    /// - Parameter namespace: 账号命名空间（多账号预留，同 `UserDefaultsRecentVisitStore`）。
+    init(defaults: UserDefaults = .standard, namespace: String = "default") {
+        self.defaults = defaults
+        self.key = "\(Self.keyPrefix).\(namespace)"
+        self.backing = InMemoryCommentDraftStore(seed: Self.load(from: defaults, key: key))
+    }
+
+    func draft(fullName: String, number: Int) async -> CommentDraft? {
+        await backing.draft(fullName: fullName, number: number)
+    }
+
+    func save(fullName: String, number: Int, body: String, at date: Date) async {
+        await backing.save(fullName: fullName, number: number, body: body, at: date)
+        // ⚠️ 存的是**对方归一化之后**的内容（"空即删"已生效），不是"我刚传进去的那一条"
+        //    —— 否则落盘内容会与内存内容分叉（同 `UserDefaultsRecentVisitStore.record`）。
+        await persistCurrent()
+    }
+
+    func discard(fullName: String, number: Int) async {
+        await backing.discard(fullName: fullName, number: number)
+        await persistCurrent()
+    }
+
+    func clear() async {
+        await backing.clear()
+        // 与另外几个 store 一样删键而不是留一份 `[]`：读取端分辨不出这两者，
+        // 能不落痕就不落痕 —— 而这一份留痕的代价格外高（正文级别的隐私）。
+        defaults.removeObject(forKey: key)
+    }
+
+    private func persistCurrent() async {
+        persist(await backing.allDrafts())
+    }
+
+    /// 整份覆盖（同 `UserDefaultsRecentVisitStore.persist` 的取舍）。
+    ///
+    /// ⚠️ **不放进 `Task {}` 里异步写**：那样"方法返回了"与"内容真的落盘了"之间
+    /// 会有一个窗口，而用户完全可能在这之后立刻杀进程 ——
+    /// 丢掉的正是他刚敲进去的那几个字（也正是 `draft` 的 `didSet` 要解决的同一件事）。
+    private func persist(_ drafts: [CommentDraft]) {
+        if drafts.isEmpty {
+            defaults.removeObject(forKey: key)
+            return
+        }
+        guard let data = CommentDraft.encodeList(drafts) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    private static func load(from defaults: UserDefaults, key: String) -> [CommentDraft] {
+        guard let data = defaults.data(forKey: key) else { return [] }
+        return CommentDraft.decodeList(from: data)
+    }
+}
+
 /// Star 基线的**落盘实现**（TECH_SPEC §7.1 / §9.10.2）。
 ///
 /// 与 `UserDefaultsRecentVisitStore` 同一分工：语义在领域包（`InMemoryStarSnapshotStore`），

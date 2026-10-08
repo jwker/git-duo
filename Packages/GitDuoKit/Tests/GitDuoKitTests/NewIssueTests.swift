@@ -225,4 +225,40 @@ struct NewIssueTests {
         #expect(threw)
         #expect(await source.calls == 0)
     }
+
+    // MARK: - 标签行与弹层的读屏提示（切片 7.4 起真的上屏了）
+
+    @Test("标签行的可见文案逐字：`标签` / `＋ 标签 / 新建` / `提交 Issue`")
+    func labelRowCopyIsVerbatim() {
+        // 原型 `07-issues.js:23-25` 逐字（`＋` 是**全角**）。
+        #expect(IssueCopy.labelsSectionTitle == "标签")
+        #expect(IssueCopy.addLabelAction == "＋ 标签 / 新建")
+        #expect(IssueCopy.submitAction == "提交 Issue")
+    }
+
+    @Test("⚠️ 三处读屏提示**两两不同** —— 写反了屏幕上完全看不出来")
+    func hintIsNotTheFilterOne() {
+        // 三句话三件事：
+        // ① 从"这条 Issue 要带的标签"里去掉一颗（§4.10）；
+        // ② 取消一个**筛选条件**（§4.4 分区二）；
+        // ③ 取消弹层里那一行的选中（§5.2，两向都能走的行上只挂"已选"这一档）。
+        //
+        // ⚠️ ①②用的是**同一个视图组件**（`SelectedLabelRow`，hint 是它的必传参数）
+        //    ⇒ 把这两句写反是一次极容易发生的复制粘贴事故，
+        //    而后果只是读屏用户听到一个反的动作。所以它值得一条断言。
+        let hints = [
+            IssueCopy.removeLabelHint,
+            RepoIssuesSectionCopy.cancelFilterHint,
+            IssueCopy.selectedLabelHint,
+        ]
+        #expect(Set(hints).count == hints.count)
+
+        #expect(IssueCopy.removeLabelHint == "双击移除这个标签")
+        #expect(RepoIssuesSectionCopy.cancelFilterHint == "双击取消这个标签筛选")
+        #expect(IssueCopy.selectedLabelHint == "已选中，双击取消")
+
+        // 两句都不许提到对方那一处才有的词。
+        #expect(!IssueCopy.removeLabelHint.contains("筛选"))
+        #expect(!RepoIssuesSectionCopy.cancelFilterHint.contains("移除"))
+    }
 }

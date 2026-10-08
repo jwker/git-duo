@@ -1,5 +1,6 @@
 import Foundation
 import GitHubAPI
+import GitDuoCore
 import Testing
 
 @testable import GitDuoKit
@@ -326,6 +327,96 @@ struct IssueDetailTests {
         let comment = IssueComment(id: 1, body: "b", createdAt: base)
         #expect(comment.displayAuthor == "已注销账号")
         #expect(comment.displayAuthor != "未知用户")
+    }
+
+    // MARK: - 正文块与头部渲染数据（切片 7.4：视图直接喂给 `MarkdownBody` / `CommentBubble`）
+
+    @Test("⚠️ 胶囊上的状态词是**英文**（原型 `pillOf()` 给 `Open` / `Closed`）")
+    func pillTitleIsEnglish() {
+        let open = IssueDetail(number: 1, title: "t", isOpen: true, createdAt: base)
+        let closed = IssueDetail(number: 1, title: "t", isOpen: false, createdAt: base)
+
+        #expect(open.pillTitle == "Open")
+        #expect(closed.pillTitle == "Closed")
+
+        // ⚠️ 与 `stateLabel`（中文，读屏用）**有意不同** —— 屏幕上的胶囊是英文、
+        //    读屏念的是中文。这条分工是切片 5 定的（`PullRequestState.pillTitle` 同款）。
+        #expect(open.stateLabel == "开放")
+        #expect(closed.stateLabel == "已关闭")
+    }
+
+    @Test("⚠️ 原型那个 `●` **不画**（全项目的胶囊都是纯文字）")
+    func pillTitleHasNoDecorations() {
+        let detail = IssueDetail(number: 1, title: "t", isOpen: true, createdAt: base)
+        #expect(!detail.pillTitle.contains("●"))
+        #expect(detail.pillTitle == detail.pillTitle.trimmingCharacters(in: .whitespaces))
+    }
+
+    @Test("⚠️ 正文的块**在 `init` 里解析好**（`body` 与 `bodyBlocks` 不可能不一致）")
+    func bodyBlocksAreParsedAtInit() {
+        let detail = IssueDetail(
+            number: 1, title: "t", isOpen: true, body: "**加粗** 与 `code`", createdAt: base
+        )
+
+        #expect(detail.bodyBlocks == MarkdownDocument("**加粗** 与 `code`").blocks)
+        // 两条"解析没做"的形态都要被挡住：它们不会崩，只会渲染出一条空气泡。
+        #expect(!detail.bodyBlocks.isEmpty)
+        #expect(detail.hasBody)
+    }
+
+    @Test("`body` 为 `nil` ⇒ 空数组（**与 `hasBody` 是两条判据**，别用一个替另一个）")
+    func missingBodyYieldsNoBlocks() {
+        let detail = IssueDetail(number: 1, title: "t", isOpen: true, createdAt: base)
+
+        #expect(detail.bodyBlocks.isEmpty)
+        #expect(detail.hasBody == false)
+    }
+
+    @Test("正文气泡头部的时间用**创建时刻**（那是「作者当初写下那段话」的时间）")
+    func bodyTimeUsesCreatedAt() {
+        let createdAt = base.addingTimeInterval(-3 * 86_400)
+        // ⚠️ 关闭时间与创建时间**不同**，用来区分"拿错了一个"：
+        //    这条气泡是作者写的正文，不是"已关闭"那件事。
+        let detail = IssueDetail(
+            number: 1, title: "t", isOpen: false, body: "正文",
+            createdAt: createdAt, closedAt: base
+        )
+
+        #expect(detail.bodyTimeLabel(now: base) == "3 天前")
+        #expect(detail.bodyTimeLabel(now: base) == RelativeTime.string(from: createdAt, now: base))
+    }
+
+    @Test("评论的时间与 `RelativeTime` 同一套（**不照抄**原型那个带时刻的 `昨天 21:40`）")
+    func commentTimeUsesTheSharedRelativeFormatter() {
+        let stamp = base.addingTimeInterval(-3 * 86_400)
+        let comment = IssueComment(id: 1, body: "b", createdAt: stamp)
+
+        #expect(comment.timeLabel(now: base) == RelativeTime.string(from: stamp, now: base))
+        #expect(comment.timeLabel(now: base) == "3 天前")
+        // 原型 `06-files.js:125` 硬编码的是带时刻的写法；为它单独造一套格式
+        // 会让同一条评论在评论区与别处显示两种时间。
+        #expect(!comment.timeLabel(now: base).contains(":"))
+    }
+
+    @Test("`IssueDetail` / `IssueComment` 是 `Hashable`（列表去重与 `ForEach` 的键要它）")
+    func modelsAreHashable() {
+        let a = IssueDetail(number: 1, title: "t", isOpen: true, body: "同一段", createdAt: base)
+        let b = IssueDetail(number: 1, title: "t", isOpen: true, body: "同一段", createdAt: base)
+        let c = IssueDetail(number: 1, title: "t", isOpen: true, body: "另一段", createdAt: base)
+
+        #expect(a == b)
+        // ⚠️ 改正文就应当是不相等的值 —— 合成 `Hashable` 会把 `bodyBlocks` 也算进去，
+        //    这条断言保证"解析结果确实参与了比较"，而不是被某个 `==` 实现忽略掉。
+        #expect(a != c)
+        #expect(Set([a, b, c]).count == 2)
+
+        // 评论那边键是**服务端 id**（全局唯一），不是 `（作者 + 时间）` 那种组合键 ——
+        // 同一秒里同一个人可以发两条，而 `ForEach` 撞键的表现是**少画一条**。
+        let first = IssueComment(id: 7, body: "同一条", authorLogin: "you", createdAt: base)
+        let second = IssueComment(id: 7, body: "同一条", authorLogin: "you", createdAt: base)
+        #expect(first == second)
+        #expect(Set([first, second]).count == 1)
+        #expect(first.id == 7)
     }
 
     // MARK: - 发送

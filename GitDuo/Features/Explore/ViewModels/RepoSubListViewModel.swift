@@ -61,6 +61,14 @@ final class RepoSubListViewModel<Item: Identifiable & Sendable> {
     /// 还有下一页 ⇒ 计数要写成 `30+`（**下界，不是确数**，§4.14）。
     var hasMore: Bool { state.canLoadMore }
 
+    /// 是否已经取过至少一次（`PagedListState.hasLoaded` 的转发）。
+    ///
+    /// ⚠️ 它服务的是"**计数该不该出现**"：§4.4 两段的分段条上写着 `开放 (N)`，
+    /// 而这一档还没加载过时**不能**写成 `开放 (0)` ——
+    /// "还没加载出来"与"确实一条都没有"是两件完全不同的事（§8.5 末条）。
+    /// 规则仍在领域层（`PagedListState`），这里只是让视图问得到它。
+    var hasLoaded: Bool { state.hasLoaded }
+
     // MARK: - 生命周期
 
     /// 进页取数。**只在没加载过时发请求** —— 返回上层再进来不该重打一遍。

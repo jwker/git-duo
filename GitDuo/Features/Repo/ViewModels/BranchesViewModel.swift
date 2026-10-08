@@ -164,7 +164,7 @@ final class BranchesViewModel {
             if case let .deletedCurrent(fallback) = result { currentBranch = fallback }
             await load()
         } catch {
-            toast.show(Self.actionFailedToast)
+            toast.show(ActionCopy.failed)
         }
     }
 
@@ -189,7 +189,7 @@ final class BranchesViewModel {
             sha = fresh?.branches.first { $0.name == currentBranch }?.commitSHA
         }
 
-        guard let sha else { return Self.actionFailedToast }
+        guard let sha else { return ActionCopy.failed }
 
         isWorking = true
         defer { isWorking = false }
@@ -212,7 +212,7 @@ final class BranchesViewModel {
             //    弹层里的输入框下方（而不是一条 2.4 秒就消失的 toast）。
             return error.message
         } catch {
-            return Self.actionFailedToast
+            return ActionCopy.failed
         }
     }
 
@@ -252,9 +252,9 @@ final class BranchesViewModel {
             // ⚠️ 409 在本包**还有第二个来源**（文件保存时 `sha` 过期，§9.6）——
             //    那句话要按调用点给，所以"冲突 ⇒ 这句话"这条规则只写在这个调用点上。
             if case .conflict = error { return BranchCopy.mergeConflictHint }
-            return Self.actionFailedToast
+            return ActionCopy.failed
         } catch {
-            return Self.actionFailedToast
+            return ActionCopy.failed
         }
     }
 
@@ -270,5 +270,7 @@ final class BranchesViewModel {
         return .decoding(error)
     }
 
-    static let actionFailedToast = "操作失败 · 请重试"
+    /// ⚠️ 「操作失败 · 请重试」那一句**不在这里** —— 切片 7.4 收口到
+    /// `GitDuoKit.ActionCopy.failed`（正本；本文件原有一份同值副本 `actionFailedToast`，
+    /// 名字里的 `Toast` 其实名不副实 —— 它有四处是**弹层内联提示**、不是 toast）。
 }

@@ -7,13 +7,13 @@ import GitDuoKit
 ///
 /// 结构：头部大卡（`RepoDetailHero`）+ 四分区切换条（`SectionTabs`）+ 分区内容。
 ///
-/// ## 四个分区里本片只交两段（决策 #50）
+/// ## 四个分区
 ///
-/// | 分区 | 本片 |
+/// | 分区 | 落在哪 |
 /// |---|---|
-/// | ① 代码（默认） | ✅ 面包屑 + 文件树 + README |
-/// | ② Issues | ⬜ 切片 7 —— `PendingSection` 占位 |
-/// | ③ Pull Requests | ⬜ 切片 7 —— `PendingSection` 占位 |
+/// | ① 代码（默认） | ✅ 面包屑 + 文件树 + README（`RepoTreeSection`，与 §4.13 共用） |
+/// | ② Issues | ✅ 切片 7 —— `RepoIssuesSection`（两档 + 标签筛选 + 新建入口） |
+/// | ③ Pull Requests | ✅ 切片 7 —— `RepoPullsSection`（两档） |
 /// | ④ Commits | ✅ 提交列表（懒加载） |
 ///
 /// 分段条**照原型画满四项**（顺序走 `RepoSection.allCases`，不自己写数组 ——
@@ -52,6 +52,8 @@ struct RepoDetailView: View {
     /// 而那种 bug 只在特定点击序列下出现。一个枚举天然只有一张。
     private enum RepoSheet: String, Identifiable {
         case branch
+        /// §4.4 分区二「筛选」—— 与 §4.10 新建 Issue 页**同一个**弹层（决策 #56）。
+        case labelPicker
         var id: String { rawValue }
     }
 
@@ -63,6 +65,8 @@ struct RepoDetailView: View {
         treeLoader: LoadRepoTree,
         commits: LoadRepoCommits,
         branches: LoadBranches,
+        issues: LoadRepoIssues,
+        pulls: LoadRepoPulls,
         starToggle: ToggleStar,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
@@ -77,6 +81,8 @@ struct RepoDetailView: View {
             treeLoader: treeLoader,
             commits: commits,
             branches: branches,
+            issues: issues,
+            pulls: pulls,
             starToggle: starToggle,
             memory: memory,
             visits: visits,
@@ -125,6 +131,47 @@ struct RepoDetailView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .task { await model.tree.loadBranches() }
+
+            case .labelPicker:
+                LabelPickerSheet(
+                    catalog: env.labelCatalog,
+                    fullName: fullName,
+                    // 选中集合归本页（`model.issueLabels`）—— 弹层只读它、只通知变化。
+                    selected: model.issueLabels,
+                    onToggle: { label in
+                        // 点一行是**两向**的：已选则取消、未选则选中。
+                        Task {
+                            if model.issueLabels.contains(where: { $0.name == label.name }) {
+                                await model.removeIssueLabel(label)
+                            } else {
+                                await model.selectIssueLabel(label)
+                            }
+                        }
+                    },
+                    onCreation: { result in
+                        // ⚠️ 三条正常路径的**提示**在这里给（弹层不认识 `ToastCenter`）。
+                        //    §7 的两句逐字在领域层，这里只负责挑哪一句。
+                        switch result {
+                        case .emptyName:
+                            env.toast.show(IssueCopy.emptyLabelNameToast)
+                        case let .alreadyExists(label):
+                            env.toast.show(IssueCopy.duplicateLabelToast)
+                            // 顺手选中已经是筛选项的那颗（"已存在"的语义就是"给你用上它"）。
+                            Task { await model.selectIssueLabel(label) }
+                        case let .created(label):
+                            env.toast.show(IssueCopy.labelCreatedToast(name: label.name))
+                            Task { await model.selectIssueLabel(label) }
+                        }
+                    },
+                    onFailure: { _ in
+                        // ⚠️ §5.2 **没有给**这条路径的文案（原型的数据是静态的，新建必成功）
+                        //    ⇒ 复用本页既有的那句通用失败提示（与 Star 失败同一句）。
+                        //    已登记为"规格未给"。
+                        env.toast.show(ActionCopy.failed)
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -190,15 +237,45 @@ struct RepoDetailView: View {
             codeSection
 
         case .issues:
-            PendingSection(
-                title: RepoSection.issues.title,
-                note: "切片 7 落地 · 开放 / 已关闭筛选与新建 Issue（PRD §4.4 分区二）"
+            RepoIssuesSection(
+                list: model.currentIssues,
+                segment: model.issueSegment,
+                openTitle: model.openIssuesTitle,
+                closedTitle: model.closedIssuesTitle,
+                selectedLabels: model.issueLabels,
+                now: now,
+                onSelectSegment: { segment in
+                    Task { await model.selectIssueSegment(segment) }
+                },
+                onTapFilter: { sheet = .labelPicker },
+                onRemoveLabel: { label in
+                    Task { await model.removeIssueLabel(label) }
+                },
+                onOpen: { number in
+                    env.router.push(.issueDetail(fullName: fullName, number: number))
+                },
+                onCreate: {
+                    env.router.push(.newIssue(fullName: fullName))
+                }
             )
 
         case .pullRequests:
-            PendingSection(
-                title: RepoSection.pullRequests.title,
-                note: "切片 7 落地 · 开放 / 已合并分段与 PR 详情（PRD §4.4 分区三）"
+            RepoPullsSection(
+                list: model.currentPulls,
+                segment: model.pullSegment,
+                openTitle: model.openPullsTitle,
+                mergedTitle: model.mergedPullsTitle,
+                now: now,
+                onSelectSegment: { segment in
+                    Task { await model.selectPullSegment(segment) }
+                },
+                onOpen: { number in
+                    // ⚠️ `readOnly: false` **显式传**（铁律 #7）：本页是"自己的仓库"，
+                    //    那个判定在路由进入本页之前就做完了，本页不推断仓库归属。
+                    env.router.push(
+                        .prDetail(fullName: fullName, number: number, readOnly: false)
+                    )
+                }
             )
 
         case .commits:
@@ -299,7 +376,9 @@ struct RepoDetailView: View {
             EmptyBox(title: CommitCopy.emptyTitle, hint: CommitCopy.emptyHint)
 
         case let .failure(error):
-            inlineFailure(error) { Task { await model.loadMoreCommits() } }
+            // 切片 7 起这块是**共享件**（Issues / PR 两段也用同一个失败块）——
+            // 抄三份的下场是那句「这一块加载失败」只会在其中一处被改。
+            SectionFailure(error: error) { Task { await model.loadMoreCommits() } }
         }
     }
 
@@ -430,48 +509,10 @@ struct RepoDetailView: View {
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。
+    ///
+    /// ⚠️ 走共用件 `PageFailure`（切片 7.4 收口）：本页、`CommitDetailView`、
+    /// `BranchesView` 三处原本各有一份**逐字相同**的实现。
     private func failureState(_ error: GitHubError) -> some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 30))
-                .foregroundStyle(Theme.Palette.textTertiary)
-            Text("加载失败")
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-            Button("重试") {
-                Task { await model.refresh() }
-            }
-            .font(Theme.Font.bodyStrong)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xxl)
-        .accessibilityElement(children: .combine)
-        // 失败原因**只说确定的那一件事**：404 与无权限被 GitHub 混同（§4.3），
-        // 不得替用户断定是"仓库不存在"还是"你没权限"。
-        .accessibilityHint(Self.failureHint(error))
-    }
-
-    /// 分区内的失败（目录 / 提交列表）—— 内容区里的一小块，**不掀翻整页**。
-    private func inlineFailure(_ error: GitHubError, retry: @escaping () -> Void) -> some View {
-        VStack(spacing: Theme.Spacing.s) {
-            Text("这一块加载失败")
-                .font(Theme.Font.footnote)
-                .foregroundStyle(Theme.Palette.textSecondary)
-            Button("重试", action: retry)
-                .font(Theme.Font.footnote.weight(.semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xl)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(Self.failureHint(error))
-    }
-
-    private static func failureHint(_ error: GitHubError) -> String {
-        switch error {
-        case .transport: "网络不可用"
-        case .rateLimited: "请求过于频繁"
-        case .unauthorized: "登录状态已失效"
-        default: "服务暂时不可用"
-        }
+        PageFailure(error: error) { Task { await model.refresh() } }
     }
 }

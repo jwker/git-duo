@@ -63,7 +63,8 @@ final class CommitDetailViewModel {
             // ⚠️ 已有内容时的下拉刷新**不能把整屏变成失败态**（§8.5：
             //    "刷新不遮挡已有内容"）—— 给一条 toast，内容留在屏幕上。
             if hadContent, pullToRefresh {
-                toast.show(Self.refreshFailedToast)
+                // ⚠️ 正本在 `GitDuoKit.RefreshCopy`（切片 7.4 收口）。
+                toast.show(RefreshCopy.failed)
             } else {
                 detail.fail(Self.failure(from: error))
             }
@@ -94,8 +95,4 @@ final class CommitDetailViewModel {
         if let githubError = error as? GitHubError { return githubError }
         return .decoding(error)
     }
-
-    /// 同 `ExploreRepoCopy.refreshFailed`（§7 没有这条，但 §8.5 要求已有内容时
-    /// 不能整屏变失败态）。
-    static let refreshFailedToast = "刷新失败 · 下拉可重试"
 }

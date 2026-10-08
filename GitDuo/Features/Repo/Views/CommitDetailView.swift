@@ -263,36 +263,11 @@ struct CommitDetailView: View {
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。
+    ///
+    /// ⚠️ 走共用件 `PageFailure`（切片 7.4 收口）：本页原来那份与
+    /// `RepoDetailView` / `BranchesView` 的**逐字相同**。
     private func failureState(_ error: GitHubError) -> some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 30))
-                .foregroundStyle(Theme.Palette.textTertiary)
-
-            Text("加载失败")
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-
-            Button("重试") {
-                Task { await model.refresh() }
-            }
-            .font(Theme.Font.bodyStrong)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xxl)
-        .accessibilityElement(children: .combine)
-        // 失败原因**只说确定的那一件事**：404 与无权限被 GitHub 混同（§4.3），
-        // 不得替用户断定是"提交不存在"还是"你没权限"。
-        .accessibilityHint(Self.failureHint(error))
-    }
-
-    private static func failureHint(_ error: GitHubError) -> String {
-        switch error {
-        case .transport: "网络不可用"
-        case .rateLimited: "请求过于频繁"
-        case .unauthorized: "登录状态已失效"
-        default: "服务暂时不可用"
-        }
+        PageFailure(error: error) { Task { await model.refresh() } }
     }
 }
 

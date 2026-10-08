@@ -1,5 +1,6 @@
 import Foundation
 import GitHubAPI
+import GitDuoCore
 import Testing
 
 @testable import GitDuoKit
@@ -491,6 +492,92 @@ struct PullDetailTests {
         #expect(item.approvalPill == "已批准")
     }
 
+    // MARK: - 正文块与时间（切片 7.4：视图直接喂给 `MarkdownBody` / `CommentBubble`）
+
+    @Test("⚠️ 正文的块**在 `init` 里解析好**（`body` 与 `bodyBlocks` 不可能不一致）")
+    func bodyBlocksAreParsedAtInit() throws {
+        let item = PullTimelineItem(
+            id: "c-1",
+            origin: .comment,
+            body: "**加粗** 与 `code`",
+            createdAt: base
+        )
+
+        #expect(item.bodyBlocks == MarkdownDocument("**加粗** 与 `code`").blocks)
+        // 两条"解析没做"的形态都要被挡住：它们不会崩，只会渲染出一条空气泡。
+        #expect(!item.bodyBlocks.isEmpty)
+        #expect(item.hasBody)
+    }
+
+    @Test("⚠️ 没有正文的评审 ⇒ `bodyBlocks` 是空数组（视图画不画仍看 `hasBody`）")
+    func missingBodyYieldsNoBlocks() {
+        let item = PullTimelineItem(id: "r-1", origin: .review(.approved), body: nil, createdAt: base)
+
+        #expect(item.bodyBlocks.isEmpty)
+        #expect(item.hasBody == false)
+    }
+
+    @Test("""
+        ⚠️ `hasBody` 与 `bodyBlocks` 是**两条判据** —— 纯空白的正文两边都为空数组，
+        但"要不要画"只由 `hasBody` 说（产品判断），不由解析器的结果说
+        """)
+    func hasBodyIsNotTheSameQuestionAsBlocksIsEmpty() {
+        // `MarkdownParser` 声明了"空行不产生块" ⇒ 纯空白给出的确实是空数组。
+        // 但这两条仍然是两件事：`hasBody` 是"用户到底写没写"，
+        // `bodyBlocks` 是"原文解析成了什么"。视图改看 `blocks.isEmpty`
+        // 就把那条产品判断降级成了实现细节（`PullTimelineItem.bodyBlocks` 的说明）。
+        let blank = PullTimelineItem(id: "c-1", origin: .comment, body: "  \n\t ", createdAt: base)
+
+        #expect(blank.hasBody == false)
+        #expect(blank.bodyBlocks.isEmpty)
+        // 于是这一档**不能**走"有内容、只是解析结果为空"那条路 —— 不画就是不画。
+        // ⚠️ 先把结果取出来再断言：`#expect` 的宏展开吃不下 `allSatisfy` 这种
+        //    `rethrows` 调用 + keypath 的组合（会报"call can throw"）。
+        let allBlocksEmpty = blank.bodyBlocks.allSatisfy(\.isEmpty)
+        #expect(allBlocksEmpty)
+    }
+
+    @Test("⚠️ 评审可以**没有提交时间** ⇒ 气泡头部的时间是 `nil`（不是空串）")
+    func reviewWithoutSubmittedAtHasNoTimeLabel() {
+        let pendingless = PullTimelineItem(
+            id: "r-1",
+            origin: .review(.commented),
+            body: "LGTM",
+            createdAt: nil
+        )
+        #expect(pendingless.timeLabel(now: base) == nil)
+
+        let timed = PullTimelineItem(
+            id: "r-2",
+            origin: .review(.commented),
+            body: "LGTM",
+            createdAt: base.addingTimeInterval(-3 * 86_400)
+        )
+        #expect(timed.timeLabel(now: base) == "3 天前")
+    }
+
+    @Test("评论一定有时间 ⇒ 时间串与 `RelativeTime` 同一套（不给评论单独造一套格式）")
+    func commentTimeUsesTheSharedRelativeFormatter() {
+        let stamp = base.addingTimeInterval(-3 * 86_400)
+        let item = PullTimelineItem(id: "c-1", origin: .comment, body: "b", createdAt: stamp)
+
+        #expect(item.timeLabel(now: base) == RelativeTime.string(from: stamp, now: base))
+        #expect(item.timeLabel(now: base) == "3 天前")
+    }
+
+    @Test("`PullTimelineItem` 是 `Hashable`（去重与 `ForEach` 的键要它）")
+    func timelineItemIsHashable() {
+        let a = PullTimelineItem(id: "c-1", origin: .comment, body: "同一段", createdAt: base)
+        let b = PullTimelineItem(id: "c-1", origin: .comment, body: "同一段", createdAt: base)
+        let c = PullTimelineItem(id: "c-1", origin: .comment, body: "另一段", createdAt: base)
+
+        #expect(a == b)
+        // ⚠️ 改正文就应当是不相等的值 —— 合成 `Hashable` 会把 `bodyBlocks` 也算进去，
+        //    这条断言保证"解析结果确实参与了比较"，而不是被某个 `==` 实现忽略掉。
+        #expect(a != c)
+        #expect(Set([a, b, c]).count == 2)
+    }
+
     // MARK: - 进页取数（决策 #57 的同一套形状）
 
     @Test("`load` = 详情 + 对话；评论与评审**两条路都发了**，页大小 100")
@@ -858,5 +945,212 @@ private enum LoadPullDetailTestsFixtures {
             deletions: deletions,
             changedFiles: changedFiles
         )
+    }
+}
+
+// MARK: - 合并成功后的本地状态
+
+/// `PullDetail.markingMerged(at:)` —— **一件事的三处后果**（PRD §4.11 / §5.3、TECH_SPEC §9.9）。
+///
+/// ## 为什么这条规则值得单独一组断言
+///
+/// `PUT …/merge` 的响应体里**没有 PR 对象**，所以"合并之后界面变成什么样"
+/// 完全由本仓说了算。它一次要动三处，而其中任何一处漏掉，屏幕上都看不出来：
+///
+/// | 漏了哪一处 | 屏幕上看起来 |
+/// |---|---|
+/// | `state` | 头部继续说「X 请求合并到 main」，而它已经合了 |
+/// | `mergedAt` | 对话区顶部那条信息条少了 `于 {时间}` 那一截（不报错，只是少说一句） |
+/// | 派生的 `canComment` | **刚合并完还能继续评论** |
+///
+/// 第三行正是"收成一条领域层规则"而不是"视图改两个字段"的理由 ——
+/// 它不是一个字段，是 `state` 的派生值。
+@Suite("PR 详情 · 合并成功后的本地状态自洽")
+struct PullDetailMarkingMergedTests {
+
+    /// 服务端当初给的 `updated_at`（用来钉住"这条路不改写它"）。
+    private let serverUpdatedAt = Date(timeIntervalSince1970: 1_786_000_000)
+
+    /// 客户端收到成功响应那一刻。
+    private let mergedAt = Date(timeIntervalSince1970: 1_786_100_000)
+
+    private func openPull(updatedAt: Date?) -> PullDetail {
+        PullDetail(
+            number: 57,
+            title: "重构导航栈",
+            state: .open,
+            headRef: "feature/repo-hub",
+            baseRef: "main",
+            authorLogin: "dev-j",
+            createdAt: Date(timeIntervalSince1970: 1_785_000_000),
+            updatedAt: updatedAt,
+            mergedAt: nil,
+            body: "仓库详情升级为四分区枢纽。",
+            additions: 842,
+            deletions: 156,
+            changedFiles: 12
+        )
+    }
+
+    @Test("状态转 .merged，合并时间落在传入的那一刻")
+    func stateBecomesMerged() {
+        let marked = openPull(updatedAt: serverUpdatedAt).markingMerged(at: mergedAt)
+
+        #expect(marked.state == .merged)
+        #expect(marked.mergedAt == mergedAt)
+    }
+
+    @Test("⚠️ 讨论因此锁上 —— canComment 不是字段，是 state 的派生值")
+    func discussionGetsLocked() {
+        let before = openPull(updatedAt: serverUpdatedAt)
+        let after = before.markingMerged(at: mergedAt)
+
+        // 前提：合并之前它是能评论的（否则这条断言会"因为别的原因"成立）。
+        #expect(before.canComment)
+        #expect(after.canComment == false)
+    }
+
+    @Test("头部说明换成「已由 X 合并进 main」，并出现那条信息条")
+    func headerAndBannerFollowTheState() {
+        let after = openPull(updatedAt: serverUpdatedAt).markingMerged(at: mergedAt)
+
+        // ⚠️ 与 `PullCopy.mergedNote` 对照，不照抄字面量 —— 同一句话有两处出处时，
+        //    抄一次就多一处要跟着改。这里要钉的是"走了 `merged` 那一支"。
+        #expect(after.headNote(now: mergedAt) == PullCopy.mergedNote(author: "dev-j", base: "main"))
+
+        let banner = after.mergedBanner(now: mergedAt)
+        #expect(banner != nil)
+        #expect(banner?.contains("讨论已锁定") == true)
+        #expect(banner?.contains("main") == true)
+    }
+
+    @Test("其余字段一个不动 —— 这条路只负责让状态自洽")
+    func otherFieldsAreUntouched() {
+        let before = openPull(updatedAt: serverUpdatedAt)
+        let after = before.markingMerged(at: mergedAt)
+
+        #expect(after.number == before.number)
+        #expect(after.title == before.title)
+        #expect(after.headRef == before.headRef)
+        #expect(after.baseRef == before.baseRef)
+        #expect(after.authorLogin == before.authorLogin)
+        #expect(after.createdAt == before.createdAt)
+        #expect(after.body == before.body)
+        #expect(after.additions == before.additions)
+        #expect(after.deletions == before.deletions)
+        #expect(after.changedFiles == before.changedFiles)
+        // 分区的第三格标题（`文件 +842 −156`）因此也不变。
+        #expect(after.filesSegmentTitle == before.filesSegmentTitle)
+    }
+
+    @Test("⚠️ updatedAt **不**被改写 —— 不替服务端编它的时间")
+    func serverUpdatedAtIsNotFabricated() {
+        let after = openPull(updatedAt: serverUpdatedAt).markingMerged(at: mergedAt)
+
+        #expect(after.updatedAt == serverUpdatedAt)
+        // 也就是说"更新于"仍然说服务端的那个时刻，而不是"刚刚"。
+        #expect(after.metaLabel(now: mergedAt).contains("更新于"))
+    }
+
+    @Test("服务端没给 updatedAt 时也不会凭空多出一个")
+    func nilUpdatedAtStaysNil() {
+        let after = openPull(updatedAt: nil).markingMerged(at: mergedAt)
+
+        #expect(after.updatedAt == nil)
+        // `metaLabel` 拿不到时间时整段去掉，不编一个（同 `PullCopy.metaLabel` 的口径）。
+        #expect(!after.metaLabel(now: mergedAt).contains("更新于"))
+    }
+
+    @Test("幂等：连着合两次，结果与合一次相同")
+    func markingTwiceIsStable() {
+        let once = openPull(updatedAt: serverUpdatedAt).markingMerged(at: mergedAt)
+        let twice = once.markingMerged(at: mergedAt)
+
+        #expect(twice == once)
+    }
+}
+
+// MARK: - 正文气泡的时间
+
+/// `PullDetail.bodyTimeLabel(now:)` —— 正文气泡上那一小截时间（PRD §4.11、原型 `08-pr.js:33-39`）。
+///
+/// ## 为什么值得单独钉住
+///
+/// 详情对象上**有两个时间**（`createdAt` 与 `updatedAt`），而头部用的是后者
+/// （`更新于 {时间}`，与 Issue 的 `创建于` 有意不同）。正文气泡要用**前者** ——
+/// 选错的表现是"这段描述看起来是刚刚写的"（每次改标题都会变），
+/// 而那看起来完全正常。
+@Suite("PR 详情 · 正文气泡的时间")
+struct PullDetailBodyTimeTests {
+
+    private let createdAt = Date(timeIntervalSince1970: 1_785_000_000)
+    private let now = Date(timeIntervalSince1970: 1_785_000_000 + 3 * 86_400)
+
+    private func detail(createdAt: Date?, updatedAt: Date?) -> PullDetail {
+        PullDetail(
+            number: 57,
+            title: "重构导航栈",
+            state: .open,
+            headRef: "feature/repo-hub",
+            baseRef: "main",
+            authorLogin: "dev-j",
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            mergedAt: nil,
+            body: "仓库详情升级为四分区枢纽。",
+            additions: 842,
+            deletions: 156,
+            changedFiles: 12
+        )
+    }
+
+    @Test("拿**创建时刻**算，不是 updatedAt")
+    func usesCreatedAtRatherThanUpdatedAt() {
+        // 两个时间差得很远，于是"用错了一个"必然看得出来。
+        let updatedAt = createdAt.addingTimeInterval(5 * 86_400)
+        let label = detail(createdAt: createdAt, updatedAt: updatedAt).bodyTimeLabel(now: now)
+
+        #expect(label == RelativeTime.string(from: createdAt, now: now))
+        #expect(label != RelativeTime.string(from: updatedAt, now: now))
+        // 走的是全项目统一的那一套相对时间（不含时刻、不含 `:`）。
+        #expect(label?.contains(":") == false)
+    }
+
+    @Test("创建时刻拿不到 ⇒ `nil`（视图据此不画那一截，而不是编一个时间）")
+    func missingCreatedAtGivesNil() {
+        let label = detail(createdAt: nil, updatedAt: createdAt).bodyTimeLabel(now: now)
+
+        #expect(label == nil)
+    }
+
+    @Test("正文的块在 `init` 里就解析好了（调用方不用记得这件事）")
+    func bodyBlocksAreParsedAtInit() {
+        let detail = detail(createdAt: createdAt, updatedAt: createdAt)
+
+        #expect(!detail.bodyBlocks.isEmpty)
+        // 逐字同一条规则：`MarkdownDocument` 是"原文 + 块"的唯一构造入口。
+        #expect(detail.bodyBlocks == MarkdownDocument("仓库详情升级为四分区枢纽。").blocks)
+    }
+
+    @Test("没有正文 ⇒ 空数组（**不是** `nil`），且 `hasBody` 与它同向")
+    func missingBodyGivesEmptyBlocks() {
+        let noBody = PullDetail(
+            number: 57,
+            title: "重构导航栈",
+            state: .open,
+            headRef: "feature/repo-hub",
+            baseRef: "main",
+            additions: 1,
+            deletions: 0,
+            changedFiles: 1
+        )
+
+        let blocks = noBody.bodyBlocks
+        #expect(blocks.isEmpty)
+        #expect(noBody.hasBody == false)
+        // ⚠️ 两条判据**同向但不同源**：`hasBody` 是"用户到底写没写"这条产品判断，
+        //    `blocks` 是不是空数组是解析器的事实（`PullTimelineItem` 的说明写了这一条）。
+        //    所以这里钉的是"这条输入的两种答案一致"，不是"两者是一回事"。
+        #expect(noBody.bodyBlocks.isEmpty == !noBody.hasBody)
     }
 }

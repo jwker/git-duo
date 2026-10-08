@@ -5,13 +5,19 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已**陪跑目视修复（6.7 起，现已到 6.9 —— 完成定义第 3 条「与原型逐屏对照」12 项于 2026-10-07 全部走完）**；**切片 7（Issues / PR）已于 2026-10-08 开工：7.0 文档先行（决策 #56–#63）已提交，7.2 数据层 + 7.1 领域层 + 7.3 设计系统**全部**落地 —— 下一段是 7.4 表现层。***
-`make verify` = **五包单测 1240 项 + 模拟器构建**，一条命令，**零编译警告**。
-（**GitHubAPI 362** · GitDuoAuth 57 · GitDuoCore 50 · **GitDuoDesign 73** · **GitDuoKit 698**）
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已**陪跑目视修复（6.7 起，现已到 6.9 —— 完成定义第 3 条「与原型逐屏对照」12 项于 2026-10-07 全部走完）**；**切片 7（Issues / PR）已于 2026-10-08 开工：7.0 文档先行（决策 #56–#63）· 7.1 领域层 · 7.2 数据层 · 7.3 设计系统 · 7.4 表现层 · 7.5 装配与路由**全部落地 —— 只剩 7.6 的两件事：`make verify`（已过）与**逐屏对照**（**未做**，清单新增 13–17 五项）。***
+`make verify` = **五包单测 1328 项 + 模拟器构建**，一条命令，**零编译警告**。
+（**GitHubAPI 362** · GitDuoAuth 57 · GitDuoCore 50 · **GitDuoDesign 79** · **GitDuoKit 780**）
 
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
 （仓库列表 / 首页置顶 / 最近访问 / 搜索）都点得进去。
+
+✅ **7.5 起「仓库 → Issues / PR → 详情」这条支线**也通了 —— `RouteView` 里 `.issueDetail` /
+`.newIssue` / `.prDetail` 三条换成真页面，五个入口（仓库详情两段 / 探索 Issues 列表 /
+探索 PR 列表 / 搜索的 Issue 与 PR 结果 / 仓库详情 PR 段）都点得进去，
+且 `.prDetail` 的 `readOnly` **一路透传**到操作区与提交详情（铁律 #7）。
+⚠️ 但**这三页一次都没目视过**（见上面那条 7.6）—— "接线通了"与"与原型一致"是两回事。
 
 ✅ **完成定义第 3 条「与原型逐屏对照」已收口 —— 12 项全部走完（2026-10-07）**（此前"这些页面都要登录才可达"的理由，6.5 之后不再成立）。
 四批都在同日走完：① 首页 · 搜索页 · 仓库详情 · 文件查看 · 探索仓库详情的 README ⇒ 报回 5 条（4 条已修 + 1 条是决策 #51）；
@@ -40,9 +46,9 @@
 在客户端**放行**、到服务端吃 422 —— **正是 `BranchName` 开头写明它存在的那条理由**。已改为**按 Unicode 标量判**，
 并修掉提示语把命中字符**印两遍**。⚠️ **只堵漏、不加规则**：全角照旧放行；`@{` 维持原判不动。
 
-⇒ **目视这笔账没有往后拖**：切片 6 的清单当天跑完。⚠️ **但切片 7 会再加一批**（Issue 详情 / 新建 Issue / PR 详情）
+⇒ **目视这笔账没有往后拖**：切片 6 的清单当天跑完。⚠️ **切片 7 已经又加了一批**（上表 13–17：Issue 详情 / 新建 Issue / PR 详情 / 仓库详情两段 / 两个弹层）
 ⇒ 别攒到两片之后再跑（那正是 4.4 报"已落地"时实际只做了 3 屏的成因）。⚠️ 走"会改真实仓库"的页面时
-（删除 / 合并分支这类）**只看形态、别真删真合**；看到"不一样"**先翻 `REVIEW-CHECKLIST §6` 末尾那张有意偏差表**（现有 **22** 条）—— 拍过板的不算缺陷。
+（删除 / 合并分支 / **合并 PR** / **创建标签**这类）**只看形态、别真删真合真建**；看到"不一样"**先翻 `REVIEW-CHECKLIST §6` 末尾那张有意偏差表**（现有 **27** 条）—— 拍过板的不算缺陷。
 
 > **切片 7 施工图（2026-10-08 起）**：Issues / PR —— Issue 详情 + 新建 Issue + PR 详情，
 > **并补上仓库详情（§4.4）的 Issues / Pull Requests 两个分区**（决策 #50 把这两段从切片 6 挪到了这里）。
@@ -56,9 +62,9 @@
 | 7.1 | 领域层（`GitDuoKit`）：✅ **已落地**（2026-10-08）—— `RepoListState`（`open`/`closed`/`all`）· `LoadRepoIssues` / `LoadRepoPulls` 加 `state` 参数与**标签筛选**（决策 #56）· 两文件**移出 `Explore/` 到 `Repo/`**（决策 #61，它们现在服务两个页面）· `IssueDetail` + `LoadIssueDetail`（**REST 两次、评论可单独重试**，决策 #57）· `IssueComment` + `PostIssueComment`（空内容判据 `canSend`）· `Label` / `LabelPalette`（10 色，**不带 `#`**）/ `LabelCatalog`（自动续页 + **空名与重名都不发那次必败的请求**）· `NewIssueDraft` + `CreateIssue`（占位标题 `新 Issue`、正文不 trim）· `PullDetail` / `PullReview` / `PullTimelineItem`（**评论与评审按时间合成一条流**，决策 #60）· `LoadPullDetail`（详情 + 对话；Commits / 文件**进分区才取**）· `PullAction`（合并三方式 / 关闭 / 重开；`PullMergeResult.merged(at:sha:)`）· `CommentDraftStore`（决策 #59）· 文案 `IssueCopy` / `PullCopy` / `ConversationCopy` / `AuthorName` · **PR 侧多文件 diff 边界**（`PullDetailTests` 里 3 条，含"接成一份会算错哪"的正面证据）| ✅ |
 | 7.2 | 数据层（`GitHubAPI`）：✅ **已落地**（2026-10-08）—— `GitHubRepoIssuesEndpoint` 加 `state`/`labels` 参数 + 详情 / 评论读 / 评论写 / 新建 · 新增 `GitHubRepoLabelsEndpoint`（列表 + 新建）· `GitHubRepoPullsEndpoint` 加 `state` 参数 + 详情 / 文件 / Commits / **评审** / 合并 / 改状态（评论写复用 issues 端点 —— PR 的时间线就是 issue 评论）· 新 DTO：`AuthorDTO`（从 `IssueDTO.Author` 提为顶层）· `LabelDTO` · `IssueDetailDTO` · `IssueCommentDTO` · `PullRefDTO` · `PullDetailDTO`（⚠️ **`createdAt` 是 7.1 追加的** —— PR 正文气泡那个时间，用 `updated_at` 会随每次改动而变）· `PullReviewDTO` · `PullMergeResultDTO`（+ `PullMergeMethod` / `PullMergeOutcome`；`PullFileDTO` 是 `CommitFileDTO` 的别名）。⚠️ 13 条路由**配额桶逐个显式声明**并由 `RepoEndpointQuotaTests` 正面断言。⚠️ **Issue 的「改状态」按决策 #62 不做** —— 施工图原先那一行与 #62 冲突，以 #62（后定）为准 | ✅ |
 | 7.3 | 设计系统（`GitDuoDesign`）：✅ **已落地**（2026-10-08）—— `CommentBubble`（头像 + 作者 + 时间 + **注入的正文** + 可选状态胶囊）· `LabelPill`（自定义颜色，**白字**）· `ColorSwatch`（10 色板，选中态两层：深边 + 内白环）· `ConversationHeader`（状态胶囊 + 说明 + 标题 + 元信息，形状直接用 `CardBox(vertical: 15, horizontal: 15)`）· **`LabelDot`**（12×12 标签小色块）· **`LabelAddButton`**（虚线「＋ 标签 / 新建」，⚠️ 后两件超出施工图原名、经用户 2026-10-08 裁定一并做掉）· **`LabelColor`**（服务端色值 → `Color` 的唯一转换处，三处共用以免分叉）。新令牌 6 个：`bubbleHeaderSurface` / `labelFallbackSurface` / `Radius.bubble`(12) / `Radius.labelDot`(4) / `Font.conversationTitle` / `Font.commentMeta`。判据 **#43**：只收基础类型、不认识领域模型。⚠️ 顺带一条**口径变更（决策 #63）**：标签是白字压色块，原 10 色色板有四档太浅（黄 1.55 · 灰 2.75）⇒ 按用户裁定换同族深色，十档全部 ≥ 4.5:1；`LabelPalette.hexes` / 原型 `LBL_COLORS` / `RepoLabelsTests` 三处同步，并新增对比度护栏 | ✅ |
-| 7.4 | 表现层（`GitDuo/Features/Repo/`）：**仓库详情两段换真件**（`RepoIssuesSection` / `RepoPullsSection`，含标签筛选档）· `IssueDetailView`（§4.9）· `NewIssueView`（§4.10）· `PullDetailView`（§4.11 三分区）· 两个弹层（`LabelPickerSheet` §5.2 / `MergePRSheet` §5.3）。⚠️ `IssueCard` / `PullCard` **移出 `Features/Explore/`** 改两处共用（决策 #61） | ⬜ |
-| 7.5 | 装配与路由：`AppEnvironment` 接入新用例与**草稿存储**（含 `signOut()` 清理）· `RouteView` 把 `.issueDetail` / `.newIssue` / `.prDetail` 三条从骨架屏换成真件 · `SkeletonPlaceholders.registry` 同步消解 | ⬜ |
-| 7.6 | 收尾：`make verify` + 文档同步 + **逐屏对照清单新增一批**（Issue 详情 / 新建 Issue / PR 详情 —— ⚠️ 别攒着，4.4 那次就是攒出来的） | ⬜ |
+| 7.4 | 表现层（`GitDuo/Features/Repo/`）：✅ **已落地**（2026-10-08）—— **仓库详情两段换真件**（`RepoIssuesSection` / `RepoPullsSection`，含标签筛选档与新建入口）· `IssueDetailView`（§4.9）· `NewIssueView`（§4.10）· `PullDetailView`（§4.11 三分区，**Commits / 文件进分区才取**）· 两个弹层（`LabelPickerSheet` §5.2 / **`MergePRSheet`** §5.3）。⚠️ `IssueCard` / `PullCard` **移出 `Features/Explore/`** 改两处共用（决策 #61）。⚠️ 本片**顺手还掉的三笔重复**：`ActionCopy.failed`（正本，4 处副本）· `RefreshCopy.failed`（正本，3 处副本）· `PageFailure`（`Features/Repo/Views/` 下 3 处逐字相同的私有实现）。⚠️ **新登记 5 条有意偏差**（`REVIEW-CHECKLIST §6` 第 23–27 条），其中 23（PR 文件分区的 diff 默认收起）是唯一一条主动偏离原型视觉的。**⚠️ 一次都没目视过**（见 7.6） | ✅ |
+| 7.5 | 装配与路由：✅ **已落地**（2026-10-08）—— `AppEnvironment` 接入五条新用例（`issueDetail` / `postIssueComment` / `createIssue` / `pullDetail` / `pullAction`）与**评论草稿存储**（`UserDefaultsCommentDraftStore`，含 `signOut()` 第 ③ 步清理 —— 草稿里可能有还没发布的正文）· `RouteView` 把 `.issueDetail` / `.newIssue` / `.prDetail` 三条从骨架屏换成真件（`.prDetail` 的 `readOnly` **一路透传**）· `SkeletonPlaceholders.registry` 同步消解（只剩编辑器与「我的」旗下的三页）。⚠️ `LoadPullDetail` 同时用到**两个端点实例**（详情 / 评审 / 文件 / Commits 在 pulls 端点、评论在 issues 端点 —— 决策 #60），这是有意的 | ✅ |
+| 7.6 | 收尾：`make verify` **已过**（1328 项，零警告）· 文档同步 **已做**（本文件 §0 + `REVIEW-CHECKLIST` 页级表 13–17 与偏差表 23–27）· **逐屏对照清单新增一批**（Issue 详情 / 新建 Issue / PR 详情 / 仓库详情两段 / 两个弹层）—— ⬜ **未做，是本片唯一未完成的完成定义**（⚠️ 别攒着，4.4 那次就是攒出来的） | 🔄 |
 
 > **切片 6 施工图（2026-10-07 起）**：文件查看 + 提交详情 + 分支管理 **+ 仓库详情外壳（PRD §4.4）**。
 > 对应 PRD **§4.4 / §4.5 / §4.7 / §4.8**（+ §5.7 切换分支弹层 / §5.8 添加文件弹层 / §3.10 分支）。

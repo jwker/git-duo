@@ -73,8 +73,20 @@ public struct CommentBubble<Body: View>: View {
     /// 所以由调用方给成型文案，本组件不去拼。
     public let authorName: String
 
-    /// 头里显示的时间（`昨天 21:40` / `2 小时前`）。同样由领域层算好。
-    public let timeText: String
+    /// 头里显示的时间（`2 小时前`）。同样由领域层算好。
+    ///
+    /// ## ⚠️ 为什么是可选（切片 7.4 改）
+    ///
+    /// PR 的评审**可以没有提交时间** —— `PullReviewDTO.submittedAt` 在官方 schema 里
+    /// 是可空的（`PullReviewState.isPartOfConversation` 的说明写了那条判据为什么
+    /// 走 `state` 而不是走时间）。那种评审仍然要画（它是讨论的一部分），
+    /// 只是头部只剩一个作者名。
+    ///
+    /// 传空串让调用方去表达"没有时间"是不行的：`HStack(spacing: 6)` 会为那个空
+    /// `Text` 多留 6pt 间隙，而"作者名右边多空了一格"看起来像排版瑕疵、
+    /// 不像一条真实的缺失。**说不出来的就不说**，与 `IssueCopy.metaLabel`
+    /// 那段（作者拿不到就整段去掉）是同一条口径。
+    public let timeText: String?
 
     /// 头右侧那颗胶囊的文案。`nil` = 不画。
     public let approvalTitle: String?
@@ -84,7 +96,7 @@ public struct CommentBubble<Body: View>: View {
     public init(
         login: String?,
         authorName: String,
-        timeText: String,
+        timeText: String?,
         approvalTitle: String? = nil,
         @ViewBuilder content: () -> Body
     ) {
@@ -130,10 +142,14 @@ public struct CommentBubble<Body: View>: View {
                 .fontWeight(.bold)
                 .foregroundStyle(Theme.Palette.textPrimary)
 
-            Text(timeText)
-                // 原型 `.t3{font-size:11.5px}` —— 与页面里所有次级时间同一档。
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Palette.textTertiary)
+            // 拿不到时间 ⇒ **整段不画**（不是画一个空 `Text` —— 那会留一个 6pt 的缝，
+            // 见 `timeText` 的说明）。
+            if let timeText, !timeText.isEmpty {
+                Text(timeText)
+                    // 原型 `.t3{font-size:11.5px}` —— 与页面里所有次级时间同一档。
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            }
 
             // 原型那颗胶囊带 `style="margin-left:auto"`：作者与时间靠左、胶囊靠右。
             // 无脑加一个 `Spacer` 还能让头部在"有没有胶囊"两种情况下宽度一致。

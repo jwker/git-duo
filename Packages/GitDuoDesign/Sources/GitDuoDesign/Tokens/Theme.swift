@@ -253,13 +253,16 @@ public enum Theme {
         public static let segment: CGFloat = 8
         public static let card: CGFloat  = 10
         public static let sheet: CGFloat = 14
-        /// **按钮 · 面包屑条 · 代码面**那一档（切片 6 新增）。
+        /// **按钮 · 面包屑条 · 代码面 · 提示条**那一档（切片 6 新增）。
         ///
         /// 原型 `styles/03-components.css` 的 `.btn{border-radius:9px}`、
         /// `styles/04-screens.css` 的 `.crumb{border-radius:9px}` 与
         /// `.markdown pre{border-radius:9px}` —— **三处同为 9**。
         /// 三件东西都是"嵌在卡片里的矩形小块"，原型给了同一个值，
         /// 所以合成一档、不立同值异名（沿 `Radius.segment`(8) 的先例）。
+        ///
+        /// 第四处来源是切片 7 的 `NoticeBar`：原型 `scripts/06-files.js` 那个失败提示条
+        /// 写的是**行内** `border-radius:9px`（不走 CSS 变量），同为 9 ⇒ 并入本档。
         public static let control: CGFloat = 9
         /// **面包屑里的分支胶囊**（原型 `styles/05-overlays.css` 的 `.branch-chip{border-radius:7px}`）。
         ///

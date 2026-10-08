@@ -28,6 +28,18 @@ import SwiftUI
 /// ## 它是内容层
 ///
 /// 分段控件嵌在页面滚动内容里，**实色，不得加 Liquid Glass**（§10.2）。
+///
+/// ## 切片 7 补的两个能力（PRD §4.4 分区二）
+///
+/// 上面那三处调用点**一个字都没改**（两个新参数都有保持原行为的默认值）：
+///
+/// | 参数 | 默认 | 给谁用 |
+/// |---|---|---|
+/// | `Segment.isAction` | `false` | §4.4 分区二的第三格「筛选」—— 长得像分段、行为是按钮、永不高亮 |
+/// | `padsHorizontally` | `true` | `false` 给"已经在内容区里"的分段条（§4.4 两段），免得边距叠成两倍 |
+///
+/// ⚠️ 这两条都是"同一个组件在两处的差别"，不是两个组件：形状（字号 / 内边距 / 圆角 /
+/// 选中配色 / 横滑）**只有这一份实现**。
 public struct SegmentedBar: View {
 
     /// 一个分段。`id` 供选中比对与 `ForEach` 稳定性，`title` 是显示文案。
@@ -36,23 +48,60 @@ public struct SegmentedBar: View {
         public let id: String
         public let title: String
 
-        public init(id: String, title: String) {
+        /// 这一格是**动作按钮**而不是分段（切片 7 新增，PRD §4.4 分区二的「筛选」）。
+        ///
+        /// ## 为什么把它收进 `Segment`，而不是另开一个"尾随视图"参数
+        ///
+        /// 它在**外观上就是同一格**：原型 `05-repo.js:120` 那三个 `.seg` 是并列等宽的，
+        /// 「筛选」也是其中之一（`<button class="seg" onclick="segPick(this)">筛选</button>`）。
+        /// 差别只在**行为** —— 点它不改变选中项，而是打开一个弹层；
+        /// 于是它**永远不该显示选中态**。
+        ///
+        /// 做成尾随视图会让"它长什么样"与分段条分家（自己排的宽度与其它格对不齐、
+        /// 字号与内边距要各写一遍），而把这点差别收进一个布尔量，形状仍然只有一份实现。
+        ///
+        /// ⚠️ 名字是 `isAction` 而不是 `isFilter`：分段条不认识"筛选"这个业务词 ——
+        /// 判据 #43，设计包里只有与业务无关的视觉件。
+        public let isAction: Bool
+
+        public init(id: String, title: String, isAction: Bool = false) {
             self.id = id
             self.title = title
+            self.isAction = isAction
         }
     }
 
     public let segments: [Segment]
     public let selectedID: String
+
+    /// 是否自带页面水平边距（`Theme.Spacing.page`）。
+    ///
+    /// ## 默认 `true` 是给"页面顶部"那种用法
+    ///
+    /// 仓库 Tab / 探索页 / 搜索页三处的分段条都在**页面顶部**：它贴边横滑，
+    /// 靠这一层 padding 与下面的大标题左对齐。
+    ///
+    /// ## `false` 是给"已经内缩的内容区"
+    ///
+    /// §4.4 两段（分区二 / 分区三）的分段条在 `.content` 里面，而 `.content` 自带
+    /// 水平边距 —— 再套一层就成了 32pt 的缩进，与同屏的卡片左边缘对不齐。
+    ///
+    /// ⚠️ 不把它做成"让调用方用负 padding 抵消"：那要求每个调用方都知道
+    /// 这个组件内部藏了多少边距，而那个数字会随组件改版而变（错位的表现是
+    /// 分段条比卡片宽出去一截，看起来像布局坏了）。
+    public let padsHorizontally: Bool
+
     public let onSelect: (Segment) -> Void
 
     public init(
         segments: [Segment],
         selectedID: String,
+        padsHorizontally: Bool = true,
         onSelect: @escaping (Segment) -> Void
     ) {
         self.segments = segments
         self.selectedID = selectedID
+        self.padsHorizontally = padsHorizontally
         self.onSelect = onSelect
     }
 
@@ -60,7 +109,11 @@ public struct SegmentedBar: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(segments) { segment in
-                    let isSelected = segment.id == selectedID
+                    // ⚠️ 动作格**永远不高亮**：它没有"被选中"这个状态
+                    //    （选中态是"这一档正在显示"的意思，而它不切任何东西）。
+                    //    少了后面那半句，`selectedID` 与它的 `id` 相同时它会亮起来
+                    //    —— 而那看起来完全正常（用户以为自己筛上了）。
+                    let isSelected = segment.id == selectedID && !segment.isAction
                     Button {
                         onSelect(segment)
                     } label: {
@@ -84,7 +137,7 @@ public struct SegmentedBar: View {
                     .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                 }
             }
-            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.horizontal, padsHorizontally ? Theme.Spacing.page : 0)
         }
     }
 }
@@ -102,6 +155,21 @@ public struct SegmentedBar: View {
             segments: ["全部", "公开", "私有", "Starred"].map { .init(id: $0, title: $0) },
             selectedID: selection
         ) { selection = $0.id }
+
+        // §4.4 分区二那一档：两段 + 一格**动作**（「筛选」永不显示选中态），
+        // 且内容区已经内缩 ⇒ `padsHorizontally: false`。
+        SegmentedBar(
+            segments: [
+                .init(id: "open", title: "开放 (12)"),
+                .init(id: "closed", title: "已关闭"),
+                .init(id: "filter", title: "筛选", isAction: true),
+            ],
+            selectedID: selection,
+            padsHorizontally: false
+        ) { picked in
+            guard !picked.isAction else { return }
+            selection = picked.id
+        }
     }
     .padding(.vertical, Theme.Spacing.page)
     .background(Theme.Palette.background)

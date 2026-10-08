@@ -69,10 +69,13 @@ public enum IssueCopy {
     // MARK: - §4.9：评论输入区
 
     /// 输入框占位（原型 `06-files.js:137` 逐字）。
+    ///
+    /// ⚠️ PR 页那一处**不一样**（`写评论…`，没有括号那句 —— 原型逐字如此），
+    /// 所以**占位留在各自的页面文案里**；只有两页相同的才上提到 `ConversationCopy`。
     public static let commentPlaceholder = "写评论… (Markdown 支持)"
 
-    /// 发送按钮（原型逐字）。
-    public static let sendAction = "发送"
+    // 「发送」按钮的文案**不在这里**：两页逐字相同（原型两处都是 `发送`），
+    // 落在 `ConversationCopy.sendAction` —— 与下面那三句同一条理由。
 
     // MARK: - 提示
 
@@ -101,6 +104,15 @@ public enum IssueCopy {
 
     /// 标签行末尾那个按钮（原型逐字，**全角 `＋`**）。
     public static let addLabelAction = "＋ 标签 / 新建"
+
+    /// §4.10 标签行里点掉一颗胶囊会做什么（**读屏用**）。
+    ///
+    /// ⚠️ **规格未给**（原型只有视觉）。它与 `SelectedLabelRow.removeHint`
+    /// （`双击取消这个标签筛选`）**不是同一句**，所以各写各的：
+    /// §4.4 那一处去掉的是**筛选条件**，这里去掉的是**这条 Issue 要带的标签** ——
+    /// 一个说的是"不按它筛了"，一个说的是"发出去时别带上它"。
+    /// 共用一句会让其中一处说错（而读屏用户听到的是**反的动作**）。
+    public static let removeLabelHint = "双击移除这个标签"
 
     /// 提交按钮（原型逐字）。
     public static let submitAction = "提交 Issue"
@@ -132,6 +144,17 @@ public enum IssueCopy {
         "选择标签 · \(count) 个"
     }
 
+    /// 标签库**还没取回来**（或取失败）时的上段标题 —— **不带计数**。
+    ///
+    /// ⚠️ **规格未给**（自拟）：原型那份标签是静态数组，`REPO_LABELS.length` 永远算得出来，
+    /// 所以 §5.2 与原型都只有带计数的那一句。这里必须多一句的理由是
+    /// §8.5 末条那条铁律 ——「还没加载出来」与「确实一条都没有」是两件事：
+    /// 还没取回来时写成 `选择标签 · 0 个` 等于告诉用户**这个仓库一个标签都没有**。
+    ///
+    /// ⚠️ 取到之后**成功与失败都用带计数的那一句吗？不是**：失败时手上没有计数，
+    /// 继续用本句（失败块自己会说明原因）。
+    public static let labelSheetTitlePending = "选择标签"
+
     /// 弹层下段标题（原型逐字）。
     public static let newLabelSectionTitle = "新建标签"
 
@@ -152,6 +175,17 @@ public enum IssueCopy {
 
     /// 名称重复（PRD §7 逐字）。
     public static let duplicateLabelToast = "标签已存在，已为你选中"
+
+    /// 弹层里点一颗**已选中**的标签会做什么（**读屏用**）。
+    ///
+    /// ⚠️ **规格未给**（§5.2 只有视觉：已选那一行右边一个绿色 `✓`），自拟。
+    ///
+    /// ⚠️ 它与 `RepoIssuesSectionCopy.cancelFilterHint`（`双击取消这个标签筛选`）
+    /// **不是同一句**：那一行只会取消，而弹层里这一行**两向都能走**
+    /// （已选 ⇒ 取消 / 未选 ⇒ 选上）⇒ 说"取消"会让读屏用户在**未选**的行上
+    /// 听到一个反的动作。所以弹层里只在**已选**的行上挂这一句
+    /// （未选的行不挂 hint），而它的措辞刻意只说"取消"、不说"筛选"。
+    public static let selectedLabelHint = "已选中，双击取消"
 
     /// 新建成功（原型 `07-issues.js:67` 逐字，含 `“”`）。
     public static func labelCreatedToast(name: String) -> String {

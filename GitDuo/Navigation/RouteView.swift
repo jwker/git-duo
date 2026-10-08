@@ -44,6 +44,9 @@ struct RouteView: View {
                 treeLoader: env.repoTree,
                 commits: env.repoCommits,
                 branches: env.branches,
+                // 切片 7 的两段（§4.4 分区二 / 三）。
+                issues: env.repoIssues,
+                pulls: env.repoPulls,
                 starToggle: env.starToggle,
                 memory: env.branchMemory,
                 visits: env.recentVisits,
@@ -105,11 +108,44 @@ struct RouteView: View {
                 toast: env.toast
             )
         case let .issueDetail(fullName, number):
-            SkeletonScreen(title: "Issue #\(number)", slice: "切片 7 落地", reference: "PRD §4.9 · \(fullName)")
+            // PRD §4.9。
+            // ⚠️ 本页**不收 `readOnly`**，而 `Route.issueDetail` 也没有这个参数 ——
+            //    这不是漏了：Issue 的「关闭 / 重新打开」本期不做（决策 #62），
+            //    所以这一页上没有任何写操作，只读态在它身上没有落点。
+            //    （PR 那边就不一样：操作区四档全由 `readOnly` 决定。）
+            IssueDetailView(
+                fullName: fullName,
+                number: number,
+                loader: env.issueDetail,
+                sender: env.postIssueComment,
+                drafts: env.commentDrafts,
+                toast: env.toast
+            )
         case let .newIssue(fullName):
-            SkeletonScreen(title: "新建 Issue", slice: "切片 7 落地", reference: "PRD §4.10 · \(fullName)")
+            // PRD §4.10。
+            // ⚠️ 标签弹层用的是**组合根里那一个** `labelCatalog`（决策 #56）——
+            //    §4.4 分区二的「筛选」是同一个实例，所以"新建的标签"在两个地方都立刻可选。
+            NewIssueView(
+                fullName: fullName,
+                creator: env.createIssue,
+                catalog: env.labelCatalog,
+                toast: env.toast
+            )
         case let .prDetail(fullName, number, readOnly):
-            SkeletonScreen(title: "PR #\(number)", slice: "切片 7 落地", reference: "PRD §4.11 · \(fullName) · 只读=\(readOnly)")
+            // PRD §4.11。
+            // ⚠️ `readOnly` 是**路由带进来的**（`ExplorePRListView` 传 `true`、
+            //    `RepoDetailView` 传 `false`），一路透传给操作区与提交详情 ——
+            //    铁律 #7：这条链上没有任何一处去"推断仓库归属"。
+            PullDetailView(
+                fullName: fullName,
+                number: number,
+                readOnly: readOnly,
+                loader: env.pullDetail,
+                actions: env.pullAction,
+                sender: env.postIssueComment,
+                drafts: env.commentDrafts,
+                toast: env.toast
+            )
         case let .exploreIssueList(fullName):
             ExploreIssueListView(fullName: fullName, issues: env.repoIssues)
         case let .explorePRList(fullName):

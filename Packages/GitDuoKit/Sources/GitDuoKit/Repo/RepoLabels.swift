@@ -32,6 +32,33 @@ public struct Label: Sendable, Hashable, Identifiable {
     }
 }
 
+extension Label {
+
+    /// 由 DTO 映射 —— **全项目唯一一处**（切片 7 收口）。
+    ///
+    /// ## 为什么要有这一处
+    ///
+    /// 切片 7 之后，"`LabelDTO` 变成 `Label`"有了**两个**调用方：
+    /// 标签库（`LabelCatalog.all` / `create`）与 Issue 列表行（`LoadRepoIssues.row(from:)`
+    /// —— 卡片要画真实标签色）。
+    /// 两处各写一遍 `Label(name: dto.name, colorHex: dto.color, …)` 的问题是：
+    /// 字段名 `color` ↔ `colorHex` 的**改写关系**（"后者不带 `#`，前者也不带，
+    /// 所以是直接搬"）会变成两份口头约定，而哪天官方给 `color` 加了 `#`，
+    /// 改一处漏一处**不会报错** —— 只有一半的标签会带上一个多余的 `#`，
+    /// 表现是那些标签的颜色悄悄回退成兜底灰。
+    ///
+    /// ⚠️ **只有 `description` 是可空的**，`name` / `color` 官方都是 Required
+    /// ⇒ 这里不做任何 `?? ""` 式的兜底：缺字段是解码期就该失败的事
+    /// （`LabelDTO` 的成员就是非可空类型），到这里再编一个空串只会把
+    /// "服务端回了半个对象"伪装成一条正常标签。
+    ///
+    /// ⚠️ **别把它改成 `public`**：它收的是 `GitHubAPI` 的类型，公开出去等于
+    /// 让 App 层能绕开领域层直接拿 DTO 造模型（依赖是单向的，那条线要守住）。
+    init(dto: LabelDTO) {
+        self.init(name: dto.name, colorHex: dto.color, description: dto.description)
+    }
+}
+
 /// 新建标签用的 **10 色色板**（PRD §3.8「新建标签提供 10 色色板」、§5.2）。
 ///
 /// ## 色值取自原型，但**去掉了 `#`**
@@ -193,7 +220,7 @@ public struct LabelCatalog: Sendable {
             // 去掉重复"，不需要额外的稳定去重算法。
             for dto in page.items where !seen.contains(dto.name) {
                 seen.insert(dto.name)
-                collected.append(Self.label(from: dto))
+                collected.append(Label(dto: dto))
             }
             cursor = page.nextCursor
             pages += 1
@@ -239,14 +266,16 @@ public struct LabelCatalog: Sendable {
             name: trimmed,
             color: colorHex
         )
-        return .created(Self.label(from: dto))
+        return .created(Label(dto: dto))
     }
 
     // MARK: - 私有
 
-    private static func label(from dto: LabelDTO) -> Label {
-        Label(name: dto.name, colorHex: dto.color, description: dto.description)
-    }
+    // ⚠️ 这里原来有一个 `private static func label(from dto: LabelDTO) -> Label`，
+    //    切片 7 把它收进了 `Label.init(dto:)`（原因写在那个初始化器的上方）——
+    //    因为 `LoadRepoIssues` 也要映射标签，两处各写一遍就会分叉。
+    //    本文件的三处调用点随之改成 `Label(dto: …)`：**只是一个转发层被拆掉了**，
+    //    映射规则本身一行都没动。
 }
 
 /// 一份标签库 + "它完不完整"。

@@ -5,6 +5,7 @@
 
 import Foundation
 import GitHubAPI
+import GitDuoCore
 
 /// PR 的三种展示状态（PRD §4.15、TECH_SPEC §4.6.2）。
 ///
@@ -109,12 +110,17 @@ extension PullRequestState {
 ///
 /// | | `IssueRow` | `PullRow` |
 /// |---|---|---|
-/// | 作者 | 有（卡片上写 `由 {作者} 创建`） | **没有**（原型卡片上没有作者） |
 /// | 状态 | 只有开放（决策 #38） | 开放 + 已合并（决策 #39） |
+/// | 卡片第二行 | `#N · 时间 · 由 {作者} 创建` | `#N · {head} → {base}`（**没有作者**） |
 ///
-/// 第一处是照原型（PRD §4.15 的卡片内容只有 `#N · {head} → {base}`）；
-/// 第二处是产品口径 —— PR 的「已合并」是一个**有价值的结局**，
+/// 第二处是照原型（PRD §4.15 的卡片内容只有 `#N · {head} → {base}`）；
+/// 第一处是产品口径 —— PR 的「已合并」是一个**有价值的结局**，
 /// 而 Issue 的「已关闭」只说明没人做了（决策 #39 的完整理由见 PRD §4.15）。
+///
+/// ⚠️ **"没有作者"只对探索页那张卡片成立**（切片 7 收窄了这条不对称）：
+/// 仓库详情 PR 段（§4.4 分区三）的第二行是 `{作者} 更新于 {时间}` ——
+/// 那一行需要作者，所以 `authorLogin` / `updatedAt` 两个字段在模型里，
+/// **画不画由页面决定**（`PullCard(now:)`）。模型不该替页面做这个决定。
 ///
 /// ⚠️ **不取 `+842 −156`（改动行数）**：`additions` / `deletions` 只在**单个 PR** 端点
 /// （`GET /pulls/{n}`）返回，列表端点**不返回** —— 这是 GitHub 的设计，不是遗漏
@@ -134,6 +140,19 @@ public struct PullRow: Sendable, Hashable, Identifiable {
     /// 目标分支名（`base.ref`）。
     public let baseRef: String
 
+    /// 作者登录名。**可以是 `nil`** —— 账号被删除后 GitHub 把整段 `user` 置为 `null`
+    /// （与 `IssueRow.authorLogin` 同一个事实）。
+    public let authorLogin: String?
+
+    /// 末次更新时刻。**可以是 `nil`**（`updated_at` 在官方 schema 里可空）。
+    ///
+    /// ⚠️ 它与 `PullCopy` 头部用的那个 `updatedAt` **是同一个字段、两种传法**：
+    /// 详情页收的是**已经格式化好的字符串**，这里收的是 `Date` ——
+    /// 因为列表卡片要现算相对时间（"2 小时前"必须相对**这一屏渲染的时刻**），
+    /// 而详情页的头部在拿到详情那一刻就把字符串定下来了。
+    /// 两者都是"由调用方决定那个『现在』"，不是两套口径。
+    public let updatedAt: Date?
+
     public var id: Int { number }
 
     public init(
@@ -141,19 +160,52 @@ public struct PullRow: Sendable, Hashable, Identifiable {
         title: String,
         state: PullRequestState,
         headRef: String,
-        baseRef: String
+        baseRef: String,
+        authorLogin: String? = nil,
+        updatedAt: Date? = nil
     ) {
         self.number = number
         self.title = title
         self.state = state
         self.headRef = headRef
         self.baseRef = baseRef
+        self.authorLogin = authorLogin
+        self.updatedAt = updatedAt
     }
 
-    /// 卡片副标题：`#57 · feature/repo-hub → main`
+    /// 探索页卡片的副标题：`#57 · feature/repo-hub → main`
     /// （逐字对齐原型 `10-explore-repo.js:139` 的 `#${pr.n} · ${pr.b}`）。
     public var metaLabel: String {
         "#\(number) · \(headRef) → \(baseRef)"
+    }
+
+    /// 仓库详情 PR 段卡片的第三行：`reviewer-a 更新于 2 小时前`
+    /// （原型 `05-repo.js:140` 逐字 `${pr.u} 更新于 ${pr.d}`；PRD §4.4 分区三同一句）。
+    ///
+    /// ## 三种"缺一半"的情形，各有各的下场
+    ///
+    /// | `authorLogin` | `updatedAt` | 结果 |
+    /// |---|---|---|
+    /// | 有 | 有 | `reviewer-a 更新于 2 小时前` |
+    /// | 无 | 有 | `更新于 2 小时前`（作者那截整段去掉） |
+    /// | 任意 | **无** | `nil` ⇒ **整行不渲染** |
+    ///
+    /// ⚠️ 第二行不是"编出来的"：时间那半是**真**信息，"谁更新的"拿不到时
+    /// 少说一个人的名字好过整句不说。这与 `IssueCopy.metaLabel` 的处置一致。
+    ///
+    /// ⚠️ 第三行返回 `nil` 而不是空串：空串会被渲染成**一行空白**（高度还在），
+    /// 而"没有这一行"与"有一行空的"在屏幕上完全不同。这也是它与 `metaLabel`
+    /// 的分工 —— 那一行永远有内容（编号 + 分支名），这一行两段都可缺。
+    ///
+    /// ⚠️ 参数是 `now` 而不是在内部取 `Date()`：相对时间必须由调用方给，
+    /// 否则它会变成渲染时机的一部分（`IssueCard` 的同一处置）。
+    public func updateLine(now: Date) -> String? {
+        guard let updatedAt else { return nil }
+        let time = RelativeTime.string(from: updatedAt, now: now)
+        if let authorLogin, !authorLogin.isEmpty {
+            return "\(authorLogin) 更新于 \(time)"
+        }
+        return "更新于 \(time)"
     }
 }
 
@@ -264,7 +316,12 @@ public struct LoadRepoPulls: Sendable {
             title: dto.title,
             state: state(from: dto),
             headRef: dto.head.ref,
-            baseRef: dto.base.ref
+            baseRef: dto.base.ref,
+            authorLogin: dto.user?.login,
+            // ⚠️ 列表端点**返回** `updated_at`（与 `additions` / `deletions` 不同 ——
+            //    那两个只有单 PR 端点给）。所以"探索页不显示更新时间"是**页面口径**
+            //    （原型那一行没有它），不是"取不到"。
+            updatedAt: dto.updatedAt
         )
     }
 
@@ -273,4 +330,80 @@ public struct LoadRepoPulls: Sendable {
     private static func state(from dto: PullRequestDTO) -> PullRequestState {
         PullRequestState(state: dto.state, mergedAt: dto.mergedAt)
     }
+}
+
+/// 仓库详情「Pull Requests」分段（PRD §4.4 分区三、决策 #61）的可见文案。
+///
+/// ## 与 `PullListIndicator` 的分工
+///
+/// | | `PullListIndicator` | `RepoPullsSectionCopy`（本类型） |
+/// |---|---|---|
+/// | 页面 | 探索 PR 列表（§4.15） | 仓库详情 PR 段（§4.4 分区三） |
+/// | 档位 | 开放 + 已合并（`.all` 一次取回后本地滤） | 「开放」+「已合并」两档**分别取** |
+/// | 说明行 | `{仓库}`，**无计数** | 无（分段条自己带计数） |
+/// | 新建入口 | 无 | **无**（§4.4 分区三明确写"无新建 PR 入口"） |
+///
+/// ⚠️ 两处都**没有新建入口**，但理由不同：§4.15 是"别人的仓库里你开不了 PR"，
+/// 这里是"PR 得从分支推出来、不是一个空表单能建的"（§5.8 的提交面板才是出口）。
+/// 所以本类型里**刻意没有一个 `newPullAction`** —— 不是还没写。
+public enum RepoPullsSectionCopy {
+
+    // MARK: - 分段条
+
+    /// 第一格：`开放 (N)`（原型 `05-repo.js:132` 逐字）。
+    ///
+    /// ## ⚠️ `N` 用的是 Issues 列表那一条计数规则
+    ///
+    /// 规则本身（"已加载的条目数，还有下一页时缀 `+`"）**只有一处定义**：
+    /// `OpenIssueIndicator.countLabel`。这里**转发**过去而不是重写一遍 ——
+    /// 跨类型调用看着别扭（那个名字里带 Issue），但"规则唯一"比"名字顺眼"重要得多：
+    /// 两个页面显示的是同一类数字，两处各算一次的下场是某天口径变了只改到一处，
+    /// 而两个页面上的数字对不上时**没人知道该信哪个**。
+    ///
+    /// ## 为什么 PR 列表这里**能**给计数，而 §4.15 那边故意不给
+    ///
+    /// §4.15 说"共 N 个 PR"会把已关闭的也算进去（那一页看不全），所以整行不给数。
+    /// 这一页是**按档取数**的 —— 屏幕上这一格下面列的就是这一档的全部（已加载部分），
+    /// 数字与内容对得上，与 §4.14 的情况同构。
+    ///
+    /// ⚠️ `N` 是**过滤之后**的已加载条目数（`LoadRepoPulls` 滤掉了"关闭但未合并"），
+    /// 也就是屏幕上真能数出来的条数。
+    ///
+    /// ⚠️ **`loadedCount` 可空**（`nil` = 这一档还没加载过）—— 此时只写 `开放`、
+    /// 不带那半个括号。理由与 `RepoIssuesSectionCopy.openSegment` 逐字相同：
+    /// `开放 (0)` 会把"还没加载出来"说成"一个都没有"。
+    public static func openSegment(loadedCount: Int?, hasMore: Bool) -> String {
+        guard let loadedCount else { return openSegmentTitle }
+        let label = OpenIssueIndicator.countLabel(loadedCount: loadedCount, hasMore: hasMore)
+        return "\(openSegmentTitle) (\(label))"
+    }
+
+    /// 第一格在"还不知道有几个"时的写法 —— **只有标题，没有那半个括号**。
+    public static let openSegmentTitle = "开放"
+
+    /// 第二格：`已合并`。⚠️ **原型这一格没有计数**（只有「开放」那格有），照抄 ——
+    /// 理由同 `RepoIssuesSectionCopy.closedSegment`：已合并 / 已关闭都是只增不减的堆积，
+    /// 给它计数会让两格在视觉上等重，而两者的信息价值并不对等。
+    public static let mergedSegment = "已合并"
+
+    // MARK: - 空态
+
+    /// 「开放」档空态标题。
+    ///
+    /// ⚠️ **自拟（规格未给）**：PRD §4.4 分区三与 §7 都没给这一档的空态
+    /// （原型的演示数据永远非空，也给不出）。
+    /// ⚠️ 与探索页的 `PullListIndicator.emptyTitle`（`暂无 Pull Request`）
+    /// **不是同一句，也别合并**：那一页是"开放 + 已合并"混排，一个"没有 PR"说得通；
+    /// 这一页的档位是分开的，说"没有 PR"会把"已合并的有一堆"也一起否掉。
+    public static let emptyOpenTitle = "暂无开放的 Pull Request"
+
+    /// 「开放」档空态引导行（**自拟（规格未给）**，措辞对齐 `OpenIssueIndicator.emptyHint`）。
+    public static let emptyOpenHint = "这个仓库当前没有开放中的 Pull Request"
+
+    /// 「已合并」档空态标题（**自拟（规格未给）**）。
+    public static let emptyMergedTitle = "暂无已合并的 Pull Request"
+
+    /// 「已合并」档空态引导行（**自拟（规格未给）**）。
+    /// ⚠️ 用"还没有"而不是"当前没有"：理由同 `RepoIssuesSectionCopy.emptyClosedHint`。
+    public static let emptyMergedHint = "这个仓库还没有已合并的 Pull Request"
 }

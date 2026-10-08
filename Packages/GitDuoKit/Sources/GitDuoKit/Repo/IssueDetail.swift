@@ -32,6 +32,13 @@ public struct IssueDetail: Sendable, Hashable, Identifiable {
     /// 要不要出气泡走 `hasBody`，别在视图里各判一次。
     public let body: String?
 
+    /// 正文**已经解析好的块** —— 视图直接喂给 `MarkdownBody`。
+    ///
+    /// ⚠️ 与 `IssueComment.bodyBlocks` 同一条理由：在 `init` 里解析，
+    /// 于是"`body` 与它不一致"这件事不可能发生，而取数那一层也不用记得再做一遍。
+    /// （原型把正文画成**作者发的第一条评论**，所以它确实要按 Markdown 渲染。）
+    public let bodyBlocks: [MarkdownBlock]
+
     /// 创建者。**可以是 `nil`**（账号已删除）。
     ///
     /// 作者为 `nil` 时头部**整段去掉**（`IssueCopy.metaLabel`）。
@@ -58,6 +65,7 @@ public struct IssueDetail: Sendable, Hashable, Identifiable {
         self.title = title
         self.isOpen = isOpen
         self.body = body
+        self.bodyBlocks = body.map { MarkdownDocument($0).blocks } ?? []
         self.authorLogin = authorLogin
         self.createdAt = createdAt
         self.closedAt = closedAt
@@ -65,6 +73,37 @@ public struct IssueDetail: Sendable, Hashable, Identifiable {
 
     /// 读屏用的状态词 —— 与 `RepoListState` / `PullRequestState.label` 同一套词。
     public var stateLabel: String { isOpen ? "开放" : "已关闭" }
+
+    /// 状态**胶囊**上的可见状态词（原型 `pillOf(p.s)` 里的 `open` / `closed-i` ⇒
+    /// `Open` / `Closed`，**英文**）。
+    ///
+    /// ⚠️ 与 `stateLabel`（中文，读屏用）**有意不同**：屏幕上的胶囊是英文、给读屏念的是中文。
+    /// 这是切片 5 就定下的分工（`SearchResultRows:294` 那句"读屏时**先说中文状态**"
+    /// 与 `PullRequestState.pillTitle` 的说明都写着这条）。
+    ///
+    /// ⚠️ 原型写的是 `<span class="pill open">● Open</span>` —— 那个 `●` **不画**。
+    /// 全项目的胶囊都不带它（`SearchResultRows` / `BranchRow` / `ConversationHeader`
+    /// 的预览用的都是纯文字），本件照既有形态走。已登记为有意偏差。
+    ///
+    /// ⚠️ 已关闭的 Issue 走**紫族**（原型 `.pill.closed-i` 与 `.pill.merged`
+    /// 的配色逐字相同），不是红族 —— 那一次翻译在 `StateTone.tone(isOpen:)`。
+    public var pillTitle: String { isOpen ? "Open" : "Closed" }
+
+    /// 正文气泡里的作者名（拿不到 ⇒ `AuthorName.unknown`）。
+    ///
+    /// ⚠️ 它与 `metaLabel` 的处理**不一样**，别合并：`metaLabel` 在作者拿不到时
+    /// **整段去掉**「由 X 创建于 …」（那一句读起来像在编事实），而正文气泡的头部
+    /// 必须有名字 —— 那里是一个头像 + 一行字的位置，空着看起来像加载失败。
+    public var displayAuthor: String { AuthorName.display(authorLogin) }
+
+    /// 正文气泡头部的时间（`2 小时前`）。
+    ///
+    /// ⚠️ 用**创建时刻**而不是关闭时刻：这条气泡是"作者当初写下的那段话"，
+    /// 它的时间就是这条 Issue 的创建时间（原型那条 `.comment` 的 `昨天 21:40`
+    /// 也是这个意思）。
+    public func bodyTimeLabel(now: Date) -> String {
+        RelativeTime.string(from: createdAt, now: now)
+    }
 
     /// 正文值不值得画成一条气泡。
     ///

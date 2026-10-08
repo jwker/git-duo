@@ -1,5 +1,6 @@
 import Foundation
 import GitHubAPI
+import GitDuoCore
 
 /// 一条会话评论（PRD §4.9 / §4.11）。
 ///
@@ -26,6 +27,25 @@ public struct IssueComment: Sendable, Hashable, Identifiable {
     /// 正文（Markdown 源文，**原样**，不裁不转义）。
     public let body: String
 
+    /// 正文**已经解析好的块** —— 视图直接喂给 `MarkdownBody`（§11.1）。
+    ///
+    /// ## ⚠️ 它在**初始化器里**解析，不是让调用方各传一份
+    ///
+    /// 两个理由：
+    ///
+    /// 1. **`body` 与它不可能不一致**。做成一个从外面传进来的参数（哪怕带默认值），
+    ///    就会有一处忘传 —— 而表现是"这条评论是空的"，不是报错。
+    ///    放在 `init` 里，构造它的那一刻就解析完了。
+    /// 2. **解析点落在数据到手的那一层**（同 `MarkdownDocument` 的说明）：
+    ///    两个调用点（`LoadIssueDetail.comment(from:)` 与 `PostIssueComment.send`）
+    ///    都只是构造一个 `IssueComment`，谁都不用记得"还要解析一遍"。
+    ///
+    /// ⚠️ 代价是**构造一个 `IssueComment` 会跑一次解析** —— 而它只在取数与发评论
+    /// 这两处被构造（都不是热路径）。反过来，若改成视图里每次重绘解析
+    /// （`MarkdownParser.blocks(from: comment.body)`），滚动一屏评论会重扫几十遍，
+    /// 且每次结果都一样。
+    public let bodyBlocks: [MarkdownBlock]
+
     /// 作者登录名。**可以是 `nil`**（账号被删除后 GitHub 把整段 `user` 置为 `null`）。
     public let authorLogin: String?
 
@@ -35,6 +55,8 @@ public struct IssueComment: Sendable, Hashable, Identifiable {
     public init(id: Int, body: String, authorLogin: String? = nil, createdAt: Date) {
         self.id = id
         self.body = body
+        // `MarkdownDocument` 是"原文 + 块"的唯一构造入口，保证两者同源。
+        self.bodyBlocks = MarkdownDocument(body).blocks
         self.authorLogin = authorLogin
         self.createdAt = createdAt
     }
@@ -43,9 +65,23 @@ public struct IssueComment: Sendable, Hashable, Identifiable {
     ///
     /// ⚠️ 作者为 `nil` 时**不写 `未知用户`**（那听起来像一个真实的账号名）——
     /// 用 `AuthorName.unknown`，它说的是确凿的事：那个账号被删了。
-    public var displayAuthor: String {
-        guard let authorLogin, !authorLogin.isEmpty else { return AuthorName.unknown }
-        return authorLogin
+    ///
+    /// 判据（含"空串也算拿不到"）只有一处：`AuthorName.display(_:)`。
+    public var displayAuthor: String { AuthorName.display(authorLogin) }
+
+    /// 气泡头部那个时间（`2 小时前`）。
+    ///
+    /// ⚠️ **与原型不完全一样，是有意的**：原型 `06-files.js:125` 硬编码的是
+    /// `昨天 21:40`（带时刻），而全项目的相对时间只有 `RelativeTime` 那一套分档
+    /// （`刚刚` / `n 分钟前` / `n 小时前` / `昨天` / `n 天前`）。
+    /// 为评论单独造一套"带时刻"的格式，会让同一条评论在评论区与别处显示两种时间
+    /// —— 那才是没人查得出来的不一致。属"原型给不出"（它的演示数据是单 token），
+    /// 不是"原型给得不一致"。
+    ///
+    /// - Parameter now: 现时。**必传**（同 `IssueDetail.headNote(now:)` 的理由：
+    ///   给它默认值等于在视图里悄悄引入第二个时间源）。
+    public func timeLabel(now: Date) -> String {
+        RelativeTime.string(from: createdAt, now: now)
     }
 }
 

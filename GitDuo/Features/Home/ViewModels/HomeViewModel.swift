@@ -95,7 +95,9 @@ final class HomeViewModel {
             let failure = Self.failure(from: error)
             if hadContent {
                 // 有内容 ⇒ 留着，不把它换成失败屏；但**不静默吞掉**，给一条提示。
-                toast.show(HomeCopy.refreshFailed)
+                // ⚠️ 那句话的正本在 `GitDuoKit.RefreshCopy`（切片 7.4 收口，
+                //    此前这里有一份同值的局部副本 —— 见 `RefreshCopy.failed` 的说明）。
+                toast.show(RefreshCopy.failed)
             } else {
                 pinned.fail(failure)
             }
@@ -144,10 +146,10 @@ enum HomeCopy {
     /// 清除后的提示（PRD §7）。
     static let recentCleared = "已清除最近访问记录"
 
-    /// ⚠️ 它**不是** PRD §7 里的句子 —— 那一节没有这条。
-    /// 原因：PRD 假定刷新失败时整屏会变成失败态；而**已有内容时**不能那样做（§8.5），
-    /// 于是"失败"必须另找一处说出口。宁可多一句，也不要把一次失败的刷新显示成"已是最新"。
-    static let refreshFailed = "刷新失败 · 下拉可重试"
+    /// ⚠️ 「刷新失败」那一句**不在这里** —— 切片 7.4 把它收口到
+    /// `GitDuoKit.RefreshCopy.failed`（正本），本文件原有一份同值副本 `refreshFailed`。
+    /// 那时候它与另外三处（探索仓库详情 / 提交详情 / 仓库详情）逐字相同，
+    /// 各自还带着一条"同 XX"的注释 —— 那正是该收口的信号。
 
     /// 「管理」跳网页端时的提示（PRD §7 原文）。
     static let managePinsToast = "置顶仓库在 GitHub 个人主页管理 · 已为你打开"

@@ -117,7 +117,7 @@ final class ExploreRepoViewModel {
         } catch {
             // ⚠️ 失败**不改动任何计数**（`ToggleStar.toggle` 保证这一点），
             //    按钮恢复可点（`defer` 收起 loading），并给一条提示。
-            toast.show(Self.starFailedToast)
+            toast.show(ActionCopy.failed)
         }
     }
 
@@ -152,7 +152,8 @@ final class ExploreRepoViewModel {
             await tree.load(defaultBranch: value.detail.defaultBranch)
         } catch {
             if hadContent {
-                toast.show(ExploreRepoCopy.refreshFailed)
+                // ⚠️ 正本在 `GitDuoKit.RefreshCopy`（切片 7.4 收口）。
+                toast.show(RefreshCopy.failed)
             } else {
                 insights.fail(Self.failure(from: error))
             }
@@ -167,9 +168,10 @@ final class ExploreRepoViewModel {
     }
 
     /// ⚠️ **决策缺口**：PRD §7 的「提示 / 校验」一节给了 Star 成功与取消的两句，
-    /// **没有给失败那一句**。这里先按"陈述事实 + 可重试"措辞。
-    /// 已登记到 `REVIEW-CHECKLIST.md §5`，等拍板后与 PRD 一起改。
-    static let starFailedToast = "操作失败 · 请重试"
+    /// **没有给失败那一句**。那一句 (「操作失败 · 请重试」) 仍然按"陈述事实 + 可重试"措辞，
+    /// 但它**从这里搬走了** —— 切片 7.4 收口到 `GitDuoKit.ActionCopy.failed`
+    /// （正本；本文件原有一份同值副本 `starFailedToast`）。
+    /// 已登记到 `REVIEW-CHECKLIST.md §5`，等拍板后与 PRD 一起改（改一处即可）。
 }
 
 /// 探索仓库详情的可见文案（PRD §4.13 / §7）。
@@ -213,9 +215,8 @@ enum ExploreRepoCopy {
     static let failureTitle = "加载失败 · 点击重试"
     static let retry = "重试"
 
-    /// 同 `HomeCopy.refreshFailed`：PRD §7 没有这条，因为 PRD 假定刷新失败时整屏变失败态。
-    /// 而**已有内容时**不能那样做（§8.5），失败必须另找一处说出口。
-    static let refreshFailed = "刷新失败 · 下拉可重试"
+    /// ⚠️ 「刷新失败」那一句**不在这里** —— 切片 7.4 收口到
+    /// `GitDuoKit.RefreshCopy.failed`（正本，PRD §7 没有这条，是 §8.5 推出来的）。
 
     static let sourceCodeButton = LatestRelease.sourceCodeButtonTitle
 }

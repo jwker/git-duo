@@ -132,6 +132,22 @@ public struct PullTimelineItem: Sendable, Hashable, Identifiable {
 
     public let body: String?
 
+    /// 正文**已经解析好的块** —— 与 `IssueComment.bodyBlocks` 同一条理由
+    /// （在 `init` 里解析，两个来源都不用记得这件事）。
+    ///
+    /// ## ⚠️ 它与 `hasBody` **分工不同**，别用一个替另一个
+    ///
+    /// - `hasBody` 回答"**要不要画**这条气泡"（判据是去掉空白后非空）；
+    /// - `bodyBlocks` 回答"**要画的话画什么**"。
+    ///
+    /// 两者在 `nil` 与纯空白上给出同向的答案（`MarkdownParser` 声明了"空行不产生块"
+    /// ⇒ 那两种输入都是空数组），但它们**仍然是两件事**：
+    /// `hasBody` 是"用户到底写没写"这条**产品判断**（所以它在领域层），
+    /// 而"`blocks` 是不是空数组"是解析器的事实。
+    /// 让视图改看 `blocks.isEmpty`，等于把一条产品判断降级成一个实现细节 ——
+    /// 而 `"---"`（有字符、却解析不出任何文字）这类输入上两者的答案并不相同。
+    public let bodyBlocks: [MarkdownBlock]
+
     /// 发表 / 提交时刻。
     ///
     /// ⚠️ 评审可以是 `nil`（见 `PullReviewState.isPartOfConversation`）；
@@ -149,14 +165,12 @@ public struct PullTimelineItem: Sendable, Hashable, Identifiable {
         self.origin = origin
         self.authorLogin = authorLogin
         self.body = body
+        self.bodyBlocks = body.map { MarkdownDocument($0).blocks } ?? []
         self.createdAt = createdAt
     }
 
     /// 显示名（作者为 `nil` ⇒ `AuthorName.unknown`）。
-    public var displayAuthor: String {
-        guard let authorLogin, !authorLogin.isEmpty else { return AuthorName.unknown }
-        return authorLogin
-    }
+    public var displayAuthor: String { AuthorName.display(authorLogin) }
 
     /// 正文值不值得画出来（只点批准、不写话的评审没有正文）。
     public var hasBody: Bool {
@@ -167,6 +181,16 @@ public struct PullTimelineItem: Sendable, Hashable, Identifiable {
     public var approvalPill: String? {
         guard case let .review(state) = origin else { return nil }
         return state.pillTitle
+    }
+
+    /// 气泡头部那个时间；**拿不到 ⇒ `nil`**（`CommentBubble.timeText` 就不画那一截）。
+    ///
+    /// ⚠️ 与 `IssueComment.timeLabel(now:)` **不是重复**：那边的 `createdAt` 是必需字段
+    /// （评论一定有发表时间），所以它返回非可选的 `String`；
+    /// 这边评审的 `submittedAt` 可空（`PullReviewState.isPartOfConversation` 写了原因）。
+    /// 硬把两者合成一个"可选版"会让评论那一侧多出一个永远不成立的 `nil` 分支。
+    public func timeLabel(now: Date) -> String? {
+        createdAt.map { RelativeTime.string(from: $0, now: now) }
     }
 }
 
@@ -223,6 +247,15 @@ public struct PullDetail: Sendable, Hashable, Identifiable {
     /// 正文（Markdown 源文）。原型把它画成**作者发的第一条评论**。
     public let body: String?
 
+    /// 正文**已经解析好的块** —— 与 `IssueDetail.bodyBlocks` 逐条同理由
+    /// （在 `init` 里解析：`body` 与它不可能不一致，两个构造点谁都不用记得这件事）。
+    ///
+    /// ⚠️ 它是**在切片 7.4 补的**：7.1 落地时 `PullDetail` 还没有任何界面消费它，
+    /// 而"要不要画正文气泡、要画就画成 Markdown"这两件事都在这一片才定。
+    /// 与 `PullTimelineItem.bodyBlocks` 是同一条规则，不是两套：
+    /// 两者都走 `MarkdownDocument`（"原文 + 块"的唯一构造入口）。
+    public let bodyBlocks: [MarkdownBlock]
+
     public let additions: Int
     public let deletions: Int
 
@@ -256,6 +289,9 @@ public struct PullDetail: Sendable, Hashable, Identifiable {
         self.updatedAt = updatedAt
         self.mergedAt = mergedAt
         self.body = body
+        // ⚠️ 派生属性在 `init` 里算完（同 `IssueComment.bodyBlocks`）——
+        //    交给外面传的话总有一处忘传，而那表现为"这条正文是空的"，不是报错。
+        self.bodyBlocks = body.map { MarkdownDocument($0).blocks } ?? []
         self.additions = additions
         self.deletions = deletions
         self.changedFiles = changedFiles
@@ -280,14 +316,33 @@ public struct PullDetail: Sendable, Hashable, Identifiable {
     ///
     /// ⚠️ 与 `PullRow` 不同：列表卡片上没有作者，而详情页的三句状态说明里都有
     /// （`{作者} 请求合并到 …`）⇒ 这里必须给一个兜底名字。
-    public var displayAuthor: String {
-        guard let authorLogin, !authorLogin.isEmpty else { return AuthorName.unknown }
-        return authorLogin
-    }
+    public var displayAuthor: String { AuthorName.display(authorLogin) }
 
     /// 正文值不值得画成一个气泡（同 `IssueDetail.hasBody`）。
     public var hasBody: Bool {
         !(body ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 正文气泡头部的时间（`2 小时前`）。
+    ///
+    /// ⚠️ 用**创建时刻**而不是 `updatedAt`：这条气泡是"作者当初写下的那段话"，
+    /// 用更新时刻会让它随每次改动而变 —— 读起来像"这段描述是刚刚写的"
+    /// （`PullDetailDTO.createdAt` 的说明写了这一条）。
+    ///
+    /// ## ⚠️ 返回可选，而 `IssueDetail.bodyTimeLabel(now:)` 返回非可选 —— 不是笔误
+    ///
+    /// 两个字段的可空性本来就不同：`IssueDetail.createdAt` 是必需字段
+    /// （`IssueDetailDTO` 里它必须存在），而 `PullDetailDTO.createdAt` 是
+    /// nullable 的（同上那条说明）。硬合成一个"可选版"会让 Issue 那一侧
+    /// 多出一个**永远不成立**的 `nil` 分支；反过来把它强解包，
+    /// 则会在服务端缺这个字段时把整页打成失败态 —— 而它只影响一个气泡上的一小截时间。
+    ///
+    /// 同一条取舍在 `PullTimelineItem.timeLabel(now:)` 与 `IssueComment.timeLabel(now:)`
+    /// 之间也出现过一次（那边是评审的 `submitted_at` 可空）。
+    ///
+    /// - Parameter now: 现时。**必传**（给它默认值等于在视图里悄悄引入第二个时间源）。
+    public func bodyTimeLabel(now: Date) -> String? {
+        createdAt.map { RelativeTime.string(from: $0, now: now) }
     }
 
     /// 状态说明（PRD §4.11 那三句）。
@@ -338,6 +393,54 @@ public struct PullDetail: Sendable, Hashable, Identifiable {
     /// 判据散开之后总有一处会漏掉 `readOnly` 那一档。
     public func operationAvailability(readOnly: Bool) -> PullOperationAvailability {
         PullOperationAvailability.decide(readOnly: readOnly, state: state)
+    }
+
+    /// **合并成功之后本地这一份**详情的样子（PRD §4.11 / §5.3、TECH_SPEC §9.9）。
+    ///
+    /// ## 为什么必须有一条领域层的规则，而不是让视图改两个字段
+    ///
+    /// `PUT /repos/{o}/{r}/pulls/{n}/merge` 的响应体里**没有 PR 对象**
+    /// （只有 `sha` / `merged` / `message`，见 `PullMergeResultDTO`），
+    /// 所以服务端不会给回一份新详情 —— 本地这份必须自己变。
+    /// 而"变哪几样"是一条**产品规则**，一次要动三处：
+    ///
+    /// | 动什么 | 不动会怎样 |
+    /// |---|---|
+    /// | `state` → `.merged` | 头部仍写 `X 请求合并到 main`，而它已经合了 |
+    /// | `mergedAt` → 那一刻 | 对话区顶部那条 `已由 X 于 {时间} 合并进 main` 会说不出时间 |
+    /// | 由前两者派生的 `canComment` | **刚合并完还能继续评论** —— 而屏幕上完全看不出异常 |
+    ///
+    /// 第三行是收成一条规则而不是散在视图里的真正理由：它不是一个字段，
+    /// 是 `state` 的派生值。视图只改 `state` 的话这条会自动跟着对；
+    /// 谁要是"顺手"只改了 `mergedAt`，它就会错。
+    ///
+    /// ## ⚠️ 只改这两样 —— **不**伪造 `updatedAt`
+    ///
+    /// 合并当然也更新了服务端的 `updated_at`，但那个值我们的时钟给不出来：
+    /// 编一个"刚刚"塞进去，会让头部那句 `更新于 {时间}` 说的是**客户端的猜测**
+    /// 而不是服务端的事实。它的准确性由下一次下拉刷新负责
+    /// （那时详情端点会给回真正的值）。同 `PullCopy.mergedBanner(author:mergedAt:base:)`
+    /// 对"拿不到时间就少说一截、不编一个"的口径。
+    ///
+    /// - Parameter date: **客户端**在收到成功响应那一刻的时间
+    ///   （`PullMergeResult.merged(at:)` 的说明写了为什么只能这样）。
+    public func markingMerged(at date: Date) -> PullDetail {
+        PullDetail(
+            number: number,
+            title: title,
+            state: .merged,
+            headRef: headRef,
+            baseRef: baseRef,
+            authorLogin: authorLogin,
+            createdAt: createdAt,
+            // ⚠️ 原样透传（见上）：这一条方法不替服务端说话。
+            updatedAt: updatedAt,
+            mergedAt: date,
+            body: body,
+            additions: additions,
+            deletions: deletions,
+            changedFiles: changedFiles
+        )
     }
 }
 
