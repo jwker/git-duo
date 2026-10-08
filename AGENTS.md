@@ -5,7 +5,7 @@
 
 ## 0. 当前阶段
 
-**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已**陪跑目视修复（6.7 起，现已到 6.9 —— 完成定义第 3 条「与原型逐屏对照」12 项于 2026-10-07 全部走完）**。**
+**切片 1（Auth）已验收；切片 2（GitHubAPI 客户端骨架）2.1–2.6 已落地；切片 3（仓库列表）3.1–3.7 已落地；切片 4（首页 + 探索 + 详情）4.0–4.6 已落地；切片 5（搜索）5.0–5.6 全部落地；切片 6（文件查看 + 提交详情 + 分支管理 + 仓库详情外壳）6.0–6.6 全部落地，并已**陪跑目视修复（6.7 起，现已到 6.9 —— 完成定义第 3 条「与原型逐屏对照」12 项于 2026-10-07 全部走完）**；**切片 7（Issues / PR）已于 2026-10-08 开工，当前在做 7.0 文档先行（决策 #56–#62）**。**
 `make verify` = **五包单测 1063 项 + 模拟器构建**，一条命令，**零编译警告**。
 （**GitHubAPI 337** · GitDuoAuth 57 · GitDuoCore 50 · GitDuoDesign **60** · **GitDuoKit 559**）
 
@@ -43,6 +43,22 @@
 ⇒ **目视这笔账没有往后拖**：切片 6 的清单当天跑完。⚠️ **但切片 7 会再加一批**（Issue 详情 / 新建 Issue / PR 详情）
 ⇒ 别攒到两片之后再跑（那正是 4.4 报"已落地"时实际只做了 3 屏的成因）。⚠️ 走"会改真实仓库"的页面时
 （删除 / 合并分支这类）**只看形态、别真删真合**；看到"不一样"**先翻 `REVIEW-CHECKLIST §6` 末尾那张有意偏差表**（现有 **22** 条）—— 拍过板的不算缺陷。
+
+> **切片 7 施工图（2026-10-08 起）**：Issues / PR —— Issue 详情 + 新建 Issue + PR 详情，
+> **并补上仓库详情（§4.4）的 Issues / Pull Requests 两个分区**（决策 #50 把这两段从切片 6 挪到了这里）。
+> 对应 PRD **§4.9 / §4.10 / §4.11 / §4.4（分区二 · 分区三）**（+ §5.2 标签选择/新建弹层 / §5.3 合并 PR 弹层）。
+> ⚠️ 它有一半零件在切片 4 就备好了（`IssueRow` / `PullRow` / `LoadRepoIssues` / `LoadRepoPulls` / `IssueCard` / `PullCard`），
+> 数据层的 `openIssues` 也早留了口子（注释逐字写着"切片 7 的「我的仓库」四分区确实需要『已关闭』，**那时再加参数**"）。
+
+| # | 内容 | 状态 |
+|---|---|---|
+| 7.0 | 文档先行：决策 **#56–#62**（表格筛选只按标签走服务端 / Issue 详情 REST 两次 / PR 卡片不显示增删 / 评论草稿落本地 / **评审状态取 `/reviews` 而非 `/comments`** / 两段范围与组件落点 / Issue 关闭重开本期不做）+ `TECH_SPEC §9.8` / **`§9.8.1`（新增：仓库详情两段）** / `§9.9` / `§4.6.2` 改写 + `PRD §4.4` 两段 / `§4.9` / `§4.11` 补口径 | 🔄 |
+| 7.1 | 领域层（`GitDuoKit`）：`LoadRepoIssues` / `LoadRepoPulls` 加 `state` 参数与**标签筛选**（决策 #56）· `IssueDetail` / `IssueComment` + `LoadIssueDetail` · `Label` + `LabelCatalog`（取数 / 新建 / 10 色板 / 校验 / 重名自动选中）· `CreateIssue` · `PullDetail` / `PullFile` / `PullReview` + `LoadPullDetail` · `PullAction`（合并三方式 / 关闭 / 重开）· **评论草稿存储**（决策 #59）· 四页文案常量 · **PR 侧多文件 diff 边界**（本片验证方式，复用 §11.2） | ⬜ |
+| 7.2 | 数据层（`GitHubAPI`）：`GitHubRepoIssuesEndpoint` 加参数 + 详情 / 评论 / 新建 / 改状态 · 新增 `GitHubRepoLabelsEndpoint`（列表 + 新建）· `GitHubRepoPullsEndpoint` 加参数 + 详情 / 文件 / Commits / **评审** / 评论 / 合并 / 改状态 · 八个新 DTO。⚠️ 配额桶逐个显式声明 | ⬜ |
+| 7.3 | 设计系统（`GitDuoDesign`）：`CommentBubble`（头像 + 作者 + 时间 + 正文 + 可选状态胶囊）· `LabelPill`（自定义颜色）· `ColorSwatch`（10 色板）· `ConversationHeader`（状态胶囊 + 说明 + 标题 + 元信息）。判据 **#43**：只收基础类型、不认识领域模型 | ⬜ |
+| 7.4 | 表现层（`GitDuo/Features/Repo/`）：**仓库详情两段换真件**（`RepoIssuesSection` / `RepoPullsSection`，含标签筛选档）· `IssueDetailView`（§4.9）· `NewIssueView`（§4.10）· `PullDetailView`（§4.11 三分区）· 两个弹层（`LabelPickerSheet` §5.2 / `MergePRSheet` §5.3）。⚠️ `IssueCard` / `PullCard` **移出 `Features/Explore/`** 改两处共用（决策 #61） | ⬜ |
+| 7.5 | 装配与路由：`AppEnvironment` 接入新用例与**草稿存储**（含 `signOut()` 清理）· `RouteView` 把 `.issueDetail` / `.newIssue` / `.prDetail` 三条从骨架屏换成真件 · `SkeletonPlaceholders.registry` 同步消解 | ⬜ |
+| 7.6 | 收尾：`make verify` + 文档同步 + **逐屏对照清单新增一批**（Issue 详情 / 新建 Issue / PR 详情 —— ⚠️ 别攒着，4.4 那次就是攒出来的） | ⬜ |
 
 > **切片 6 施工图（2026-10-07 起）**：文件查看 + 提交详情 + 分支管理 **+ 仓库详情外壳（PRD §4.4）**。
 > 对应 PRD **§4.4 / §4.5 / §4.7 / §4.8**（+ §5.7 切换分支弹层 / §5.8 添加文件弹层 / §3.10 分支）。
@@ -266,7 +282,7 @@
 |---|---|---|
 | `redesign/prototype/` | **唯一可点验收依据**（入口 `index.html`；`scripts/` 16 个 JS · `styles/` 5 个 CSS） | 交互、文案、布局的最终裁决者 |
 | `PRD.md` | 产品 | 行为、文案、边界（**不得出现实现细节**） |
-| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**43 项全部【已定】**） |
+| `TECH_SPEC.md` | 技术 | 架构、API 映射、配额、数据模型、决策表（**62 项全部【已定】**） |
 | `REVIEW-CHECKLIST.md` | 评审 + **切片计划正本** | 切片顺序 §1 · 完成定义 §2 · 前置条件 §3 · 断言→切片映射 §4 · **决策记录 D1–D4（已全部拍板）** §5 |
 | `GITHUB-APP-SETUP.md` | 运维 | GitHub App 的手把手配置（表单逐栏值、权限 6 项、自检清单、错误码对照） |
 | `DEVICE-TESTING.md` | 运维 | 真机测试：一次性准备（含 🔒 无法自动化的一步）、`make device`、1.8 验收清单、错误对照、真机才能验的 5 件事 |

@@ -25,7 +25,7 @@
 | 【已定】 | 已经拍板的技术决策，后续不再反复 |
 | 【待定】 | 受外部平台约束或尚未决策，需要确认后才能开工的项 |
 
-> 本版 **55 项决策全部为【已定】**，无【待定】项。
+> 本版 **62 项决策全部为【已定】**，无【待定】项。
 
 ### 0.3 术语
 
@@ -107,7 +107,15 @@
 | 54 | 文件查看页对大文件 / 二进制文件的降级 | **三档，判据是一个纯函数**（2026-10-07 定，方向承 §9.5）：① **≤1MB 文本** ⇒ contents 的 `content` 是 base64，解出即用；② **>1MB** ⇒ contents 回 **200 + `encoding:"none"` + 空 `content`**（**实测**：`kubernetes/kubernetes` 的 `api/openapi-spec/swagger.json`，4,280,356 字节 ⇒ `encoding='none'`、`content_len=0`），改走 `Accept: application/vnd.github.raw` 取原文（**实测同一文件回 200 + 完整 4,280,356 字节**，不是截断）；③ **二进制** ⇒ 按**扩展名**判为图片者走 raw 取字节 + 图片预览，其余二进制给「不支持预览」+ 跳网页端。**识别规则落点**：领域层纯函数 `FilePreviewKind`（扩展名 → `.text` / `.image` / `.other`）—— App target 没有测试 target，留在这里就没人守得住（§9.5）。⚠️ **不按"UTF-8 解码失败"判二进制**：那要求先把可能很大的字节读进内存再试解码，而扩展名在**发请求之前**就有。⚠️ 图片也**先看 `size` 再决定下不下载**（上限是常量，见 §9.5） | 【已定】 |
 | 55 | 分支记忆存在哪里 | **持久化到 UserDefaults，按仓库分别记忆，登出清空**（2026-10-07 收口）：PRD §3.10 明写"分支记忆属**账号绑定数据**，退出登录时清空" ⇒ 它必须**跨启动存活**，否则"登出要清"无从谈起。§9.4.1 原文写的是"记忆为会话级（**可持久化以提升体验**）"，把两件事并列了、措辞含糊，现收口为**持久化**。落点照 `UserDefaultsRecentVisitStore` 先例（键前缀独立，不与 `recentVisits` / `searchHistory` 共用）；`signOut()` ③ 步补 `clear()` —— 该挂账本就写在 `AppEnvironment.signOut()` 的注释里（"按仓库的分支记忆（切片 6）"）。⚠️ **解析是两段式的**：记忆值**立即使用**（乐观，不串行等分支列表），分支列表回来后再校正；若 contents 因该 `ref` 不存在回 404，按 §9.4.1 的回落规则**静默重发一次、不向用户报错**（否则用户会先看到一个"不存在或无权访问"再自愈） | 【已定】 |
 
-> **状态汇总**：55 项决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+| 56 | 仓库详情 Issues 段的「筛选」怎么落地 | **只按标签筛、走服务端重新取**（用户 2026-10-08 拍板）：PRD §4.4 分区二画了 `开放 (N)` / `已关闭` / `筛选` 三档，但「筛选」标着 ⏳「筛选逻辑待细化」而**没有任何内容**，原型里它是个**死按钮**（`segPick` 只切高亮、不筛任何东西）。用户选择**本期就做**，维度定为**只筛标签**（不做作者 / 指派 / 里程碑）—— `GET /issues` 原生支持 `?labels=`（逗号分隔即多选），且标签就是本片已经在做的 §5.2 那一套（同一份 `GET /labels` 数据），不引入第二个数据源、也不引入第二种交互（作者 / 指派都是**单选**，与标签的多选会变成两套形态）。**取数走服务端重新请求**（`?state=…&labels=a,b`），**不做本地过滤**：本地只能筛已加载的那一页（30 条，其中还混着 PR）⇒ 结果显著偏少，而说明行的计数会与"实际有多少"对不上 —— 与决策 #38 被否掉的那个形状**完全相同**。已选标签在分段条上以标签胶囊呈现，点掉即取消（再取一次） | 【已定】 |
+| 57 | Issue 详情怎么取数 | **REST 两次请求**（用户 2026-10-08 拍板）：§9.8 原先并列了「REST 两次（issue + comments）」与「GraphQL 一次聚合」两个方案而未定。选 REST 的理由与「REST 为骨架」这条主线一致（决策 #6），且两个请求**可分别缓存、分别重试**（评论拉失败不该让正文也消失）；主桶 5000/h 充裕，省下的那一次往返换不来什么。**备选被否**：GraphQL 聚合 —— 要把 §4.6.5 的「四个 GraphQL 场景」扩成第五个、动到主线，还要按潜在节点数预扣配额 | 【已定】 |
+| 58 | 仓库详情 PR 卡片上的 `+842 −156` 从哪来 | **取不到 ⇒ 不显示这一截**（用户 2026-10-08 拍板，**外部事实造成的缺口**）：`additions` / `deletions` / `changed_files` **只在单个 PR 端点**（`GET /pulls/{n}`）返回，**列表端点不返回**（`PullRequestDTO` 的类型说明已记着这条）。PRD §4.4 分区三写的卡片是 `{作者} 更新于 {时间} · {增删}`，而列表给不出第三项。落地：卡片写 `{作者} 更新于 {时间}`（`user.login` + `updated_at`，**列表都给**），**去掉增删**，登记为有意偏差。**备选被否**：① 逐条补 `GET /pulls/{n}`（30 行 = 30 次主桶请求，滚一次列表烧一批配额）；② 与探索页卡片完全一致（丢掉作者与时间，与 PRD §4.4 的写法不符） | 【已定】 |
+| 59 | 评论草稿存在哪 | **落本地持久化（UserDefaults），登出清空**（用户 2026-10-08 拍板）：§9.8 原先只写"建议草稿落到本地存储"、未定。PRD §4.9 的失败提示条逐字写着「草稿已保留，可重试」—— 若只留内存，用户退出去再进来草稿就没了，**那句承诺当场落空**（与「文案是契约」这条铁律相冲）。键按「仓库 + 编号」隔离，不与 `recentVisits` / `searchHistory` / `branchMemory` 共用；`signOut()` ③ 步补 `clear()`（草稿里可能含还没发布的正文） | 【已定】 |
+| 60 | PR 的评审状态从哪来 | **`GET /pulls/{n}/reviews`，不是 `/comments`**（2026-10-08 **外部事实推翻文档写法**，性质同 #47 / #53）：§9.9 原写「评审评论走 `GET …/pulls/{n}/comments`，含 `APPROVED` / `CHANGES_REQUESTED` 状态胶囊」—— 这两件事**不是一个端点**：`/pulls/{n}/comments` 是**行内评论**（带 `path` / `line`，本身不含任何审批状态），审批状态在 **`/pulls/{n}/reviews`**（`state` 取值 `APPROVED` / `CHANGES_REQUESTED` / `COMMENTED` / `DISMISSED` / `PENDING`，官方枚举 `PullRequestReviewState`）。原型评论上那个「已批准」胶囊来自后者。落地：**两个端点都取** —— 会话评论（`/issues/{n}/comments`）构成时间线，评审（`/pulls/{n}/reviews`）提供"谁批准了"，两者合进同一条时间线 | 【已定】 |
+| 61 | 仓库详情两段与探索两段的差别 | **范围有意不同、组件复用同一个**（2026-10-08 定）：① **范围**：仓库详情 Issues 段是 `开放 (N)` + **已关闭** 双档、PR 段是 `开放 (N)` + **已合并** 双档 —— 与探索页（#38 只开放 / #39 开放 + 已合并）**有意不同**：探索页回答"看别人的贡献"，仓库详情回答"管自己的仓库"，已关闭的 Issue 在这里是要看的。② **组件**：`IssueCard` / `PullCard` 仍留在 Feature 层（#43），但**移出 `Features/Explore/`** 改由两个 Feature 共用 —— 判据是「**同一个 UI 元素有两处定义 ⇒ 必然分叉**」（6.4d 的 `RepoTreeSection` 已有先例）。⚠️ 但两处卡片**形态确有差别**、不是照搬：仓库详情的 Issue 卡片多一枚**标签胶囊**（原型 `05-repo.js:127` 的 `${i.c}`）、PR 卡片多一行 `{作者} 更新于 {时间}`；探索页两处都没有（原型 `10-explore-repo.js` 的卡片只有两行） | 【已定】 |
+| 62 | Issue 的「关闭 / 重新打开」做不做 | **本期不做**（2026-10-08 登记，**规格未给**）：PRD §4.9 的结构里只有"评论输入区"、**没有关闭 / 重开入口**；原型 `SCR.issueDetail` 同样没有（只有评论框 + 失败提示条）。§4.6.2 的端点表里确实列了 `PATCH …/issues/{n}`，但那是**端点清单**、不等于产品范围。⇒ 本片按"与原型一致"落地：**只有评论**。⚠️ 这是**登记而非否决**：若产品上需要（例如"我的 Issue"页要能关自己的 Issue），说一声即补 —— 它不影响本片其余部分，属可后加项 | 【已定】 |
+
+> **状态汇总**：**62 项**决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
 
 > ⚠️ **#53 与 #47 的共性**：两条都是**外部事实把文档里的旧写法推翻**后据实改正的，不是偏好选择。
 > 记在这里是因为它们是同一类事故的两例 —— **写文档时"看起来显然"的写法，可能只在某种令牌类型 / 某个字段上才成立**。
@@ -595,8 +603,9 @@ enum GitHubError: Error {
 | PR 详情 | `GET /repos/{owner}/{repo}/pulls/{n}` | |
 | PR 文件清单 | `GET …/pulls/{n}/files` | 含 `patch` 字段（单文件 diff） |
 | PR diff 原文 | `GET …/pulls/{n}`，`Accept: application/vnd.github.diff` | **REST 独有**，GraphQL 无等价 |
-| PR 对话评论 | `GET/POST …/issues/{n}/comments` | PR 的会话评论走 issue 端点 |
-| PR 评审评论 | `GET …/pulls/{n}/comments` | 行内评论（本期只读展示） |
+| PR 对话评论 | `GET/POST …/issues/{n}/comments` | PR 的会话评论走 issue 端点（**时间线的主体**就是它，发评论也发到这里） |
+| PR 行内评论 | `GET …/pulls/{n}/comments` | 带 `path` / `line` 的行内评论，**不含审批状态** |
+| PR 评审（谁批准了） | `GET …/pulls/{n}/reviews` | ⚠️ **审批状态只在这一个端点**（`state` = `APPROVED` / `CHANGES_REQUESTED` / `COMMENTED` / `DISMISSED` / `PENDING`，官方枚举 `PullRequestReviewState`）—— **决策 #60**，原 §9.9 把它误记在 `/comments` 上 |
 | PR Commits | `GET …/pulls/{n}/commits` | |
 | 合并 PR | `PUT …/pulls/{n}/merge`，`merge_method: merge\|squash\|rebase` | 三种方式一一对应 |
 | 关闭 PR | `PATCH …/pulls/{n}`，`state: closed` | |
@@ -719,9 +728,10 @@ View State（表现层，为 UI 量身裁剪，含 loading/empty/error）
 | `TreeEntry` | `name`,`path`,`kind(.file/.dir)`,`lastCommitMessage` |
 | `FileContent` | `path`,`text`,`sha`,`size`,`isBinary` |
 | `Issue` | `number`,`title`,`state(.open/.closed)`,`labels`,`author`,`createdAt`,`commentCount`,`body` |
-| `PullRequest` | `number`,`title`,`state(.open/.merged/.closed)`,`head`,`base`,`author`,`updatedAt`,`additions`,`deletions`,`changedFileCount`,`mergeable` |
+| `PullRequest` | `number`,`title`,`state(.open/.merged/.closed)`,`head`,`base`,`author`,`updatedAt`,`additions`,`deletions`,`changedFileCount`,`mergeable`。⚠️ **列表端点只给一部分**：`additions` / `deletions` / `changedFileCount` **只有单个 PR 端点返回**（决策 #58）⇒ 列表卡片上不显示增删 |
 | `PullRequestState` | 三态枚举：开放 / 已合并 / 已关闭（**由 `state` + `mergedAt` 共同判定**） |
-| `Comment` | `id`,`author`,`createdAt`,`body`,`isReview`,`reviewState(.approved/.changesRequested/.commented)` |
+| `PullFile` | `path`,`additions`,`deletions`,`patch`（**可为空** —— 改动过大时 GitHub 不给该文件的 `patch`，那一片降级为"到网页端查看"，见 §9.9） |
+| `Comment` | `id`,`author`,`createdAt`,`body`,`isReview`,`reviewState(.approved/.changesRequested/.commented)`。⚠️ **两个来源**：会话评论走 `GET …/issues/{n}/comments`，评审（`reviewState`）走 `GET …/pulls/{n}/reviews` —— **决策 #60** |
 | `Commit` | `sha`,`message`,`author`,`committedAt`,`additions`,`deletions`,`files` |
 | `DiffHunk` / `DiffLine` | `header`；`kind(.context/.add/.delete)`,`oldLine`,`newLine`,`text` |
 | `Label` | `name`,`hexColor` |
@@ -751,6 +761,7 @@ View State（表现层，为 UI 量身裁剪，含 loading/empty/error）
 | 最近访问（全名 + 时间戳 + **当时是否可写**，≤6） | UserDefaults（JSON） | 同上 |
 | 收藏夹（`name` / `isDefault`）与归属映射 `favMap` | UserDefaults（JSON）或轻量文件夹 | 数据量小，无查询需求；**`count` 不落盘**，由映射推导（§9.12） |
 | 搜索历史（≤8） | UserDefaults | 同上 |
+| **未发完的评论草稿**（按仓库 + 编号） | UserDefaults | **决策 #59**：PRD §4.9 的提示条承诺「草稿已保留，可重试」⇒ 退出去再进来必须还在。键按「仓库 + 编号」隔离；`signOut()` ③ 步清空（草稿里可能含还没发布的正文） |
 | 当前分支（**按仓库**，`branchByRepo`） | UserDefaults（JSON） | **决策 #55**：PRD §3.10 的"退出登录时清空"要求它**跨启动存活** ⇒ 必须落盘（原文写"内存 + 可选 UserDefaults"把两件事并列了，现收口）。键前缀独立，作用域与两段式解析见 §9.4.1 |
 | 分区 / 滚动位置等页面态 | 内存 | 页面销毁即丢，无需持久化 |
 | 网络响应缓存 | 文件目录 + LRU（§5.1） | 大对象、可丢弃 |
@@ -1093,30 +1104,53 @@ enum Route: Hashable {
 
 | 功能 | 方案 |
 |---|---|
-| 列表（开放/已关闭） | `GET …/issues?state=`，⚠️ **必须过滤 `pull_request` 字段**（issues 端点会混入 PR） |
-| 详情 | REST 两次请求（issue + comments）或 **GraphQL 一次聚合**（§4.6.5） |
-| 新建 Issue | `POST …/issues`（title/body/labels）；标题为空时用占位标题（PRD 已定义） |
-| 标签多选 | 仓库标签库 `GET …/labels`；选中集合存 ViewModel |
-| 新建标签 | `POST …/labels`（`name` + `color`，**色值不带 `#`**）；重名 → GitHub 返回 422，客户端应提前本地去重并"已存在则自动选中" |
-| 评论发送 | `POST …/issues/{n}/comments`；失败保留草稿（本地内存 + 可选持久化） |
+| 列表（开放 / 已关闭 / 标签筛选） | `GET …/issues?state=open\|closed`（+ `?labels=a,b`），⚠️ **必须过滤 `pull_request` 字段**（issues 端点会混入 PR）。**筛选只按标签、走服务端**（决策 #56）：`labels` 逗号分隔即多选；**不做本地过滤** —— 本地只能筛已加载的那一页（30 条，其中还混着 PR），结果显著偏少且说明行的计数对不上（决策 #38 同一个坑） |
+| 计数 `{N}` | 与决策 #38 **同一口径**：**已加载的非 PR 条目数**（还有下一页时写 `N+`）。⚠️ 不用 `open_issues_count`（它把 PR 也算进去），也不额外打一次 Search 换精确值 |
+| 详情 | **REST 两次请求**（决策 #57）：`GET …/issues/{n}` + `GET …/issues/{n}/comments`。两次**可分别缓存、分别重试** —— 评论拉失败不该让正文也消失（这正是没选 GraphQL 聚合的理由之一） |
+| 新建 Issue | `POST …/issues`（`title` / `body` / `labels[]`）；标题为空时用占位标题（PRD §4.10 已定义） |
+| 标签多选 | 仓库标签库 `GET …/labels`；选中集合存 ViewModel（弹层内操作后即时刷新标签行，PRD §5.2） |
+| 新建标签 | `POST …/labels`（`name` + `color`，**色值不带 `#`**，6 位十六进制）；重名 → GitHub 返回 422，客户端**提前本地去重**并"已存在则自动选中"（不发那一次必败的请求） |
+| 评论发送 | `POST …/issues/{n}/comments`；失败保留草稿 |
+| 关闭 / 重新打开 Issue | **本期不做**（决策 #62）：PRD §4.9 与原型都没有这个入口。端点 `PATCH …/issues/{n}` 虽在 §4.6.2 表里，但那只是端点清单、不等于产品范围 |
 
-**草稿策略**：发送失败时草稿必须保留供重试（PRD 已定义该错误态）。建议草稿落到本地存储，避免用户返回再进来丢失。
+**草稿策略（决策 #59）**：发送失败时草稿必须保留供重试 —— PRD §4.9 的提示条逐字承诺「草稿已保留，可重试」⇒ **落 UserDefaults 持久化**（键按「仓库 + 编号」隔离，不与 `recentVisits` / `searchHistory` / `branchMemory` 共用），`signOut()` ③ 步清空（草稿里可能含还没发布的正文）。只留内存会让"返回再进来"丢掉草稿，那句承诺当场落空。
+
+#### 9.8.1 仓库详情的 Issues / Pull Requests 两段（切片 7 新增）
+
+这两段是 §4.4 四分区里的第二、三段，零件由切片 7 交付（决策 #50）。**与 §4.14 / §4.15 的探索页两段有意不同**（决策 #61）：
+
+| | 探索页（§4.14 / §4.15） | 仓库详情（§4.4 两段） |
+|---|---|---|
+| Issues 范围 | **只开放**（决策 #38） | **开放 + 已关闭** → 两档分段 |
+| PR 范围 | **开放 + 已合并**（决策 #39） | **开放 + 已合并** → 两档分段 |
+| Issue 卡片 | 状态图标 + 标题 + 副标题 | **多一枚标签胶囊**（原型 `05-repo.js:127`） |
+| PR 卡片 | 状态图标 + 标题 + `#N · head → base` | **多一行** `{作者} 更新于 {时间}`（**无增删** —— 列表端点不返回，决策 #58） |
+| 新建入口 | 无 | Issues 段有「＋ 新建 Issue」；PR 段**无**（PRD §4.4 明确） |
+| 筛选 | 无 | Issues 段有「筛选」（**只按标签**，决策 #56） |
+
+- **组件落点**：`IssueCard` / `PullCard` **移出** `Features/Explore/`，落到 `Features/Repo/Components/`（本片主场），探索页改为引用它们。判据是「**同一个 UI 元素有两处定义 ⇒ 必然分叉**」（6.4d 的 `RepoTreeSection` 已有先例）。两处形态差异靠**参数**表达（标签数组、作者与时间行），**不靠复制组件**。
+- **切换分档要重新取数**（`state=` 变了），**不是本地过滤**；每档各自持有分页游标与失败态。
+- **配额**：全部落主桶（`.core`），与 §4.14 / §4.15 同一桶。
 
 ### 9.9 Pull Request 模块
 
-- 详情头部：`GET …/pulls/{n}`；三态判定 = `state` + `merged_at`。
-- **对话**：评论走 `GET/POST …/issues/{n}/comments`（PR 会话）；评审评论走 `GET …/pulls/{n}/comments`，含 `APPROVED` / `CHANGES_REQUESTED` 状态胶囊。
-- **Commits**：`GET …/pulls/{n}/commits`，可点入提交详情（透传只读态）。
-- **文件**：`GET …/pulls/{n}/files`，逐文件 `patch` → 解析为 `DiffCard`（§11.2）。PRD 明确指出的是"点击文件卡片展开 diff"，即**折叠态按需渲染**——正好配合 diff 解析的惰性化（大 PR 只解析可见文件）。
-- **diff 原文兜底**：单文件 `patch` 缺失（大文件）时，可退回 PR 级 `application/vnd.github.diff` 并按文件切分。
+- 详情头部：`GET …/pulls/{n}`；三态判定 = `state` + `merged_at`（`open` / `merged` / `closed`，判定规则见 `PullRequestState.init(state:mergedAt:)`）。
+- **对话**：会话评论走 `GET/POST …/issues/{n}/comments`（**PR 的时间线就是 issue 评论**，这也是 `POST` 发评论的落点）；**评审（"谁批准了"）走 `GET …/pulls/{n}/reviews`**（决策 #60，**不是** `/comments`）。
+  ⚠️ **两个端点不是一回事**：`/pulls/{n}/comments` 是**行内评论**（带 `path` / `line`），本身**不含**审批状态；`/pulls/{n}/reviews` 的 `state` 才是 `APPROVED` / `CHANGES_REQUESTED` / `COMMENTED` / `DISMISSED` / `PENDING`（官方枚举 `PullRequestReviewState`）。原型评论上那枚「已批准」胶囊来自后者。两者按**作者 + 时间**合进同一条时间线——会话评论与评审在屏幕上本来就是一条流。
+- **Commits**：`GET …/pulls/{n}/commits`，可点入提交详情（**透传只读态**）。
+- **文件**：`GET …/pulls/{n}/files`，逐文件 `patch` → 解析为 `DiffCard`（§11.2）。PRD 明确的是"点击文件卡片展开 diff"，即**折叠态按需渲染** —— 正好配合 diff 解析的惰性化（大 PR 只解析可见文件）。
+  - **PR 侧多文件 diff 边界**是本片的验证方式（决策 #50 把 §11.2 的解析器提前到了切片 6，这里验的是"**多个文件、各自的 hunk 边界都不串**"）：一个 PR 的 `files[]` 里每个文件是**独立的一份 patch**、各自从头开始编号，**不能**当一份连续的 diff 解析。
+  - **diff 原文兜底**：单文件 `patch` 缺失（大文件，GitHub 对超大 diff 不给 `patch` 字段）时，该文件**显示"改动过大，请到网页端查看"**并从 `RepoWebLinks` 走跳转 —— 本片**不**退回 PR 级 `application/vnd.github.diff` 再切分（那是"自己实现一个 diff 分段器"，而 §9.9 原文只是"可退回"、不是必须；真实触碰面很小，代价却是一整块新解析逻辑）。已登记为有意偏差。
 - **操作区状态机**（对应 PRD §4.11）：
 
 | 条件 | 可用操作 |
 |---|---|
 | 他人仓库 | 仅评论（提示无合并/关闭权限） |
-| 自己的仓库 + open | 合并（三方式）/ 关闭 |
-| 自己的仓库 + closed | 重新打开 |
+| 自己的仓库 + open | 合并（三方式，`PUT …/pulls/{n}/merge`）/ 关闭（`PATCH …/pulls/{n}`） |
+| 自己的仓库 + closed | 重新打开（`PATCH …/pulls/{n}`） |
 | 自己的仓库 + merged | 无操作 + **隐藏评论输入区**（讨论已锁定） |
+
+- **合并的三种结局**（与 §9.7.1 的 merges 分支合并同源，`PUT …/pulls/{n}/merge`）：**200** 真合并 / **405**「这个 PR 不能被合并」（已合并过、或 draft）/ **409** 冲突 ⇒ 三种都要分开说，**不能**折成一句"合并失败"。三种方式一一对应 `merge_method: merge \| squash \| rebase`。
 
 ### 9.10 探索
 
