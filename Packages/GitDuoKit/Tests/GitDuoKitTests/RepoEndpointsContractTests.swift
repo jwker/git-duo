@@ -102,4 +102,23 @@ struct RepoEndpointsContractTests {
         let _: any RepositorySearchDataSource = GitHubSearchRepositoriesEndpoint(client: client)
         let _: any SearchDataSource = GitHubSearchDataSource(client: client)
     }
+
+    // MARK: - 切片 9（我的页 / 我的会话）
+
+    @Test("⚠️ 切片 9 的两条接缝 —— 9.1 立协议、9.2 接上，这里钉住它们**没有掉下来**")
+    func sliceNineSeams() {
+        // 一条是**空的**扩展体（那个端点的方法签名与协议逐字一致）——
+        // 删掉它编译照样过、其余测试照样绿，所以必须有这一行。
+        let _: any ConversationSearchEndpoint = GitHubSearchIssuesEndpoint(client: client)
+
+        // 另一条跨两个端点类型（一个 REST、一个 GraphQL），所以是"凑齐"的类型：
+        // 它同时说明两件事 —— 两个端点的方法名没被改过、两个客户端的装配签名没被改过。
+        let _: any ProfileDataSource = GitHubProfileDataSource(
+            restClient: client,
+            graphQLClient: graphQLClient
+        )
+
+        // 适配器那一侧（生产实现）也各用一次：它俩是组合根真正要装配的东西。
+        let _: any MyConversationsDataSource = GitHubMyConversationsDataSource(client: client)
+    }
 }

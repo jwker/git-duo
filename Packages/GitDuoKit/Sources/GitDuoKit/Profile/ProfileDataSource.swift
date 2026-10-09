@@ -22,11 +22,16 @@ import GitHubAPI
 /// 产品语义"的唯一所在，它必须能被单测（App target 没有测试 target）。
 /// 所以适配器只负责"把端点回的东西原样端出来"，不在这里做翻译。
 ///
-/// ## 生产实现落在切片 9.2
+/// ## 生产实现（切片 9.2 已接上）
 ///
 /// 与切片 8 的处置相同（8.1 立协议、8.2 接端点）：本协议由本包声明、
-/// 由本包的单测做替身；真实实现是一个把 REST 的 `/user` 与 GraphQL 的 `viewer`
+/// 由本包的单测做替身。真实实现是 `GitHubProfileDataSource` —— 一个把 REST 的
+/// `GitHubViewerProfileEndpoint` 与 GraphQL 的 `GitHubViewerActivityEndpoint`
 /// 凑齐的包装类型（对照 `GitHubSearchEndpoints`）。
+///
+/// ⚠️ 那个类型是**纯转发、没有规则**，所以它**没有专属测试套件** —— 装配由
+/// `RepoEndpointsContractTests.sliceNineSeams` 那一行保证（签名一改就编译不过）。
+/// 这一层真正被断言的是 `LoadProfileOverviewTests`（用脚本化替身测降级隔离）。
 public protocol ProfileDataSource: Sendable {
 
     /// `GET /user` —— 资料头部（昵称 / 简介 / 关注者数）。

@@ -40,9 +40,16 @@ public struct MyConversationHitPage: Sendable {
 ///
 /// `sort=updated&order=desc`（见 `MyConversationsQuery.sortParameter` / `sortOrder`）。
 /// 漏了**不会报错**，只会安静地按服务端的相关度排 —— 而屏幕上看起来完全正常
-/// （列表有内容、条数也对），只有用户会发现"顺序怪"。所以它写在协议说明里，
-/// 由本包的单测断言"这条路径确实按最近更新排"（替身按游标返回，顺序由它自己决定；
-/// 真实排序由 9.2 的适配器负责，`REVIEW-CHECKLIST` 第 147 条会目视核对）。
+/// （列表有内容、条数也对），只有用户会发现"顺序怪"。
+///
+/// ## 生产实现（切片 9.2 已接上）
+///
+/// 是 `GitHubMyConversationsDataSource`，它**收的是另一条更窄的接缝**
+/// （`ConversationSearchEndpoint`）而不是具体端点 —— 正因为上面那一条
+/// "漏了不报错"：收协议之后，"排序必须显式交出来"成了**协议要求**
+/// （协议声明不允许默认值），于是那件事可以在**不出网**的情况下被断言
+/// （`GitHubMyConversationsDataSourceTests` 9 条）。
+/// `REVIEW-CHECKLIST` 第 147 条仍会目视核对真实排序。
 ///
 /// ## 为什么按 `kind` 分发（而不是收一个 `SearchQueryPart`）
 ///

@@ -126,6 +126,62 @@ struct GitHubSearchIssuesEndpointTests {
         #expect(await limiter.nextAllowedAt(.codeSearch) == nil)
     }
 
+    // MARK: - 排序（切片 9.2 新增：`sort` / `order` 两个查询参数）
+
+    @Test("⚠️ `sort` / `order` 是**独立查询参数**（不进 `q`）—— 我的会话页要 `updated`（PRD §4.21）")
+    func passesSortAsQueryParameters() async throws {
+        // 塞进 `q` 里不会报错，只会**安静地按相关度排** —— 所以这条断言的是
+        // "它在查询串里，而不在 `q` 里"。
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(.json(envelope(items: "")))
+
+        _ = try await makeEndpoint(harness: harness, rateLimiter: makeRateLimiter())
+            .search(query: "author:@me is:pull-request", sort: "updated", order: "desc")
+
+        let url = try #require(harness.lastRequest?.url)
+        let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(items.first { $0.name == "sort" }?.value == "updated")
+        #expect(items.first { $0.name == "order" }?.value == "desc")
+        #expect(
+            items.first { $0.name == "q" }?.value == "author:@me is:pull-request",
+            "排序**不在** `q` 里 —— 两个位置各是一次真实的排序行为"
+        )
+    }
+
+    @Test("`sort` 为 `nil`（搜索页）⇒ `sort` 与 `order` **两个都不带** = 服务端 best match")
+    func omitsSortParametersWhenNil() async throws {
+        // `sort=best+match` 并不是一个合法取值 ⇒ 搜索页靠的正是"两个参数都不带"。
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(.json(envelope(items: "")))
+
+        _ = try await makeEndpoint(harness: harness, rateLimiter: makeRateLimiter())
+            .search(query: "swiftui is:issue", sort: nil)
+
+        let url = try #require(harness.lastRequest?.url)
+        let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(items.first { $0.name == "sort" } == nil)
+        #expect(items.first { $0.name == "order" } == nil)
+    }
+
+    @Test("⚠️ 续页那一路**不带** `sort` / `order`：游标是完整 URL，查询串已在里面")
+    func cursorRequestCarriesItsOwnQuery() async throws {
+        // 这条钉的是"只有第一页有序"那个隐患的**前提**：GitHub 把当前查询串回显在
+        // `Link` 头的 `rel="next"` 里，所以续页用原 URL 就够了（`search` 的说明记着这条依赖）。
+        // 一旦哪天它不回了，本用例仍然通过 —— 但那时**只有第一页有序**，
+        // 而这是目视最容易漏的一类问题（列表看起来完全正常）。
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(.json(envelope(items: "")))
+
+        let cursor = try #require(
+            URL(string: "https://api.github.com/search/issues?q=author%3A%40me&sort=updated&order=desc&page=2")
+        )
+        _ = try await makeEndpoint(harness: harness, rateLimiter: makeRateLimiter())
+            .search(query: "author:@me is:issue", cursor: cursor, sort: "updated", order: "desc")
+
+        #expect(harness.lastRequest?.url?.absoluteString == cursor.absoluteString)
+        #expect(harness.requestCount == 1, "续页只发一条 —— 不带额外参数、也不重发第一页")
+    }
+
     // MARK: - 解码（类型与合并判定都在这一段）
 
     @Test("解码 Issue：没有 pull_request 键 ⇒ isPullRequest 为 false")

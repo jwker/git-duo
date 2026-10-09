@@ -42,10 +42,29 @@ public struct GitHubSearchIssuesEndpoint: Sendable {
     /// - Parameter query: 完整的 `q=`，**必须含 `is:issue` 或 `is:pull-request`**
     ///   （理由见类型说明）。
     /// - Parameter cursor: 上一页的 `nextCursor`（**完整 URL**）；`nil` 取第一页。
+    /// - Parameter sort: **排序字段**（独立查询参数，取值如 `updated` / `created` / `comments`）。
+    ///   `nil` = 不带 `sort`，即服务端的**相关度**排序 —— 搜索页要的就是它。
+    ///
+    ///   ⚠️ 它与 `is:` 那种限定符**不是一回事**：把 `sort=updated` 塞进 `q=` 里不会报错，
+    ///   只会**安静地按相关度排**（屏幕上看起来完全正常，只有用户会发现"顺序怪"）。
+    ///   「我的 Pull Request / 我的 Issue」要的就是 `updated`（PRD §4.21）。
+    /// - Parameter order: `sort` 的配套方向，只在 `sort` 非空时生效。
+    ///
+    /// ## ⚠️ 续页那一路**不带** `sort` / `order`，这是有意的
+    ///
+    /// 第 2 页起用的是服务端在 `Link: rel="next"` 里给的**完整 URL**，而
+    /// GitHub 会把当前查询串原样带进那个链接 ⇒ `sort` / `order` 自然跟着走。
+    /// 再拼一遍不但多余，还会让"翻页后排序变了"这种问题**从两边都能出错**。
+    ///
+    /// 代价如实记在这里：这条性质**靠服务端把查询串回显在 `Link` 头里**。
+    /// 真变了的表现是**只有第一页有序**（而列表整体看起来仍然正常）——
+    /// `GitHubSearchIssuesEndpointTests` 里有一条断言"游标那一路用的就是原 URL"。
     public func search(
         query: String,
         perPage: Int = 30,
-        cursor: URL? = nil
+        cursor: URL? = nil,
+        sort: String? = nil,
+        order: String = "desc"
     ) async throws -> SearchResult<SearchConversationDTO> {
         let query = try SearchEndpointSupport.validatedQuery(query)
 
@@ -57,7 +76,12 @@ public struct GitHubSearchIssuesEndpoint: Sendable {
                 .get(
                     client.url(
                         "search/issues",
-                        query: SearchEndpointSupport.queryItems(query: query, perPage: perPage)
+                        query: SearchEndpointSupport.queryItems(
+                            query: query,
+                            perPage: perPage,
+                            sort: sort,
+                            order: order
+                        )
                     ),
                     rateLimitResource: .search
                 )

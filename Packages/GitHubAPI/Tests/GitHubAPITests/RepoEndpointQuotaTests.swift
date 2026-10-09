@@ -88,6 +88,52 @@ struct RepoEndpointQuotaTests {
     private static let emptyPage = StubURLProtocol.Response.json("[]")
     private static let noContent = StubURLProtocol.Response.empty(status: 204)
 
+    /// 跑一条路由，断言它落在**搜索桶**（切片 9.2 起需要：那里终于有一条**该**走搜索桶的路由）。
+    ///
+    /// 与 `assertCoreBucket` 是同一套探针，只是换了个断言方向 —— 两处都要有，
+    /// 因为 `.core` 与 `.search` 的"漏声明"会往两个相反的方向错：
+    /// 该主桶的落到搜索桶 ⇒ 30/分钟那个桶会被打爆；
+    /// 该搜索桶的落到主桶 ⇒ 主桶被当不限速用（§4.5），而两者都**不会报错**。
+    private func assertSearchBucket(
+        _ route: String,
+        stub response: StubURLProtocol.Response,
+        body: @Sendable (GitHubRESTClient) async throws -> Void
+    ) async {
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(response)
+
+        let clock = now
+        let limiter = RateLimiter(
+            policies: Self.probePolicies,
+            clock: { clock },
+            sleeper: { _ in }
+        )
+        let client = GitHubRESTClient(
+            credentials: credentials,
+            transport: HTTPTransport(
+                credentials: credentials,
+                session: harness.makeSession(),
+                cache: HTTPResponseCache(configuration: .memoryOnly()),
+                rateLimiter: limiter,
+                retryPolicy: .none,
+                clock: { clock },
+                sleeper: { _ in }
+            )
+        )
+
+        do {
+            try await body(client)
+        } catch {
+            Issue.record("\(route)：请求本身失败了（\(error)）—— 这一条要先修好再看配额")
+            return
+        }
+
+        #expect(await limiter.nextAllowedAt(.search) != nil, "\(route)：没有落在搜索桶")
+        #expect(await limiter.nextAllowedAt(.core) == nil, "\(route)：误用了主桶（它只有 30 次/分钟）")
+        #expect(await limiter.nextAllowedAt(.codeSearch) == nil, "\(route)：误用了代码搜索桶")
+        #expect(await limiter.nextAllowedAt(.graphql) == nil, "\(route)：误用了 GraphQL 桶")
+    }
+
     private static let fileJSON = StubURLProtocol.Response.json(
         #"{"name":"f","path":"f","sha":"s","size":1,"type":"file","encoding":"base64","content":"aA=="}"#
     )
@@ -313,7 +359,7 @@ struct RepoEndpointQuotaTests {
 
     // MARK: - 默认会话不挂 URLCache（决策 #32）
 
-    @Test("七个端点的**默认**会话都不挂 URLCache（决策 #32：令牌会跟着序列化请求对象落盘）")
+    @Test("九个端点的**默认**会话都不挂 URLCache（决策 #32：令牌会跟着序列化请求对象落盘）")
     func defaultSessionsDoNotUseURLCache() {
         let plain = GitHubRESTClient(credentials: credentials)
 
@@ -325,5 +371,39 @@ struct RepoEndpointQuotaTests {
         #expect(GitHubRepoIssuesEndpoint(client: plain).session.configuration.urlCache == nil)
         #expect(GitHubRepoPullsEndpoint(client: plain).session.configuration.urlCache == nil)
         #expect(GitHubRepoLabelsEndpoint(client: plain).session.configuration.urlCache == nil)
+        // 切片 9 两个（资料读 + 我的会话列表）
+        #expect(GitHubViewerProfileEndpoint(client: plain).session.configuration.urlCache == nil)
+        #expect(GitHubSearchIssuesEndpoint(client: plain).session.configuration.urlCache == nil)
     }
+
+    // MARK: - 切片 9（我的页 / 我的会话）
+
+    @Test("`GET /user`（我的页资料）—— 主桶")
+    func viewerProfileIsCore() async {
+        await assertCoreBucket("user（资料）", stub: Self.viewerProfileJSON) { client in
+            _ = try await GitHubViewerProfileEndpoint(client: client).loadProfile()
+        }
+    }
+
+    @Test("⚠️ 我的会话列表 —— **搜索桶**（与搜索页共用；单条 part ⇒ 每翻一页 1 格）")
+    func myConversationsUsesSearchBucket() async {
+        // ⚠️ 这一条与上面整片"全部主桶"相反，是本项目**第二条**该走搜索桶的路由
+        //   （第一条是搜索页自己）。它落到主桶时**不会报错** —— 表现是搜索桶的
+        //   30 次/分钟从没被算过，而这一页其实在悄悄地用别人（搜索页）的额度。
+        await assertSearchBucket("search/issues（我的会话）", stub: Self.searchIssuesJSON) { client in
+            _ = try await GitHubSearchIssuesEndpoint(client: client).search(
+                query: "author:@me is:pull-request",
+                sort: "updated",
+                order: "desc"
+            )
+        }
+    }
+
+    private static let viewerProfileJSON = StubURLProtocol.Response.json(
+        #"{"login":"octocat","name":null,"bio":null,"followers":1}"#
+    )
+
+    private static let searchIssuesJSON = StubURLProtocol.Response.json(
+        #"{"total_count":0,"incomplete_results":false,"items":[]}"#
+    )
 }
