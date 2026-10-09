@@ -124,75 +124,89 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 >
 > ⚠️ **这条漂移不是纸面问题，它当场害我推错一次方向**：2026-10-09 用户报回「已 Star 报『操作失败 请重试』」，
 > 我读到这行「⬜ 待自查」，就当成"App 缺 `Starring` 权限"、把这一条定性为**外部配置没做**。
-> 而 P2 其实早就确认过 6 条 ⇒ **"声明里有"与"手里那张令牌里有"是两件事**（真实成因见下）。
+> 而 P2 其实早就确认过 6 条 ⇒ **那一跳本身也是错的**（真实成因见下：根本不是权限级别的事，
+> 而是"仓库不在 App 安装范围内"—— 同一个错误措辞的另一种成因）。
 
-### 🔴 P2 已过 ≠ 令牌带 `Starring` ≠ `Starring` 的**级别**够（走查 #3 那条 403 的处置）
+### 🔴 P2 已过 ≠ 令牌带 `Starring` ≠ `Starring` 的**级别**够（走查 #3 那条 403）—— **2026-10-09 实测定案**
 
 **现象**：走查 #129 / #3 —— 点「已 Star」报 `操作失败 请重试`；且**仓库详情页那一颗也失败**（两处同一个通道）。
 
-**✅ 2026-10-09 结案（真机实测，抓到了服务端原话）**
+**✅ 结案（真机探针 · 服务端原话 · 同一次运行内的对照实验）**
 
 用户先做了那条"1 分钟自查"（退出登录 → 重新登录 → 点一颗已 Star）—— `仍然报错`；
-随后确认设置页上 `Starring` **本来就是 Read and write**。两条都不能解释现象 ⇒ 加了一处**临时**诊断
-（`GitDuo/App/StarProbe.swift`，DEBUG-only，**用完即删**），在这台真机上用与 App **逐字相同**的请求头把原话取回来：
+随后确认设置页上 `Starring` **本来就是 Read and write**。两条都解释不了现象 ⇒ 加了一处**临时**诊断
+（`GitDuo/App/StarProbe.swift`，DEBUG-only，**用完即删**），在这台真机上用与 App **逐字相同**的请求头把原话取回来。
+
+**第一轮**（只测了别人的仓库）看起来像"令牌缺 write"：
 
 | 请求 | 结果 | `x-accepted-github-permissions` |
 |---|---|---|
 | `GET /user/starred?per_page=1` | **200** | `starring=read` |
-| `GET /user/starred/{o}/{r}` | **204** | `metadata=read,starring=read` |
-| `DELETE /user/starred/{o}/{r}` | **403** | `starring=write,metadata=read` |
-| `PUT /user/starred/{o}/{r}` | **403** | `starring=write,metadata=read` |
+| `GET /user/starred/{o}/{r}`（别人的） | **204** | `metadata=read,starring=read` |
+| `DELETE` / `PUT /user/starred/{o}/{r}`（别人的） | **403** | `starring=write,metadata=read` |
 
-两个 403 的体都是 `{"message":"Resource not accessible by integration"}` ——
-**这是 GitHub 对"App 令牌权限不足"的标准措辞**（不是"你这个人 / 这个仓库没权限"）。
-⇒ **定论：手里这张令牌满足 `starring=read`、不满足 `starring=write`。**
+⚠️ **但这一轮缺对照组，所以它推出的"令牌缺 write"是错的。** 补上对照才看清：
 
-#### ⚠️ 而且现象本身就带答案 —— **"读"通不通**能把剩下两种成因分开
+| 组 | 仓库 | 归属 | 私有 | 读 | 写 |
+|---|---|---|---|---|---|
+| **A** | `jwker/my-blog` | **本人拥有** | 否 | 404（未 Star） | **204 ✅** |
+| **A** | `jwker/crawl-douban-top250-github-action` | **本人拥有** | 是 | 204 | **204 ✅** |
+| **B** | `github/gitignore` | 别人的 | 否 | 404 | **403 ❌** |
+| **C** | `robbietilton/Compositor`（用户原报错那个） | 别人的 | 否 | 204 | **403 ❌** |
+| **D** | `github/gitignore` 改走 **GraphQL `addStar`** | 别人的 | 否 | — | **403 ❌**（`errors[0].message` 同为 `Resource not accessible by integration`） |
 
-这条是本次查明的最有用的一点。`Starring` 这一项**读**与**写**是同一个下拉框的两个值，
-而这个 App 用它的地方刚好两半都有：
+**同一张令牌 / 同一组请求头 / 同一次运行**，唯一变量是"**仓库属于谁**"。
+`GET /user/installations` → 只有 **1 个安装：`jwker`（`repository_selection=all`）**。
 
-| 用到的地方 | 需要 | 本次表现 |
+⇒ **定案：GitHub App 的用户令牌，写操作被限制在「App 安装范围内的仓库」。**
+- **写的能力本身是有的** —— 自己的仓库，公开 / 私有**都能写**。
+- 403 只出现在"仓库不属于安装账号"时；且 **REST 与 GraphQL 两条路径同样被拒** ⇒ 是**权限层的判断**，不是请求形状。
+- 社区里已有人报告同一现象（[#59559](https://github.com/orgs/community/discussions/59559)，2024-08 与 2025-08 两条），
+  两次的落点都是**改用 OAuth App**。
+
+> ❌ **我在这条上连着判错三次，全错**（记在这里防复犯）：
+> ① "App 缺 `Starring` 权限"（依据是一行漂了三天的状态列）；
+> ② "账号级权限改过、旧令牌不会自动获得 ⇒ 重新登录就好"（**用户照做了，没用**）；
+> ③ "App 申报的级别是 Read-only"（**用户回：starring本来就已经是 Read and write** —— 他是对的）。
+> **三次错在同一个未检验的前提**：把**端点要求的权限头**（`x-accepted-github-permissions: starring=write`）
+> 当成了**令牌实际拥有权限**的证据 —— 那个头只说"这个端点**要**什么"，**不说"你手里有什么"**。
+> ⚠️ 更具体地说：`Resource not accessible by integration` 只说明"**App 这一层**没通过"，
+> **不说明是级别不够** —— 它同样可以来自"这个仓库不在 App 的安装范围内"。**措辞相同、成因不同，我默认了前者。**
+>
+> 📌 **判据（写下来）：一个响应头、一个 200，只能证明它字面上说的事。**
+> 要判"令牌有什么"，就得做一次**该权限专属、结果可分辨**的操作。
+> 以及：**下结论前先补齐对照组** —— 真正定案的是"自己的仓库 vs 别人的仓库"这一对，
+> 不是任何单个测量。
+
+#### ⚠️ 三个仍然成立的事实（留着，别丢）
+
+- **官方对这个端点的要求**是 *"**`Starring` user permissions (write)** and **`Metadata` repository
+  permissions (read)**"* ⇒ B / C 两组那两条 403 的响应头写着 `starring=write,metadata=read` 是对的，
+  但**那只说明端点要什么**（见上一条判据）。
+- **官方原文里这一项叫 "user permissions"（用户级）**，而 App 设置页上它在 "Account permissions" 分组里
+  —— 同一个东西的两个叫法。别在设置页上找不到 "user permissions" 就以为没有这一项。
+- ⚠️ **"读得到"不等于"令牌有读权限"**：`GET /user/starred`（列表）官方明写
+  *"can be used without authentication or the aforementioned permissions if only public resources are requested"*
+  ⇒ 拿它去反推"令牌有 `Starring` 读"**本身不成立**。
+
+#### ⏸️ **待拍板：这是产品级选择，不是排错**（不替你定）
+
+写 Star 对**别人的仓库**在当前架构下**不可能成功** ⇒ 只有两条路：
+
+| 选项 | 内容 | 代价 |
 |---|---|---|
-| 仓库详情页那颗按钮"我 Star 过没有"（`GET /user/starred/{o}/{r}`）+「我的 Star」列表 | **read** | ✅ **通过**（那颗按钮显示的是「**已 Star**」而不是「Star」，列表也有内容） |
-| 点下去那一下（`PUT` / `DELETE /user/starred/{o}/{r}`） | **write** | ❌ 403 ⇒ `操作失败 · 请重试` |
+| **A. 改用 OAuth App** | 授权改走 OAuth App（`scope=public_repo`；GitHub 自己在响应头里就写着 `x-accepted-oauth-scopes: public_repo, repo`） | **大**：`TECH_SPEC §3` 整块 · `GITHUB-APP-SETUP.md` · `GitDuoAuth` 与它的测试全要跟着改；权限粒度从"细粒度"退回 scope；令牌 `ghu_` → `gho_`；**刷新语义要重定**（OAuth App 的 classic 令牌默认不过期，除非启用 token expiration）。社区两次都是这么解决的 |
+| **B. 保留 GitHub App，UI 如实降级** | 对不在安装范围内的仓库，Star 按钮置灰 + 说明"该仓库所属账号未安装 GitDuo" | 小；但等于承认**收藏这个核心功能对绝大多数仓库不可用** |
+| **C. 只记账，不动** | 把这份实测留作证据，去 GitHub 社区 / issue 回一帖，等官方口径 | 零；功能仍不可用 |
 
-⇒ **写路径确认是缺的**：两个写请求都回 **403 + `{"message":"Resource not accessible by integration"}`**
-—— 这是 GitHub 对"**App 令牌权限不足**"的标准措辞（不是"这个人/这个仓库没权限"），
-且两个 403 的响应头都写着该端点**要求的**权限集 `starring=write,metadata=read`。
-⚠️ **"设置页上写着 Read and write"与它并不矛盾 —— 两者是两件事**：
-设置页看的是 App **当前的声明**，令牌带的是**授权那一刻的快照**；
-升级账号级权限**不会**让已发出去的令牌自动获得
-（`GITHUB-APP-SETUP.md §2.10` 那条 🔴，官方原文逐字在那一节）。
-依据是官方对本端点那句话：*"The fine-grained token must have the following permission set:
-**`Starring` user permissions (write)** …"*。
+⚠️ **可选的一分钟加固实验**：把 App 安装改成「Only select repositories」并**排除 `jwker/my-blog`**，
+再跑一次探针 —— 若自家那颗仓库也变成 403，就把「**安装范围**」（而非"归属"）钉成唯一变量。
 
-> ⚠️ **判据别记岔（2026-10-09 我自己在这上面连错三次）**：**"读得到"不等于"令牌有读权限"。**
-> `GET /user/starred`（列表）官方明写 *"can be used without authentication or the aforementioned permissions
-> if only public resources are requested"* ⇒ 拿它去反推"令牌有 `Starring` 读"**本身不成立**。
-> 真正定死结论的是**写请求那两条 403 的响应体**，不是读请求那两条 200/204。
-> 一般化的教训：**一个"看起来很像证据"的现象，要先问它"换一种成因还会不会这样"。**
-
-> ⚠️ **注意官方原文里那一项叫 "user permissions"（用户级），而 App 设置页上它在 "Account permissions" 分组里**
-> —— 同一个东西的两个叫法。别在设置页上找 "user permissions" 找不到就以为没有这一项。
-
-#### 处置（三步，**顺序不能换**；第 2 步是关键）
-
-| 步 | 做什么 | 为什么 |
-|---|---|---|
-| 1 | App 设置页（`https://github.com/settings/apps`）→ 你的 App → **Permissions & events** → *Account permissions* → **`Starring`** = **Read and write** | 声明管的是"以后发的令牌" |
-| 2 | **把 GitHub 侧那条授权真正撤掉**：`https://github.com/settings/connections/applications/Iv23liKmpmDl65pKlS1p` → **Revoke access** | ⚠️ **只在 App 里退出登录可能不算数**（见下那条缺陷）——旧授权活着，下次登录就可能复用它的权限快照 |
-| 3 | 回 GitDuo **退出登录 → 重新登录**，**并留意浏览器有没有出现授权页** | 出现 ⇒ 点同意 ⇒ 新令牌才带上 `write`；**不出现就说明又在复用旧授权** ⇒ 回到第 2 步 |
-
-> ✅ **为什么"退出登录 → 重新登录"可能白做**（2026-10-09 查得并**当场修掉的 App 侧缺陷**）
-> 登出撤销若没真的成功，GitHub 侧的授权（grant）会活着；下次登录就可能复用那条旧授权
-> ⇒ **新令牌仍带着旧的权限快照**。而 `AuthCoordinator.signOut` 原来有两处让"没成功"看不出来：
-> ① 撤销用的是 Keychain 里那张**可能已过期**的令牌（官方要求必须提供 **valid** `access_token`，
->    而 `ghu_` 只活 8 小时）—— 过期即失败，而失败只是降级成 `revokedLocallyOnly`；
-> ② `store.load()` 抛错时**根本没发撤销请求**，`outcome` 却仍是 `.revoked`（**谎报"已撤销"**）。
-> **两处都已修**（先改 `TECH_SPEC §3.6` 补两条 🔴，再改代码 + 两条测试）：
-> ① 改成"**先用手里那张试；失败才刷新一次、拿新令牌再试一次**"（成功路径不多花请求，失败路径不吃闷亏）；
-> ② 读不出凭据时如实降级为 `.revokedLocallyOnly`。
+> ℹ️ **顺带修掉的一个 App 侧缺陷**（**与本次 403 无关**，别混为一谈）
+> "退出登录 → 重新登录"曾可能白做：`AuthCoordinator.signOut` ① 撤销用的是 Keychain 里那张**可能已过期**的令牌
+> （该端点要求 **valid** `access_token`，而 `ghu_` 只活 8 小时）—— 失败只降级；② `store.load()` 抛错时
+> **根本没发撤销请求**，结局却仍是 `.revoked`（**谎报"已撤销"**）。**两处都已修**
+> （`TECH_SPEC §3.6` 先补两条 🔴，再改代码 + 两条测试）。
 
 > ✅ **已排除（2026-10-09，实测）**：**不是**请求组装的问题。官方对 `PUT /user/starred/{o}/{r}` 写着
 > *"you'll need to set `Content-Length` to zero when calling out to this endpoint"*，所以我们那条
@@ -203,11 +217,9 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 > ✅ **同时排除**：API 版本头（`2026-03-10` 服务端接受，实测 `GET /rate_limit` 回 200）、
 > 令牌类型（实测 `ghu_` = user-to-server，正是这类端点要的那种）、URL 形状（实测打印出的 URL 正确）、
 > 配额（`x-ratelimit-remaining` 四千多）。
-
-> ⏳ **待你回报**：第 2、3 步做完之后那一下是否成功（写请求是否从 403 变 204）。
-> 若**仍然 403** ⇒ 说明 App 声明的级别其实不是 `write`（那就回到第 1 步逐字核对）。
-> 工程侧已经把能验的都验完了：**端点 / 传输层 / 令牌注入 / 错误归一化 / API 版本 / 授权 URL / URL 形状 / `Content-Length` 全部排除**
-> ⇒ 剩下的变量只在 GitHub 侧的授权状态上。P1 / P4 / P5 / P6 按现状，P3 已结。
+>
+> 📌 **结案口径**：这条**不再是"待回报"**。用户做完三步后实测仍然"一样" —— 但真因不是权限级别，
+> 是上面那条「安装范围」限制。**P1 / P4 / P5 / P6 按现状，P3 已结，本项转入"待拍板"（A / B / C 三选一）。**
 
 ---
 
