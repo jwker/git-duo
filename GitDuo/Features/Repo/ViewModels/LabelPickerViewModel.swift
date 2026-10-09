@@ -42,13 +42,28 @@ final class LabelPickerViewModel {
     /// 取标签库失败。**与 `library` 并存** —— 重试时不该把已经拿到的那份抹掉。
     private(set) var loadError: GitHubError?
 
-    /// **新建**请求失败。
+    /// **弹层内**那一行（`nil` = 不显示）：名称为空、或请求本身失败。
     ///
-    /// ⚠️ 它与 `loadError` 是**两个操作的两个字段**，不能共用一个：
-    /// 共用的表现是"取库成功之后再新建失败 ⇒ 列表照画、而那句失败提示无处可去"，
+    /// ## ⚠️ 为什么它不是 `toast.show(…)`（决策 #77 / 偏差第 45 条）
+    ///
+    /// 提示条挂在**根容器**上，而弹层（`.sheet`）是一层**独立呈现** ⇒ **弹层开着时被整块盖住**。
+    /// 而这一支恰恰是**不关弹层**的那种（用户还得接着打字 / 再点一次）⇒
+    /// 走提示条的表现是"**点了没反应**"。
+    ///
+    /// ## ⚠️ 它与 `loadError` 是**两个操作的两个字段**，不能共用
+    ///
+    /// 共用的表现是"取库成功之后再新建失败 ⇒ 列表照画、而那句话无处可去"，
     /// 或者反过来（新建失败被当成"标签库没取到"、把已经拿到的整份列表换成一块失败块）。
     /// 而这两种都**不报错**，只是屏幕上少一句或错一块。
-    private(set) var createError: GitHubError?
+    /// （同理：本字段也**不**与"名称为空"共用一个布尔量 —— 那两句话不同。）
+    ///
+    /// ## ⚠️ 它取代了原先的 `createError: GitHubError?`
+    ///
+    /// 原先失败**抛给宿主**（`onFailure` 回调，宿主再 `toast.show(ActionCopy.failed)`），
+    /// 那是因为"弹层不认识提示通道"这条设计。而弹层内那一行**就是弹层自己的东西**
+    /// ⇒ 失败不再往外报，`createError` 随之失去唯一的读者（留着一个没人读的 `private(set)`
+    /// 字段，下一个读代码的人会以为它有用）。**文案一个字都没变**（`ActionCopy.failed`）。
+    private(set) var creationHint: String?
 
     /// 新建标签的名称输入。
     var newName = ""
@@ -93,7 +108,7 @@ final class LabelPickerViewModel {
     /// 点「创建并选中」。
     ///
     /// - Returns: 三种结局（`LabelCreation`）；`nil` = 这一发**没有结局** ——
-    ///   要么被在途守卫挡住（重入），要么真的发了请求但失败了（那一种看 `createError`）。
+    ///   被在途守卫挡住了（重入）。
     ///
     /// ⚠️ 空名与重名**不发请求**（`LabelCatalog.create` 提前本地挡掉），它们仍算"有结局"。
     ///
@@ -102,12 +117,17 @@ final class LabelPickerViewModel {
     /// 而"我建的标签去哪了"是一个必然会被问的问题。
     ///
     /// ⚠️ 失败**不降级成任何一种成功**：`LabelCatalog.create` 只把"重名"当成正常路径，
-    /// 其余（422 / 网络）都抛 —— 这里照原样收进 `createError`，由宿主给一句失败提示。
+    /// 其余（422 / 网络）都抛 —— 这里收成 `creationHint` 里那句通用失败提示
+    /// （**不再抛给宿主**：弹层内那一行就是弹层自己的东西，见 `creationHint` 的说明）。
+    ///
+    /// ⚠️ 三档里**只有"空名"与"失败"**会写 `creationHint` ——
+    /// 另外两档（重名 / 建成）弹层会**关掉**，那时照旧由宿主发提示条（看得见）。
     func create() async -> LabelCreation? {
         guard !isCreating else { return nil }
 
         isCreating = true
-        createError = nil
+        // 这一次的结果说了算，先清上一次的。
+        creationHint = nil
         defer { isCreating = false }
 
         do {
@@ -131,20 +151,29 @@ final class LabelPickerViewModel {
                 // 建完把输入框清掉：留着它，用户会以为没建成、再点一次。
                 newName = ""
 
-            case .alreadyExists, .emptyName:
-                // 两种都不是错误，是两条正常路径（提示 + 顺手选中）—— 由宿主给提示。
+            case .alreadyExists:
+                // 关弹层 ⇒ 由宿主发提示条（"已存在，已为你选中"），弹层内不留话。
                 break
+
+            case .emptyName:
+                // ⚠️ 这一档**不关弹层** ⇒ 话画在这里（`IssueCopy.emptyLabelNameHint`）。
+                creationHint = IssueCopy.emptyLabelNameHint
             }
 
             return result
         } catch {
-            createError = Self.failure(from: error)
+            // ⚠️ 请求失败同样**不关弹层**（用户还能改个名再试）⇒ 也画在弹层里。
+            //    文案取切片 7.4 收的那句通用正本（§5.2 没给这条路径的话）。
+            creationHint = ActionCopy.failed
             return nil
         }
     }
 
     /// 把任意错误收敛成 `GitHubError`（同其余 ViewModel：映射失败归 `.decoding`，
     /// **不是** `.transport` —— 后者会谎称网络问题、给出"检查网络"的错误引导）。
+    ///
+    /// ⚠️ 现在它**只服务 `load()`**（取标签库那一支）—— 新建那一支不再需要它，
+    /// 因为失败不再往外报类型、只写一句给用户看的话（见 `creationHint`）。
     private static func failure(from error: any Error) -> GitHubError {
         if let githubError = error as? GitHubError { return githubError }
         return .decoding(error)

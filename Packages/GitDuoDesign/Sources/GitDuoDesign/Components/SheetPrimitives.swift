@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// 弹层里的四件通用零件 —— 原型 `styles/05-overlays.css` 的 `.sheet-title` /
-/// `.sheet-row` / `.sheet-hint` / `.sheet-input`（+ `03-components.css` 的 `.btn`）。
+/// 弹层里的通用零件 —— 原型 `styles/05-overlays.css` 的 `.sheet-title` /
+/// `.sheet-row` / `.sheet-hint` / `.sheet-input`（+ `03-components.css` 的 `.btn`），
+/// 外加**一件原型里没有的**：`SheetFailureHint`（弹层内那个"**没成**"的一行，决策 **#77** ——
+/// 它与其余四件的来路不同：那四件是照抄原型，这一件是**从层级事实倒推出来**的，见它自己的说明）。
 ///
 /// ```css
 /// .sheet{padding:8px 10px 12px}                       /* 容器内边距，由各弹层自己加 */
@@ -22,11 +24,20 @@ import SwiftUI
 /// 它们与 `Toast` / `ToastCenter` 同属**导航层原语**（`TECH_SPEC §8.4`），
 /// 放在设计包才能被切片 7 / 8 / 9 的弹层直接复用。
 ///
+/// ⚠️ **它们都还不知道自己被什么包着** —— 原型把它们与页面画在同一层，而 App 里弹层是独立呈现
+/// （`.sheet`）⇒ 同一句话的可见性会**静默反转**。`SheetFailureHint` 就是为此存在的：
+/// 它认得"我在弹层里"这件事（不挂根容器、不靠 `ToastCenter`）。
+///
 /// ⚠️ **已知的一处私有副本**：`Search/Components/UserProfileSheet.swift` 里那个
 /// `private struct SheetActionButton` 是本包 `ActionButton` 的复制品
 /// （切片 5 落地时设计包里还没有这一件）。收拢它是切片 7 / 8 动那一带时顺手的事，
 /// 已登记在 `REVIEW-CHECKLIST §5` —— 两处的 `.btn` 视觉是逐字相同的，
 /// 这里**不**顺手改切片 5 已验收的页面。
+///
+/// ⚠️ **已收拢的一处**（2026-10-09，决策 #77）：`RenameFileSheet` 里那段"失败时那一行"
+/// 原本是**裸写**的 `Text`（4 个修饰符），本件抽出时顺手换成了 `SheetFailureHint`
+/// —— 两者逐字等价（`caption` / `destructive` / 左对齐 / `Spacing.s`），
+/// 换掉的理由不是"改好看"而是**它马上要出现在第 5 处**（再抄三遍就是四份会各自漂移的副本）。
 ///
 /// ## 它们是内容层
 ///
@@ -294,6 +305,66 @@ public struct SheetHint: View {
     }
 }
 
+// MARK: - 失败行
+
+/// 弹层里"**这一下没成**"的那一行 —— 动作按钮**上方**、左对齐、危险色、**无底色**。
+///
+/// ## ⚠️ 它与 `NoticeBar` / `Toast` 的差别**就是它存在的理由**
+///
+/// | | 挂在哪 | 长什么样 | 弹层开着时 |
+/// |---|---|---|---|
+/// | `Toast`（`ToastCenter`）· `NoticeBar` | **根容器 / 页面里** | 圆角底 + 一行字 | ❌ **被弹层整块盖住** |
+/// | 本件 | 弹层**内部** | 只有一行字（无底色） | ✅ 它就在用户正在看的那一层 |
+///
+/// 这不是审美选择，是**层级事实**：`.sheet` 是一层独立呈现，挂在页面上的东西到不了它里面。
+/// ⇒ 决策 **#77** 把处置定成通则：**弹层留着 ⇒ 那句话画在弹层里；弹层关掉 ⇒ 照旧走提示条**。
+/// ⚠️ 反面就是走查报回的那个现象：文案、判定、单测全都对，而屏幕上**点了没反应**。
+///
+/// ## 形态**不是**本次新造的
+///
+/// 逐字来自 §5.16 的 `RenameFileSheet` —— 那一张弹层**原型里没有**（决策 #66），
+/// 当时只能自己定一行，定的就是这个（`caption` + `Palette.destructive` + 左对齐 + `Spacing.s` 内边距）。
+/// 本次把那份**裸写收拢进本件**，其余四处照抄它 —— 于是"没有原型参照"的那一次自拟，
+/// 成了"有原型"那几处（§5.2 / §5.6 / §5.13）的依据。全 App 只有这一份实现。
+///
+/// ## 为什么**不**复用 `NoticeBar`（换个位置放）
+///
+/// `NoticeBar` 是**页面里**的一条（原型 `#sendErr`）：它的圆角底色是"从正文里跳出来"用的；
+/// 而弹层内部本来就只有一列内容，这一行离它说明的那个输入框只有十几 pt ——
+/// 再加一层底会把它变成一个小方块、读起来像另一段内容。
+/// ⚠️ 两件**不许合并**：底色那件服务页面，本件服务弹层（同 `SheetRow` / `LinkRow` / `MenuRow`
+/// 三者不合并的理由 —— 数值与容器都不同，合了必有一处偏离）。
+///
+/// ## 判据 #43：它进设计包
+///
+/// 只收一个 `String`，不认识任何领域模型；文案由各 Feature / 领域层给
+/// （`FolderCopy.emptyName` / `duplicateInManagement` / `duplicateInRename` ·
+/// `IssueCopy.emptyLabelNameHint` · `ActionCopy.failed`）。
+public struct SheetFailureHint: View {
+
+    /// 字色。⚠️ 非 `private`：单测要能钉住"它取的是哪一档"（同 `SheetRow.titleColor`）。
+    var color: Color { Theme.Palette.destructive }
+
+    /// 字号那一档。同上，给单测。
+    var font: Font { Theme.Font.caption }
+
+    private let text: String
+
+    public init(_ text: String) {
+        self.text = text
+    }
+
+    public var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(color)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Theme.Spacing.s)
+            .padding(.top, Theme.Spacing.s)
+    }
+}
+
 // MARK: - 输入框
 
 /// 弹层里的单行输入（原型 `.sheet-input`）。
@@ -455,6 +526,10 @@ public struct SheetField: View {
         .padding(.top, Theme.Spacing.s)
 
         SheetHint("Merge 走 API · 冲突时引导到网页端处理")
+
+        // 决策 #77：弹层里"没成"的那一行 —— 位置就在动作按钮**上方**（原型没有这一形态，
+        // 见类型说明：它的存在理由是弹层把页面级的提示条盖住了）。
+        SheetFailureHint("收藏夹已存在")
 
         ActionButton(title: "合并", style: .primary, verticalPadding: 12, action: {})
         ActionButton(title: "取消", style: .ghost, verticalPadding: 12, action: {})

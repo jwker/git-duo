@@ -67,6 +67,21 @@ final class FoldersViewModel {
 
     var sheet: SheetRoute?
 
+    /// **弹层内**那一行校验提示（`nil` = 不显示）。
+    ///
+    /// ## ⚠️ 为什么它不是 `toast.show(…)`
+    ///
+    /// 提示条挂在**根容器**（`MainTabView`）上，而弹层是一层**独立呈现** ⇒
+    /// **弹层开着时提示条被整块盖住**。于是"点了创建却没反应"成了用户唯一能看到的现象
+    /// —— 而文案、判定、单测全都对（走查报回的就是这个，偏差第 **45** 条 / 决策 **#77**）。
+    ///
+    /// ⇒ 分工是：**弹层留着**的那几档写这里（视图把它画在动作按钮上方），
+    /// **关弹层**的那几档照旧 `toast.show(…)` —— 那时弹层已经不在了，提示条看得见。
+    ///
+    /// ⚠️ 它跟着**执行动作的人**走：创建与改名都在本类型里执行 ⇒ 状态在这里、由视图传给弹层。
+    /// （标签新建那个弹层是反例：动作在**它自己的** ViewModel 里执行 ⇒ 那边自己持有。）
+    private(set) var sheetHint: String?
+
     private let store: any FolderStore
     private let toast: ToastCenter
 
@@ -90,10 +105,13 @@ final class FoldersViewModel {
     // MARK: - 用户动作
 
     func openActions(_ summary: FolderSummary) {
+        // 开弹层先清一次：上一次那一行不该留到这一次（同 `sheet` 换值时不留旧快照的理由）。
+        sheetHint = nil
         sheet = .actions(name: summary.name, count: summary.itemCount)
     }
 
     func openCreate() {
+        sheetHint = nil
         sheet = .create
     }
 
@@ -103,7 +121,13 @@ final class FoldersViewModel {
     /// 仓库详情那个入口（§5.6 前半）的重名处置**有意不同**：提示"已为你选中"
     /// 并照样把仓库放进去 —— 两句话的差别就是那条行为差别的唯一可见证据
     /// （见 `FolderCopy.duplicateInManagement` 的说明，别合并）。
+    ///
+    /// ⚠️ 两条校验的提示落点是 **`sheetHint`（弹层内那一行）**，不是提示条 ——
+    /// 这两档**不关弹层**，而提示条会被弹层盖住（见 `sheetHint` 的说明 / 决策 #77）。
     func create(name: String) async {
+        // 这一次的结果说了算，先清上一次的。
+        sheetHint = nil
+
         switch await store.create(name: name) {
         case let .created(created):
             toast.show(FolderCopy.created(created))
@@ -111,27 +135,32 @@ final class FoldersViewModel {
             await load()
 
         case .duplicate:
-            toast.show(FolderCopy.duplicateInManagement)
+            sheetHint = FolderCopy.duplicateInManagement
 
         case .emptyName:
-            toast.show(FolderCopy.emptyName)
+            sheetHint = FolderCopy.emptyName
         }
     }
 
     /// §5.13 重命名。
     ///
-    /// ⚠️ 四档的**可见差别**（PRD §5.13 逐条）：
+    /// ⚠️ 五档的**可见差别**（PRD §5.13 逐条）：
     ///
-    /// | 结果 | 弹层 | 提示 |
-    /// |---|---|---|
-    /// | 改名成功 | 关 | `已重命名为「{新名}」` |
-    /// | **与原名相同** | 关 | **不给任何提示** |
-    /// | 空名 / 与别的夹重名 | 留着 | 对应的那一句 |
+    /// | 结果 | 弹层 | 提示 | 落点 |
+    /// |---|---|---|---|
+    /// | 改名成功 | 关 | `已重命名为「{新名}」` | 提示条 |
+    /// | **与原名相同** | 关 | **不给任何提示** | — |
+    /// | 空名 / 与别的夹重名 | **留着** | 对应的那一句 | **弹层内那一行**（决策 #77） |
     ///
     /// 第二行是**有意**的（`FolderRenameOutcome.unchanged` 的说明）：它不是失败，
     /// 是"用户按了保存但等于没改"；对它报一句"已重命名为 X"会让用户下一次
     /// 怀疑别的提示也是假的。
+    ///
+    /// ⚠️ 第三列的落点不一样，正是因为**弹层留不留**：留着 ⇒ 提示条看不见（盖住），
+    /// 关掉 ⇒ 看得见。**别把两列合成一列**（合了必然有一处静默失效）。
     func rename(from oldName: String, to newName: String) async {
+        sheetHint = nil
+
         switch await store.rename(from: oldName, to: newName) {
         case let .renamed(_, to):
             toast.show(FolderCopy.renamed(to: to))
@@ -142,10 +171,10 @@ final class FoldersViewModel {
             sheet = nil
 
         case .emptyName:
-            toast.show(FolderCopy.emptyName)
+            sheetHint = FolderCopy.emptyName
 
         case .duplicate:
-            toast.show(FolderCopy.duplicateInRename)
+            sheetHint = FolderCopy.duplicateInRename
 
         case .protectedDefault:
             // 界面**不给**这一行入口（默认夹那一行不是按钮），这里是逻辑层的

@@ -62,6 +62,14 @@ final class ExploreRepoViewModel {
     /// 所以不存在"勾在哪"与"清单里有没有它"对不上的中间帧。
     private(set) var folderSummaries: [FolderSummary] = []
 
+    /// **弹层内**那一行校验提示（`nil` = 不显示）。
+    ///
+    /// ⚠️ 本页只有 `.emptyName` 那一档用它（新建收藏夹）。另外两档（建成 / 重名复用）
+    /// 都会**关掉弹层** ⇒ 照旧 `toast.show(…)` —— 弹层不在的时候提示条看得见。
+    /// 而 `.emptyName` 那一档**弹层留着**（用户还得接着打字），提示条会被弹层整块盖住
+    /// ⇒ 必须画在弹层里（决策 #77 / 偏差第 45 条；详见 `FoldersViewModel.sheetHint`）。
+    private(set) var sheetHint: String?
+
     /// 相对时间现算用的"现在"。由视图在渲染那刻传进来（见 `open` 处的说明）。
     var now: Date { .now }
 
@@ -234,11 +242,15 @@ final class ExploreRepoViewModel {
     /// ⚠️ 重名时走 **`duplicateInRepository`**（"已存在，已为你选中"）而不是管理页那一句
     /// —— 两个入口在这一步**有意不同**（§9.12），差别就在这半句话上。
     ///
-    /// - Returns: **这一张弹层该不该关**。空名 ⇒ `false`（留在弹层里改，同原型
-    ///   `createFav` 先 `toast` 再 `return`）；建成或重名复用 ⇒ `true`
-    ///   （原型两条路都是 `closeSheet()`）。弹层的 `sheet` 状态在本视图手上，
-    ///   所以由调用点据此决定 —— 在这里持有一个"该不该关"的布尔量会变成第二份真相。
+    /// - Returns: **这一张弹层该不该关**。空名 ⇒ `false`（留在弹层里改；提示画在**弹层内**，
+    ///   因为它这一档不关弹层 —— 提示条会被弹层盖住，决策 #77）；建成或重名复用 ⇒ `true`
+    ///   （原型两条路都是 `closeSheet()`；那两档关掉弹层之后照旧走提示条）。
+    ///   弹层的 `sheet` 状态在本视图手上，所以由调用点据此决定 ——
+    ///   在这里持有一个"该不该关"的布尔量会变成第二份真相。
     func createFolderAndFavorite(name: String) async -> Bool {
+        // 这一次的结果说了算，先清上一次的。
+        sheetHint = nil
+
         let outcome = await folders.createAndFavorite(name: name, repo: fullName)
         await loadFavorite()
 
@@ -250,7 +262,9 @@ final class ExploreRepoViewModel {
             toast.show(FolderCopy.duplicateInRepository)
             return true
         case .emptyName:
-            toast.show(FolderCopy.emptyName)
+            // ⚠️ 这一档 `return false`（弹层留着）—— 提示与返回值必须**同向**：
+            //    若哪天改成 `return true`，这句话就没人看得见了（弹层关掉、而它没走提示条）。
+            sheetHint = FolderCopy.emptyName
             return false
         }
     }

@@ -19,19 +19,23 @@ import SwiftUI
 /// 弹层本体**完全一样**（用户裁定的原话是"复用同一个弹层"）⇒
 /// 本件不认识任何一个宿主，差别全在回调里。
 ///
+/// ## ⚠️ 两条"没成"的路径**不再报给宿主**（2026-10-09 改口径，决策 #77）
+///
+/// 原先四条路径**全**报给宿主（三个 `onCreation` + 一个 `onFailure`），由宿主各给提示
+/// —— 因为"弹层不认识提示通道"这条设计。而**提示条会被弹层整块盖住**：
+/// 挂在根容器上，而弹层是一层独立呈现 ⇒ 空名与请求失败这两条**不关弹层**的路径
+/// 表现成"点了没反应"（走查第 4 条）。现在它们改成**弹层内那一行**
+/// （`SheetFailureHint`，位置在「创建并选中」按钮上方，读 `model.creationHint`）。
+///
+/// ⚠️ **剩下两条仍然报给宿主**：`.alreadyExists` / `.created` 会**关掉弹层** ⇒
+/// 那两句照旧走提示条（弹层不在的时候看得见），而且宿主还要顺手把标签**选中**。
+///
 /// ## ⚠️ 选中集合归**宿主**，不归本件
 ///
 /// 本件只收 `selected`（只读，用来画 `✓`）并通过 `onToggle` 通知变化。
 /// 理由：两处"变化之后要发生什么"不同，而那是宿主的决定 ——
 /// 弹层自己存一份的话，两处就会出现**两份选中状态**，
 /// 且它们会在"宿主重取数据之后"分叉（弹层那份还是旧的）。
-///
-/// ## ⚠️ 三条"新建"路径 + 一条"请求失败"，分成两个回调
-///
-/// §5.2 的校验两行 + 成功一路都是**正常产品路径**（`LabelCreation`，
-/// 领域层刻意不让它们变成 `throw`），而请求真失败是另一类。
-/// 两类分开报给宿主，宿主就能各给各的提示 —— 合成一个回调会让
-/// "失败的提示"与"校验的提示"在某一处被写成同一句话。
 ///
 /// ## 弹层自己负责关不关
 ///
@@ -55,11 +59,11 @@ struct LabelPickerSheet: View {
     /// 点一行 —— 增还是删由**宿主**决定（它才是选中集合的拥有者）。
     let onToggle: (GitDuoKit.Label) -> Void
 
-    /// 新建的三条正常路径之一发生了（校验两行 / 成功一路）。
+    /// 这条新建**有结局了、而且弹层要关了**（重名 / 建成两档）。
+    ///
+    /// ⚠️ **它不含"名为空"那一档** —— 那一档弹层不关，话画在弹层里（`creationHint`）。
+    /// 所以宿主拿到这个回调时通常要做两件事：给一句提示条 + 顺手选中那颗标签。
     let onCreation: (LabelCreation) -> Void
-
-    /// 新建的请求本身失败（§5.2 **未给**这条路径的文案 ⇒ 由宿主给一句通用提示）。
-    let onFailure: (GitHubError) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -75,13 +79,11 @@ struct LabelPickerSheet: View {
         fullName: String,
         selected: [GitDuoKit.Label],
         onToggle: @escaping (GitDuoKit.Label) -> Void,
-        onCreation: @escaping (LabelCreation) -> Void,
-        onFailure: @escaping (GitHubError) -> Void
+        onCreation: @escaping (LabelCreation) -> Void
     ) {
         self.selected = selected
         self.onToggle = onToggle
         self.onCreation = onCreation
-        self.onFailure = onFailure
         _model = State(initialValue: LabelPickerViewModel(catalog: catalog, fullName: fullName))
     }
 
@@ -102,6 +104,12 @@ struct LabelPickerSheet: View {
                 // 原型 `margin:12px 0 4px`。
                 .padding(.top, Theme.Spacing.m)
                 .padding(.bottom, Theme.Spacing.xs)
+
+            // 决策 #77：两条"没成"的路径画在这里 —— 空名与请求失败**都不关弹层**，
+            // 而提示条挂在根容器上、会被弹层整块盖住（偏差第 45 条）。
+            if let hint = model.creationHint {
+                SheetFailureHint(hint)
+            }
 
             ActionButton(
                 title: IssueCopy.createLabelAction,
@@ -227,21 +235,16 @@ struct LabelPickerSheet: View {
     // MARK: - 新建
 
     private func create() async {
-        let result = await model.create()
-
-        // ⚠️ 先看失败：`create()` 返回 `nil` 有两种含义（重入 / 请求失败），
-        //    而只有后者会留下 `createError`。分不清的话，请求失败会变成"点了没反应"。
-        if let error = model.createError {
-            onFailure(error)
-            return
-        }
-
-        guard let result else { return }
+        // ⚠️ `nil` 现在只有一种含义（被在途守卫挡住 ⇒ 什么都不做）。
+        //    原先它还有第二种（请求失败），那时要靠 `createError` 分 —— 现在失败
+        //    自己写进 `creationHint`，分类这件事不需要了（见 `LabelPickerViewModel.create()`）。
+        guard let result = await model.create() else { return }
 
         switch result {
         case .emptyName:
-            // **不关**：用户还得接着打字。
-            onCreation(result)
+            // ⚠️ **不关**：用户还得接着打字。话已经由 ViewModel 写进 `creationHint`、
+            //    画在按钮上方 —— **不再回调宿主**（回调了它也无事可做）。
+            break
 
         case .alreadyExists, .created:
             onCreation(result)
@@ -256,8 +259,7 @@ struct LabelPickerSheet: View {
         fullName: "my-git/gitduo",
         selected: [],
         onToggle: { _ in },
-        onCreation: { _ in },
-        onFailure: { _ in }
+        onCreation: { _ in }
     )
     .background(Theme.Palette.background)
 }

@@ -24,6 +24,12 @@ import SwiftUI
 ///
 /// 关不关、关掉之后要不要接着做别的（仓库入口要顺带收藏）全由宿主决定：
 /// 校验不过那一档**必须留着**弹层（用户还能改名再试）。
+///
+/// ## ⚠️ 校验不过的那句话**画在这里**（`hint`）
+///
+/// 它不由本件判定（判定在 `FolderStore`），但**由本件显示** —— 位置在「创建」按钮**上方**。
+/// 理由见 `FoldersViewModel.sheetHint`：提示条挂在根容器上、弹层开着时被整块盖住
+/// ⇒ **弹层留着**的那两档必须把话画在弹层里（决策 #77 / 偏差第 45 条）。
 struct NewFolderSheet: View {
 
     /// 从哪个入口打开 —— 只影响按钮文案。
@@ -46,6 +52,9 @@ struct NewFolderSheet: View {
 
     let entry: Entry
 
+    /// 校验不过时那一行（`nil` = 不显示）。由**宿主**持有（动作在它那里执行）。
+    let hint: String?
+
     /// 提交那个名字。**没有返回值** —— 关不关由宿主决定。
     let onCreate: (String) async -> Void
 
@@ -63,6 +72,11 @@ struct NewFolderSheet: View {
                 .padding(.horizontal, Theme.Spacing.s)
                 .padding(.top, Theme.Spacing.s)
                 .submitLabel(.done)
+
+            // 紧贴按钮上方 —— 它说的是"你刚才按的那一下为什么没成"。
+            if let hint {
+                SheetFailureHint(hint)
+            }
 
             ActionButton(
                 title: entry.confirmTitle,
@@ -90,7 +104,12 @@ struct NewFolderSheet: View {
     }
 }
 
-#Preview {
-    NewFolderSheet(entry: .management) { _ in }
+#Preview("没有校验问题") {
+    NewFolderSheet(entry: .management, hint: nil) { _ in }
+        .background(Theme.Palette.background)
+}
+
+#Preview("重名（管理页入口）") {
+    NewFolderSheet(entry: .management, hint: FolderCopy.duplicateInManagement) { _ in }
         .background(Theme.Palette.background)
 }

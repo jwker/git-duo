@@ -54,8 +54,12 @@ struct IssueCopyLabelSheetTests {
     }
 
     @Test("§7 的两句校验提示逐字（都不发请求）")
-    func labelSheetValidationToasts() {
-        #expect(IssueCopy.emptyLabelNameToast == "请先填写标签名称")
+    func labelSheetValidationCopy() {
+        // ⚠️ 这两句的**载体不同**（决策 #77）：空名那句**画在弹层内**
+        //（`emptyLabelNameHint` —— 弹层留着让用户接着打字，而提示条会被弹层盖住），
+        // 重名那句**走提示条**（`duplicateLabelToast` —— 那一档会关掉弹层，看得见）。
+        // 常量名里的 `Hint` / `Toast` 正是这条差别的记号，两个名字都不要"统一"。
+        #expect(IssueCopy.emptyLabelNameHint == "请先填写标签名称")
         #expect(IssueCopy.duplicateLabelToast == "标签已存在，已为你选中")
     }
 
@@ -64,11 +68,12 @@ struct IssueCopyLabelSheetTests {
         #expect(IssueCopy.labelCreatedToast(name: "performance") == "已创建标签 “performance”")
     }
 
-    @Test("⚠️ 两句 toast 与「已存在 / 空名」两条路径一一对应，且互不串用")
-    func toastsAreNotSwapped() {
-        // 两句都是 2.4 秒就消失的话，串用之后没有任何东西能提示你错了。
-        #expect(IssueCopy.emptyLabelNameToast != IssueCopy.duplicateLabelToast)
-        #expect(IssueCopy.emptyLabelNameToast.contains("填写"))
+    @Test("⚠️ 两句校验话与「已存在 / 空名」两条路径一一对应，且互不串用")
+    func validationCopyIsNotSwapped() {
+        // 两句都很短、都出现在同一个弹层那一段里，串用之后没有任何东西能提示你错了
+        // （空名那句会显示在弹层内、重名那句则随着弹层关闭一起被带走）。
+        #expect(IssueCopy.emptyLabelNameHint != IssueCopy.duplicateLabelToast)
+        #expect(IssueCopy.emptyLabelNameHint.contains("填写"))
         #expect(IssueCopy.duplicateLabelToast.contains("已存在"))
     }
 }

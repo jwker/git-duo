@@ -81,13 +81,15 @@ struct RenameFileSheet: View {
             SheetHint(FileCopy.renameSheetHint)
 
             if let failure {
-                Text(failure)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.destructive)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Theme.Spacing.s)
-                    .padding(.top, Theme.Spacing.s)
+                // ⚠️ 这一段原先**裸写在这里**（`Text` + 四个修饰符），2026-10-09 收拢进
+                //    `SheetFailureHint`（决策 #77）—— 同样的那四行马上要出现在第 5 处
+                //    （收藏夹新建 · 两个入口 / 收藏夹重命名 / 标签新建 · 两个宿主），
+                //    再抄三遍就是四份会各自漂移的副本。**形态逐字不变**。
+                //
+                // ⚠️ 本件是那个形态的**出处**：它原型里没有（§5.16 是新规格，决策 #66），
+                //    当时只能自己定一行 —— 定的就是这个。于是"没有原型参照"的那一次自拟，
+                //    成了"有原型"那几处（§5.2 / §5.6 / §5.13）的依据。
+                SheetFailureHint(failure)
             }
 
             ActionButton(

@@ -7,13 +7,22 @@ import SwiftUI
 /// 结构：标题 `重命名收藏夹` → 名称输入框（**预填当前名称**）→「保存」→「取消」。
 /// 原型出处：`scripts/11-favorites.js` 的 `renameFolderForm`（逐字）。
 ///
-/// ## ⚠️ 校验的失败提示走**轻提示**，不是输入框下面那一行
+/// ## ⚠️ 校验的失败提示画在**本弹层内**（2026-10-09 改口径，决策 #77）
 ///
 /// 原型的 `renameFolder` 三档分别是
-/// `toast('先输入收藏夹名称')` / `toast('已有同名收藏夹')` / **静默关闭**（与原名相同）
-/// —— 即"错误用 toast 说"。所以本件**没有** `failure` 那个内联行
-/// （`RenameFileSheet` 有，因为 §5.16 是一张没有原型参照的新规格，
-/// 那时只能自己定；这里有正本，就照正本）。
+/// `toast('先输入收藏夹名称')` / `toast('已有同名收藏夹')` / **静默关闭**（与原名相同），
+/// ⇒ 本件**最早**是按"照原型用 toast 说"写的，注释里当时写着一条处置：
+/// 「**这里有正本，就照正本**；`RenameFileSheet` 那种没有原型参照的新规格才自己定内联行」。
+///
+/// ⚠️ **那条处置在 App 里是错的**，而它在原型里是对的 —— 差别在**层级**：
+/// 原型的弹层与 toast 同属一层 DOM（`toast{z-index:90}` 直接盖在弹层上，看得见）；
+/// 而 App 的弹层是一层**独立呈现**，挂在根容器上的提示条**被整块盖住**。
+/// ⇒ 用户走查报回"点了保存没反应"（走查第 4 条）。现在前两档改成**弹层内那一行**
+/// （`SheetFailureHint`，位置在「保存」按钮上方、形态与 `RenameFileSheet` 逐字相同）；
+/// "与原名相同"那一档仍然静默关闭（它压根不该有提示）。
+///
+/// ⚠️ 这是**全 App 的通则**，不只本件：**弹层留着 ⇒ 话画在弹层里；弹层关掉 ⇒ 照旧走提示条**
+/// （正本：`TECH_SPEC §8.4` 决策 #77；与原型的不同处置登记在偏差第 45 条）。
 ///
 /// ## ⚠️ 判据一个字都不在这里
 ///
@@ -26,6 +35,9 @@ struct RenameFolderSheet: View {
     /// 当前名称 —— 输入框的预填值（§5.13 逐字）。
     let name: String
 
+    /// 校验不过时那一行（`nil` = 不显示）。由**宿主**持有（动作在它那里执行）。
+    let hint: String?
+
     /// 提交新名字。
     ///
     /// ⚠️ **没有返回值**：关不关弹层由宿主决定（成功与"没改"两档都关、
@@ -37,8 +49,9 @@ struct RenameFolderSheet: View {
 
     @State private var newName: String
 
-    init(name: String, onRename: @escaping (String) async -> Void) {
+    init(name: String, hint: String?, onRename: @escaping (String) async -> Void) {
         self.name = name
+        self.hint = hint
         self.onRename = onRename
         // ⚠️ **预填的是真值不是占位符**：用户不改就能直接提交。
         //    所以 `SheetField` 的 placeholder 给空串 —— 框里已经有一串字的时候
@@ -54,6 +67,11 @@ struct RenameFolderSheet: View {
                 .padding(.horizontal, Theme.Spacing.s)
                 .padding(.top, Theme.Spacing.s)
                 .submitLabel(.done)
+
+            // 紧贴按钮上方 —— 它说的是"你刚才按的那一下为什么没成"。
+            if let hint {
+                SheetFailureHint(hint)
+            }
 
             ActionButton(
                 title: FolderCopy.saveAction,
@@ -81,7 +99,12 @@ struct RenameFolderSheet: View {
     }
 }
 
-#Preview {
-    RenameFolderSheet(name: "前端好项目") { _ in }
+#Preview("没有校验问题") {
+    RenameFolderSheet(name: "前端好项目", hint: nil) { _ in }
+        .background(Theme.Palette.background)
+}
+
+#Preview("重名") {
+    RenameFolderSheet(name: "前端好项目", hint: FolderCopy.duplicateInRename) { _ in }
         .background(Theme.Palette.background)
 }

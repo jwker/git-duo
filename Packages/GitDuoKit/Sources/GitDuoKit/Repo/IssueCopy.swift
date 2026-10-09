@@ -171,7 +171,14 @@ public enum IssueCopy {
     public static let labelSheetHint = "新标签会保存到仓库标签列表，之后所有 Issue 都可直接选用"
 
     /// 名称为空（PRD §7 逐字）。
-    public static let emptyLabelNameToast = "请先填写标签名称"
+    ///
+    /// ⚠️ **载体是弹层内的一行，不是提示条**（决策 **#77**，2026-10-09）：
+    /// 这一档**不关弹层**（用户还得接着打字），而提示条挂在根容器上、会被弹层整块盖住
+    /// ⇒ 它画在「创建并选中」按钮**上方**。所以常量名里**不再带 `Toast`**
+    /// —— 名字说"这是提示条"而它在弹层里，下一次读代码的人就会照 `Toast` 去改它。
+    /// ⚠️ 同一段里另两句**照旧走提示条**（`duplicateLabelToast` / `labelCreatedToast`）：
+    /// 那两档会**关掉弹层**，弹层不在的时候提示条看得见。
+    public static let emptyLabelNameHint = "请先填写标签名称"
 
     /// 名称重复（PRD §7 逐字）。
     public static let duplicateLabelToast = "标签已存在，已为你选中"

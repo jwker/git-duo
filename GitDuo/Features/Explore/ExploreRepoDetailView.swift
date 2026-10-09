@@ -167,9 +167,9 @@ struct ExploreRepoDetailView: View {
 
             case .newFolder:
                 // §5.6 前半 —— 仓库详情入口，按钮是「创建并收藏」。
-                NewFolderSheet(entry: .repository) { name in
-                    // 空名 ⇒ 留在弹层里（模型回 `false`），只给一条提示；
-                    // 建成 / 重名复用 ⇒ 关掉（与原型的 `closeSheet()` 一致）。
+                // ⚠️ 空名那一档**弹层留着** ⇒ 提示画在弹层里（`model.sheetHint`，
+                //    决策 #77）；建成 / 重名复用两档**关弹层** ⇒ 照旧走提示条。
+                NewFolderSheet(entry: .repository, hint: model.sheetHint) { name in
                     Task {
                         if await model.createFolderAndFavorite(name: name) { sheet = nil }
                     }

@@ -198,7 +198,9 @@ struct FoldersView: View {
             )
 
         case let .rename(name):
-            RenameFolderSheet(name: name) { newName in
+            // ⚠️ `hint` 传的是**宿主**那一份（动作在 `FoldersViewModel` 里执行）
+            //    —— 弹层只负责把它画出来，一个字都不判。
+            RenameFolderSheet(name: name, hint: model.sheetHint) { newName in
                 await model.rename(from: name, to: newName)
             }
 
@@ -209,7 +211,9 @@ struct FoldersView: View {
 
         case .create:
             // **管理页入口**（§5.6 后半）：按钮是「创建」，只新建、不收藏任何仓库。
-            NewFolderSheet(entry: .management) { name in
+            // ⚠️ 重名与空名那两档**弹层留着** ⇒ 提示画在弹层里（`model.sheetHint`）；
+            //    建成功那一档**关弹层** ⇒ 照旧走提示条（决策 #77）。
+            NewFolderSheet(entry: .management, hint: model.sheetHint) { name in
                 await model.create(name: name)
             }
         }

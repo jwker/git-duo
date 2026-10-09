@@ -160,11 +160,15 @@ struct NewIssueView: View {
                 model.toggleLabel(label)
             },
             onCreation: { result in
-                // 三条正常路径的提示在这里给（弹层不认识 `ToastCenter`），
-                // 与 `RepoDetailView` 逐字相同 —— §7 的两句在领域层，这里只挑哪一句。
+                // ⚠️ 走到这里的**只有关弹层的那两条**（重名 / 建成）—— 决策 #77：
+                //    空名那一档弹层不关，话由弹层自己画在按钮上方，**不到这里来**。
+                // 与 `RepoDetailView` 逐字相同：§7 的两句在领域层，这里只挑哪一句。
                 switch result {
                 case .emptyName:
-                    toast.show(IssueCopy.emptyLabelNameToast)
+                    // 到不了（弹层自己说）。留着这一档只是因为 `LabelCreation` 是穷举的；
+                    // **这里不许再发一次提示** —— 两处都发会让同一件事说两遍，
+                    // 而其中一遍（提示条）还被弹层盖着。
+                    break
                 case let .alreadyExists(label):
                     toast.show(IssueCopy.duplicateLabelToast)
                     // "已存在"的语义就是"给你用上它"：顺手选中那一颗。
@@ -173,11 +177,6 @@ struct NewIssueView: View {
                     toast.show(IssueCopy.labelCreatedToast(name: label.name))
                     if !model.isSelected(label) { model.toggleLabel(label) }
                 }
-            },
-            onFailure: { _ in
-                // ⚠️ §5.2 **没有给**这条路径的文案（原型的数据是静态的，新建必成功）
-                //    ⇒ 用那句通用失败提示（`ActionCopy.failed`，切片 7.4 收的正本）。
-                toast.show(ActionCopy.failed)
             }
         )
     }

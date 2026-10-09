@@ -173,11 +173,13 @@ struct RepoDetailView: View {
                         }
                     },
                     onCreation: { result in
-                        // ⚠️ 三条正常路径的**提示**在这里给（弹层不认识 `ToastCenter`）。
+                        // ⚠️ 走到这里的**只有关弹层的那两条**（重名 / 建成）—— 决策 #77：
+                        //    空名那一档弹层不关，话由弹层自己画在按钮上方，**不到这里来**。
                         //    §7 的两句逐字在领域层，这里只负责挑哪一句。
                         switch result {
                         case .emptyName:
-                            env.toast.show(IssueCopy.emptyLabelNameToast)
+                            // 到不了（弹层自己说）。见 `NewIssueView` 那一处的同一条注释。
+                            break
                         case let .alreadyExists(label):
                             env.toast.show(IssueCopy.duplicateLabelToast)
                             // 顺手选中已经是筛选项的那颗（"已存在"的语义就是"给你用上它"）。
@@ -186,12 +188,6 @@ struct RepoDetailView: View {
                             env.toast.show(IssueCopy.labelCreatedToast(name: label.name))
                             Task { await model.selectIssueLabel(label) }
                         }
-                    },
-                    onFailure: { _ in
-                        // ⚠️ §5.2 **没有给**这条路径的文案（原型的数据是静态的，新建必成功）
-                        //    ⇒ 复用本页既有的那句通用失败提示（与 Star 失败同一句）。
-                        //    已登记为"规格未给"。
-                        env.toast.show(ActionCopy.failed)
                     }
                 )
                 .presentationDetents([.medium, .large])
