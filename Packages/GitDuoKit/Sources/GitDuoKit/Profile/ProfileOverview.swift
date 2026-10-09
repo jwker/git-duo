@@ -61,7 +61,22 @@ extension ProfileSection: Equatable where Value: Equatable {}
 /// 53 列全是最浅档。PRD §4.17 明写这种情形**照常画一张全空的图**、不给空态 ——
 /// "零贡献"是一个有意义的事实，与"没取到"（`.failure`）不是一回事。
 /// 类型上这两者也不一样，视图**没法**把它们画成同一种东西。
+///
+/// ## ⚠️ `year` 是"**这一份数据是拿哪一年换来的**"
+///
+/// 2026-10-09 加（用户走查第 2 条：热力图要能切年份）。它必须跟着数据走，
+/// 而不是放在视图的 `@State` 里：切换年份的那一瞬间，屏幕上是**旧一年的数据**，
+/// 而卡片右上如果照"我刚点的那一项"写字，就会出现"写着 2025、画的是 2026"
+/// —— 两个数**各自都是真的**，摆在一起才成了假话（同 `ViewerActivityDTO` 那条 `affiliations` 的教训）。
+///
+/// 所以口径是：**总数与年份是同一份数据的两面**，一起换；要换就得等新的回来。
 public struct ProfileOverview: Sendable {
+
+    /// 这一份结果对应的年份（`LoadProfileOverview.load(year:)` 的入参）。
+    ///
+    /// ⚠️ 即使 `identity` / `grid` 都失败了它也是有的 —— 失败的是"这一年的数"，
+    /// 不是"我们在问哪一年"。
+    public let year: ContributionYear
 
     public let identity: ProfileSection<ViewerProfile>
 
@@ -70,10 +85,12 @@ public struct ProfileOverview: Sendable {
     public let stats: ProfileStats
 
     public init(
+        year: ContributionYear,
         identity: ProfileSection<ViewerProfile>,
         grid: ProfileSection<ContributionGrid>,
         stats: ProfileStats
     ) {
+        self.year = year
         self.identity = identity
         self.grid = grid
         self.stats = stats

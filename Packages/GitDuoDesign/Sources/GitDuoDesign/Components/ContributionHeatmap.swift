@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 贡献热力图 —— 「我的」页那张 `1,024 次贡献 / 过去一年` + 一整年的方格图
+/// 贡献热力图 —— 「我的」页那张 `1,024 次贡献 / 2026 年` + 年份切换器 + 一整年的方格图
 /// （PRD §4.17 第 3 条、TECH_SPEC §9.14、决策 #74）。
 ///
 /// ```css
@@ -18,29 +18,32 @@ import SwiftUI
 /// **不是**新约定，是同一个约定在两边的名字。
 ///
 /// ⚠️ 本包**不认识** `ContributionGrid` / `ContributionDay` / `ContributionLevel`
-/// （依赖铁律：设计包不依赖领域包），所以跨包只走这个基础类型。
+/// （依赖铁律：设计包不依赖领域包），所以跨包只走基础类型：矩阵是 `[[Int?]]`、
+/// 月份表头是 `[MonthMark]`（列号 + 文案，文案由调用方从 `ProfileCopy` 取）、
+/// 年份是 `HeatmapYear`（数字 + 文案）。
 /// 「第几档」与「画哪个颜色」的对应关系见 `Theme.Palette.heatmapLevels` 的抬头。
 ///
-/// ## ⚠️⚠️ 格子尺寸**由可用宽度算出来**，不许写死
+/// ## ⚠️⚠️ 格子**固定 11pt**，放不下就横向滑动（2026-10-09 改，用户走查第 2 条）
 ///
-/// `TECH_SPEC §9.14` 末段：「53 周 × 7 天 = 371 格，格子边长与间距**必须由可用宽度
-/// 算出来**（容器尺寸 / size class），**不许写死像素**」。原型那两处 `11px` / `2.5px`
-/// 是**硬编码的演示值**，照抄就等于把"iPhone 只有一种宽度"写进代码。
+/// 原型那条 CSS 就是这两件事：`.hm-cell{width:11px;height:11px;gap:2.5px}` +
+/// `.hm-grid{overflow-x:auto}`。**两处都是回归原型**。
 ///
-/// 做法：网格只声明**比例**（`aspectRatio(columnCount:)` —— 用一个格子边长为单位
-/// 表示整张图该有多宽多高），交给 SwiftUI 按可用宽度铺满；`Canvas` 拿到的
-/// `size.width` 就是**真实的可用宽度**，再反算一格多大（`cellSize(forWidth:columnCount:)`）。
+/// 本组件此前写的是相反的口径（"格子边长由可用宽度反算、刻意不做横向滚动"，
+/// 见 `TECH_SPEC §9.14` 改前的末段），那是决策 #74 落地时自己换的，理由是
+/// "53 列滚动起来只能看见半年，会让「过去一年」那句变成假话"。**那句话现在没有了**
+/// （卡片右上改成年份切换器，写的是 `{年份} 年`）⇒ 那个理由随之消失，而用户的观感
+/// （格子太小、要能滑）成了唯一还站着的意见。
 ///
-/// **落地时量过一次（2026-10-09）**：iPhone 17 Pro（402pt 宽）上，
-/// 页面左右各 16pt、卡片左右各 14pt ⇒ 可用 **342pt** ⇒ 一格 **5.28pt**、
-/// 间距与圆角各 **1.20pt**、整图高 **44.1pt**。
-/// 格子很小，但热力图看的是**形状**不是单格数值，而 53 列铺满一屏正好是"一整年"的形状。
+/// ⚠️ **"不许写死像素"那条铁律仍然成立**，只是对象换了：它的原意是"不许假定
+/// iPhone 只有一种宽度"（不许用 `UIScreen.main`）。这里没有任何一处读屏幕尺寸 ——
+/// 放不下由滚动接管，11pt 是**原型的视觉值**。整张图的内容宽 =
+/// `53 × 11 + 52 × 2.5 ≈ 713pt`（iPhone 17 Pro 上卡片可用宽约 342pt ⇒ 约 2.1 屏）。
 ///
-/// ⚠️ **刻意不做横向滚动**：原型 `.hm-grid{overflow-x:auto}` 在 40 列时就已经溢出
-/// （实测 313pt 的可视宽、538pt 的内容宽 ⇒ 一屏只能看见 23 周）。
-/// 我们画的是 53 列，若照原型滚动就会**只看见半年** —— 而卡片右边写着「过去一年」，
-/// 那句话会变成假话。真要"更大的格子 + 横向滚动"，改一处即可：
-/// 把 `cellSize` 的结果夹到下限，并给 `Canvas` 外面套一个 `ScrollView(.horizontal)`。
+/// ## ⚠️ 默认停在**最右端**
+///
+/// PRD §4.17 的"默认停在当前月份附近"。窗口的结尾要么是"今天"（当前年），要么是
+/// 该年 12/31 ⇒ **最右永远是最新那一段**，所以 `.defaultScrollAnchor(.trailing)`
+/// 就是那句话的实现，不需要按月份算偏移量。
 ///
 /// ## 零贡献照常画（`levels` 非空、全是最浅档）
 ///
@@ -49,7 +52,7 @@ import SwiftUI
 /// 与"没取到"（整个卡片换成一行失败提示）在画面上完全不同。
 ///
 /// `levels` 真的**是空数组**时（`weeks: []` 这种畸形响应）只画头部那行字、
-/// 跳过网格 —— 而不是画一个零宽或零高的东西（那会得到一条细线，看着像渲染坏了）。
+/// 跳过表头与网格 —— 而不是画一个零宽或零高的东西（那会得到一条细线，看着像渲染坏了）。
 ///
 /// ## 它是内容层
 ///
@@ -62,22 +65,64 @@ public struct ContributionHeatmap: View {
     /// 跨包的两处声明同样连不起来（见 `heatmapLevels` 抬头那条说明）。
     ///
     /// ⚠️ **`nonisolated` 不是装饰**：本类型是 `View` ⇒ 隐式 `@MainActor`，
-    /// 而下面那几个"算尺寸"的纯函数是 `nonisolated` 的（要在单测里直接调）。
+    /// 而下面那几个"算坐标"的纯函数是 `nonisolated` 的（要在单测里直接调）。
     /// 漏了这个关键字不会编译不过，只会得到一串
     /// `main actor-isolated static property 'rowCount' can not be referenced from a nonisolated context`
     /// 的**警告** —— 而增量构建会把它吞掉，只有强制全量重编才看得见。
     public nonisolated static let rowCount = 7
+
+    /// 一格边长（pt）—— 原型 `.hm-cell{width:11px;height:11px}` 的**原值**。
+    ///
+    /// ⚠️ 这个数字**直接决定要不要横向滚动**：`53 × 11 + 52 × 2.5 ≈ 713pt` 在任何
+    /// iPhone 上都放不下 ⇒ 一定滚得动。改到 6 以下就会变成"能放下但看不清"，
+    /// 而那时滚动条空着、用户也说不清哪里不对。
+    public nonisolated static let cellSize: CGFloat = 11
 
     /// 间距与圆角**相对格子边长**的比例 —— 原型 `2.5px / 11px`。
     ///
     /// 原型把间距和圆角都写成 `2.5px`（`gap:2.5px` 与 `border-radius:2.5px`），
     /// 而格子是 `11px` ⇒ 一个比例同时管这两件事。
     ///
-    /// ⚠️ 别把它换算成一个固定的 pt 值：格子在 iPhone 上只有 5.28pt，
-    /// 而原型那个 `2.5px` 是在 11px 的格子上量的 —— 写死会让小格子看起来像"糊在一起"。
-    ///
     /// ⚠️ `nonisolated` 的理由同 `rowCount`（上面那条）。
     nonisolated static let unitRatio: CGFloat = 2.5 / 11
+
+    /// 月份表头那一行的高度（pt）。
+    ///
+    /// `Theme.Font.caption`（11pt）的行高约 13pt ⇒ 14 给一点余量。
+    /// ⚠️ 它**不参与** `unitRatio`：那是格子内部的几何，这是两个区块之间的间距。
+    public nonisolated static let monthRowHeight: CGFloat = 14
+
+    /// 间距（pt）= 原型 `2.5px`。
+    public nonisolated static var gap: CGFloat { cellSize * unitRatio }
+
+    /// 一格的**步进**（边长 + 间距）—— 列坐标与月份标签共用它，见 `xOffset(column:)`。
+    public nonisolated static var step: CGFloat { cellSize + gap }
+
+    /// 整张网格的高度（pt）：7 格 + 6 个间距 = 92。
+    public nonisolated static var gridHeight: CGFloat {
+        CGFloat(rowCount) * cellSize + CGFloat(rowCount - 1) * gap
+    }
+
+    /// x 轴一个月份标签（列号 + 文案）。
+    ///
+    /// ⚠️ 文案是**调用方给的**：本包不写 `1月` 这样的字 —— 那句话是文案，归领域层
+    /// 管（`ProfileCopy.monthLabel(_:)`）。设计包里写死一句等于把文案漏出铁律
+    /// （同下面那条"不给它编一句『贡献热力图』"）。
+    public struct MonthMark: Identifiable, Hashable, Sendable {
+
+        /// 列下标（0 = 最左那一周）。
+        public let column: Int
+
+        /// 挂在那一列上的字（`1月`）。
+        public let title: String
+
+        public var id: Int { column }
+
+        public init(column: Int, title: String) {
+            self.column = column
+            self.title = title
+        }
+    }
 
     /// 列 → 格子档位（`nil` = 补位，`0...4` = 档位）。形状同 `ContributionGrid.levelMatrix`。
     public let levels: [[Int?]]
@@ -86,81 +131,133 @@ public struct ContributionHeatmap: View {
     /// 都是领域层 `ProfileCopy.contributionCount(_:)` 的事（文案是契约）。
     public let totalText: String
 
-    /// 右上角那几个字（`过去一年`）。
-    public let rangeText: String
+    /// 网格上方那一排月份标签（领域层 `ContributionGrid.monthLabels` 给列号，
+    /// `ProfileCopy.monthLabel(_:)` 给字）。
+    public let monthMarks: [MonthMark]
 
-    public init(levels: [[Int?]], totalText: String, rangeText: String) {
+    /// 年份切换器上显示的字（`2026 年`）。
+    public let yearTitle: String
+
+    /// 年份切换器里的选项（顺序 = 菜单顺序）。
+    public let yearOptions: [HeatmapYear]
+
+    /// 当前选中的年份（`HeatmapYear.year`）。
+    ///
+    /// ⚠️ 它**必须与 `totalText` 来自同一份数据**：切换年份时总数与年份一起换，
+    /// 否则会出现"写着 2025、画的是 2026"（`ProfileOverview.year` 的说明）。
+    public let selectedYear: Int
+
+    /// 切换器的读屏标签（`ProfileCopy.heatmapYearAccessibilityLabel(year:)`）。
+    public let yearAccessibilityLabel: String
+
+    /// 选了某一年（传回 `HeatmapYear.year`）。
+    public let onSelectYear: (Int) -> Void
+
+    public init(
+        levels: [[Int?]],
+        totalText: String,
+        monthMarks: [MonthMark],
+        yearTitle: String,
+        yearOptions: [HeatmapYear],
+        selectedYear: Int,
+        yearAccessibilityLabel: String,
+        onSelectYear: @escaping (Int) -> Void
+    ) {
         self.levels = levels
         self.totalText = totalText
-        self.rangeText = rangeText
+        self.monthMarks = monthMarks
+        self.yearTitle = yearTitle
+        self.yearOptions = yearOptions
+        self.selectedYear = selectedYear
+        self.yearAccessibilityLabel = yearAccessibilityLabel
+        self.onSelectYear = onSelectYear
     }
 
     public var body: some View {
         CardBox(vertical: 14) {
             VStack(alignment: .leading, spacing: 0) {
-                header
+                HeatmapHeader(
+                    totalText: totalText,
+                    yearTitle: yearTitle,
+                    yearOptions: yearOptions,
+                    selectedYear: selectedYear,
+                    yearAccessibilityLabel: yearAccessibilityLabel,
+                    onSelectYear: onSelectYear
+                )
 
                 // 网格真的是空的（畸形响应）⇒ 只留头部那行字。
                 if !levels.isEmpty {
-                    Canvas { context, size in
-                        Self.draw(levels: levels, in: &context, size: size)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            monthRow
+                            grid
+                        }
+                        .frame(width: contentWidth, alignment: .leading)
                     }
-                    // 只声明比例，宽度交给 SwiftUI 铺满 —— 见类型说明的"格子尺寸由可用宽度算出来"。
-                    .aspectRatio(Self.aspectRatio(columnCount: levels.count), contentMode: .fit)
+                    // PRD §4.17：「默认停在当前月份附近」。窗口结尾是"今天"或该年 12/31
+                    // ⇒ 最右端就是最新那一段，见类型说明。
+                    .defaultScrollAnchor(.trailing)
                     // 371 个格子逐个念给读屏听没有意义（也没有逐格提示语可给），
-                    // 而"多少次贡献"那行本来就是可读文本 ⇒ 整块图对读屏隐藏。
+                    // 而"多少次贡献 + 哪一年"那行本来就是可读文本（还在切换器上）
+                    // ⇒ 整块图（含月份表头）对读屏隐藏。
                     // ⚠️ **不给它编一句 `贡献热力图` 这样的话**：那句话是文案，
                     // 归领域层管（`ProfileCopy`），设计包里写死一句等于把文案漏出铁律。
+                    // ⚠️ `.accessibilityHidden` 只挂在这个 `ScrollView` 上，
+                    // **不能挂到 `CardBox` 上** —— 那样会把年份切换器一起藏掉。
                     .accessibilityHidden(true)
                 }
             }
         }
     }
 
-    /// 头部那行：左边总数、右边时间范围（原型 `.row{margin-bottom:10px}`）。
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-            // 原型 `.t1`（15px/650）被内联改成 `font-size:14px` ⇒
-            // 最近的一档是 `rowTitle`（`.subheadline` 15），权重取 `.semibold`（600 ≈ 650）。
-            Text(totalText)
-                .font(Theme.Font.rowTitle.weight(.semibold))
-                .foregroundStyle(Theme.Palette.textPrimary)
-
-            Spacer(minLength: 0)
-
-            // 原型 `.t3`（11.5px / `--text3`）。
-            Text(rangeText)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Palette.textTertiary)
+    /// 月份表头：每个标签按它那一列的 x 坐标摆。
+    ///
+    /// ⚠️ 用 `ZStack` + `offset` 而不是 `HStack` + 占位：月份之间的列数不等（4–5 列），
+    /// 用 `HStack` 就得给每一列配一个宽度可变的占位视图，而那是 53 个多余视图。
+    /// `offset` 不影响布局，而这里的布局是固定尺寸（表头宽度 = 网格宽度），
+    /// 所以"不影响布局"恰好是我们要的。
+    private var monthRow: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(monthMarks) { mark in
+                Text(mark.title)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    // 表头行高度固定、文字不许被压成两行。
+                    .fixedSize()
+                    .offset(x: Self.xOffset(column: mark.column))
+            }
         }
-        // 原型 `style="margin-bottom:10px"`（10 不在 4pt 阶里 ⇒ 写原值）。
-        .padding(.bottom, 10)
+        .frame(width: contentWidth, height: Self.monthRowHeight, alignment: .topLeading)
     }
+
+    private var grid: some View {
+        Canvas { context, _ in
+            Self.draw(levels: levels, in: &context)
+        }
+        .frame(width: contentWidth, height: Self.gridHeight)
+    }
+
+    /// 整张图的宽度 = `n` 格 + `n−1` 个间距。
+    private var contentWidth: CGFloat { Self.contentWidth(columnCount: levels.count) }
 
     // MARK: - 纯函数（可单测）
 
-    /// 以一格边长（= 1）为单位，整张图的宽高比。
+    /// `count` 列时整个网格的宽度（pt）。
     ///
-    /// 宽 = `n` 格 + `n−1` 个间距；高 = 7 格 + 6 个间距。
-    /// `n == 0` 时回落成 `1×1`：调用点已经用 `!levels.isEmpty` 挡在前面，
-    /// 这里只是不让"传了一个空矩阵"变成一次除零。
-    public nonisolated static func aspectRatio(columnCount: Int) -> CGSize {
-        guard columnCount > 0 else { return CGSize(width: 1, height: 1) }
-        return CGSize(width: unitLength(count: columnCount), height: unitLength(count: rowCount))
-    }
-
-    /// 一格多大（pt）—— **由可用宽度反算**，这是本组件唯一一处尺寸来源。
-    ///
-    /// 原型那两处 `11px` 之所以不能照抄，见类型说明。
-    public nonisolated static func cellSize(forWidth width: CGFloat, columnCount: Int) -> CGFloat {
+    /// ⚠️ 写成 `count * step` 会多算一个间距（最后一列右边不该有间距）——
+    /// 53 列上那是 2.5pt 的差，看不出来，但它会让"内容宽"与"最后一格的右边缘"
+    /// 悄悄不一致，而横向滚动的末端位置正是按内容宽算的。
+    public nonisolated static func contentWidth(columnCount: Int) -> CGFloat {
         guard columnCount > 0 else { return 0 }
-        return max(0, width) / unitLength(count: columnCount)
+        return CGFloat(columnCount) * cellSize + CGFloat(columnCount - 1) * gap
     }
 
-    /// `count` 个格子 + `count−1` 个间距，以一格为单位表示的总长度。
-    private nonisolated static func unitLength(count: Int) -> CGFloat {
-        guard count > 0 else { return 0 }
-        return CGFloat(count) + CGFloat(count - 1) * unitRatio
+    /// 第 `column` 列的 x 坐标（pt）—— 网格与月份表头**共用这一个**。
+    ///
+    /// ⚠️ 两处各算一遍是"标签逐列漂移"的唯一成因（漂一点点，几十列之后偏一格）。
+    public nonisolated static func xOffset(column: Int) -> CGFloat {
+        guard column > 0 else { return 0 }
+        return CGFloat(column) * step
     }
 
     /// 某一档取哪个颜色。
@@ -180,16 +277,12 @@ public struct ContributionHeatmap: View {
     /// 列数多的时候，`VStack` + 371 个 `Rectangle` 也能画出来，但那意味着
     /// 一次布局要过 371 个视图；而且每一格都要自己算一遍坐标（算错一处就是
     /// 一整列斜着）。画在一个 `Canvas` 里，坐标只有下面这一行乘法。
-    private nonisolated static func draw(
-        levels: [[Int?]],
-        in context: inout GraphicsContext,
-        size: CGSize
-    ) {
-        let cell = cellSize(forWidth: size.width, columnCount: levels.count)
-        guard cell > 0 else { return }
-        let gap = cell * unitRatio
-        let step = cell + gap
-        let radius = cell * unitRatio
+    ///
+    /// ⚠️ 尺寸**不再来自 `size`**（那是"按可用宽度反算"时代的参数）：格子固定 11pt，
+    /// 所以 `Canvas` 的 frame 与画出来的内容必然一致 —— 反过来，如果哪天有人
+    /// 把 `.frame` 去掉、让它按可用宽度铺，格子会被拉伸而**代码里看不出任何异常**。
+    private nonisolated static func draw(levels: [[Int?]], in context: inout GraphicsContext) {
+        let radius = cellSize * unitRatio
 
         for (column, cells) in levels.enumerated() {
             // 列长理论上恒为 `rowCount`（领域包 `ContributionGrid.layout` 保证），
@@ -199,10 +292,10 @@ public struct ContributionHeatmap: View {
                 // 就该露出卡片白底 —— 画成最浅色会让整张图看起来从周一就开始了。
                 guard let level else { continue }
                 let rect = CGRect(
-                    x: CGFloat(column) * step,
+                    x: xOffset(column: column),
                     y: CGFloat(row) * step,
-                    width: cell,
-                    height: cell
+                    width: cellSize,
+                    height: cellSize
                 )
                 context.fill(
                     Path(roundedRect: rect, cornerRadius: radius),
@@ -224,18 +317,51 @@ public struct ContributionHeatmap: View {
         }
     }
 
+    // 月份表头：约每 4–5 列一个月（真数据由 `ContributionGrid.monthLabels` 算）。
+    let marks = (0..<12).map {
+        ContributionHeatmap.MonthMark(column: $0 * 4 + 1, title: "\($0 + 1)月")
+    }
+    let years = [
+        HeatmapYear(year: 2026, title: "2026 年"),
+        HeatmapYear(year: 2025, title: "2025 年"),
+        HeatmapYear(year: 2024, title: "2024 年"),
+    ]
+
     return VStack(spacing: Theme.Spacing.m) {
-        ContributionHeatmap(levels: levels, totalText: "1,024 次贡献", rangeText: "过去一年")
+        ContributionHeatmap(
+            levels: levels,
+            totalText: "1,024 次贡献",
+            monthMarks: marks,
+            yearTitle: "2026 年",
+            yearOptions: years,
+            selectedYear: 2026,
+            yearAccessibilityLabel: "切换年份，当前 2026 年",
+            onSelectYear: { _ in }
+        )
 
         // 零贡献：53 列全是最浅档 —— 照常画一张图，不给空态。
         ContributionHeatmap(
             levels: Array(repeating: Array(repeating: 0, count: 7), count: 53),
             totalText: "0 次贡献",
-            rangeText: "过去一年"
+            monthMarks: marks,
+            yearTitle: "2026 年",
+            yearOptions: years,
+            selectedYear: 2026,
+            yearAccessibilityLabel: "切换年份，当前 2026 年",
+            onSelectYear: { _ in }
         )
 
-        // 畸形响应：一列都没有 ⇒ 只剩头部那行字。
-        ContributionHeatmap(levels: [], totalText: "0 次贡献", rangeText: "过去一年")
+        // 畸形响应：一列都没有 ⇒ 只剩头部那行字（切换器仍在）。
+        ContributionHeatmap(
+            levels: [],
+            totalText: "0 次贡献",
+            monthMarks: [],
+            yearTitle: "2026 年",
+            yearOptions: years,
+            selectedYear: 2026,
+            yearAccessibilityLabel: "切换年份，当前 2026 年",
+            onSelectYear: { _ in }
+        )
     }
     .padding(Theme.Spacing.page)
     .background(Theme.Palette.background)

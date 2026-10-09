@@ -63,7 +63,6 @@ public enum ContributionLevel: String, Sendable, Hashable, CaseIterable {
 
 /// 热力图上的一天（TECH_SPEC §9.14）。
 public struct ContributionDay: Sendable, Hashable, Identifiable {
-
     /// 那一天，**原样保留服务端给的 `yyyy-MM-dd` 字符串**。
     ///
     /// ⚠️ 不转 `Date`：这个值不带时区，而转成 `Date` 就必须**替服务端选一个时区**
@@ -87,6 +86,26 @@ public struct ContributionDay: Sendable, Hashable, Identifiable {
     }
 }
 
+/// x 轴上一个月份标签**该挂在哪一列**（2026-10-09 加）。
+///
+/// ⚠️ 它只有**事实**（第几列、几月），没有一个字的文案 —— "挂上去写什么"
+/// 由 `ProfileCopy.monthLabel(_:)` 决定（文案是契约，见 `ContributionGrid.monthLabels`）。
+public struct MonthLabel: Sendable, Hashable, Identifiable {
+
+    /// 列下标（0 = 最左那一周）。
+    public let column: Int
+
+    /// 月份（`1...12`）。
+    public let month: Int
+
+    public var id: Int { column }
+
+    public init(column: Int, month: Int) {
+        self.column = column
+        self.month = month
+    }
+}
+
 /// 一整年的热力图网格（TECH_SPEC §9.14、决策 #74）。
 ///
 /// ## 形状：**列 = 周，行 = 一周里的第几天**
@@ -96,14 +115,14 @@ public struct ContributionDay: Sendable, Hashable, Identifiable {
 ///
 /// ## ⚠️ 头尾两周可能不足 7 天，所以"补位"是必须的
 ///
-/// 日历的周是**周日对齐**的，而"过去一年"这个窗口不会正好从周日开始、到周六结束
-/// ⇒ 第一列前面、最后一列后面会空出几格。**不能按"每周固定 7 格"去铺**，
+/// 日历的周是**周日对齐**的，而窗口（自然年，见 `ContributionYear`）不会正好从周日开始、
+/// 到周六结束 ⇒ 第一列前面、最后一列后面会空出几格。**不能按"每周固定 7 格"去铺**，
 /// 那会让整张图**整体错位**（而错位的热力图看起来一样正常，只是每一天都不在它该在的位置）。
 ///
 /// ## ⚠️ 列数是**接口给多少画多少**（决策 #74③）
 ///
 /// 原型画死 **40 列**（`12-me.js` 的 `for(let w=0;w<40;w++)`，硬编码演示值）；
-/// 接口默认给的是**整整一年（≈53 周）**。这里按接口给的画满 ——
+/// 而我们给的窗口（自然年）是**整整一年（≈53 周）**。这里按接口给的画满 ——
 /// 已登记为**有意偏差第 38 条**（`REVIEW-CHECKLIST §6`）。
 ///
 /// ## 零贡献是**正常值**，不是空态
@@ -144,6 +163,53 @@ public struct ContributionGrid: Sendable, Hashable {
     /// 所以跨包只传这个。
     public var levelMatrix: [[Int?]] {
         columns.map { column in column.map { $0?.level.scale } }
+    }
+
+    /// x 轴月份表头该挂在哪几列上（2026-10-09 加，用户走查第 2 条）。
+    ///
+    /// ## 规则：**每个月第一次出现的那一列**
+    ///
+    /// 逐列取"这一列第一个有日子的格"，月份与前一列不同 ⇒ 这一列挂标签。
+    /// 于是 1 月只会在第 0 列（窗口从 1/1 开始），此后每个月各挂一次 —— 恰好 12 个。
+    ///
+    /// ## ⚠️ 这里为什么只给"第几列 + 几月"，不给字符串
+    ///
+    /// 因为"哪一列该挂"是**事实**（只依赖数据结构），而"挂上去写什么"是**文案**
+    /// （`1月` 还是 `Jan`、要不要空格）—— 文案按铁律归 `ProfileCopy`。
+    /// 领域层只要把两件事分开，App 层一行 `map` 就把它们合起来。
+    ///
+    /// ⚠️ **不处理"标签会重叠"**：本机一格 11pt、一个月最少 4 列（≈50pt），
+    /// 而 `{n}月` 在 caption 下约 22pt ⇒ 真实数据下撞不上。若哪天格子里程变了、
+    /// 或者有人把窗口改成非自然年，这里要补一条"离得太近就跳过"的规则。
+    public var monthLabels: [MonthLabel] {
+        var labels: [MonthLabel] = []
+        var previous: Int?
+
+        for (index, column) in columns.enumerated() {
+            // 该列第一个有日子的格 —— 头尾两周可能是全补位（`nil`），跳过它们。
+            guard let date = column.compactMap({ $0?.date }).first,
+                  let month = Self.month(inISODate: date)
+            else { continue }
+
+            if month != previous {
+                labels.append(MonthLabel(column: index, month: month))
+            }
+            previous = month
+        }
+        return labels
+    }
+
+    /// 从服务端给的 `yyyy-MM-dd` 里取月份。取不出来 ⇒ `nil`（那一列不挂标签）。
+    ///
+    /// ⚠️ **不建 `DateFormatter`**：这个字符串不带时区，而"把它变成 `Date` 再取月"
+    /// 会引入一次时区解释（`ContributionDay.date` 的抬头讲了为什么本类型一路不碰 `Date`）。
+    /// 按 `-` 切开取第二段既没有时区，也不会因为设备日历设置而变。
+    static func month(inISODate date: String) -> Int? {
+        let parts = date.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3, let month = Int(parts[1]), (1...12).contains(month) else {
+            return nil
+        }
+        return month
     }
 
     public init(columns: [[ContributionDay?]], totalContributions: Int, days: [ContributionDay]) {

@@ -48,8 +48,8 @@ public struct GitHubProfileDataSource: ProfileDataSource {
         try await profile.loadProfile()
     }
 
-    /// GraphQL `viewer` 三个字段（**1 点**）。
-    public func loadActivity() async throws -> ViewerActivityDTO {
-        try await activity.loadActivity()
+    /// GraphQL `viewer` 三个字段（**1 点**，切年份也是 1 点）。
+    public func loadActivity(from: Date, to: Date) async throws -> ViewerActivityDTO {
+        try await activity.loadActivity(from: from, to: to)
     }
 }

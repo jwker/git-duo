@@ -34,10 +34,18 @@ import GitHubAPI
 /// 这一层真正被断言的是 `LoadProfileOverviewTests`（用脚本化替身测降级隔离）。
 public protocol ProfileDataSource: Sendable {
 
-    /// `GET /user` —— 资料头部（昵称 / 简介 / 关注者数）。
+    /// `GET /user` —— 资料头部（昵称 / 简介 / 关注者数 / 头像）。
     func loadProfile() async throws -> ViewerProfileDTO
 
-    /// GraphQL `viewer { contributionsCollection { contributionCalendar } starredRepositories { totalCount } repositories { totalCount } }`
+    /// GraphQL `viewer { contributionsCollection(from:to:) { contributionCalendar } starredRepositories { totalCount } repositories { totalCount } }`
     /// —— 一次往返同时供热力图与头部的两个计数（决策 #74 / #76）。
-    func loadActivity() async throws -> ViewerActivityDTO
+    ///
+    /// - Parameters:
+    ///   - from: 窗口起点（含）。**由领域层按本机日历算好**
+    ///     （`ContributionYearBoard.interval(of:)`，2026-10-09 起窗口 = 自然年）。
+    ///   - to: 窗口终点（含）；当前年就是"现在"。
+    ///
+    /// ⚠️ 窗口**必须显式传**：漏了它"切到 2025 年"就没有任何参数能表达
+    /// （旧版是让官方默认值兜成"一年前 → 现在"）。
+    func loadActivity(from: Date, to: Date) async throws -> ViewerActivityDTO
 }

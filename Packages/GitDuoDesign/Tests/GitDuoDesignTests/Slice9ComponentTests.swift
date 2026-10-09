@@ -53,52 +53,47 @@ struct Slice9ComponentTests {
         // 没法断言"没读接口"，但可以断言"色板是写死的常量" —— 改了就必须过这一关。
     }
 
-    // MARK: - 格子尺寸（本片唯一一处几何算法）
+    // MARK: - 格子几何（本片唯一一处几何算法）
 
-    @Test("⚠️ 一列 7 格；比例以**一格边长**为单位，间距按 2.5/11 算")
+    @Test("⚠️ 一列 7 格；格子 **11pt**、间距/圆角按 2.5/11 算（全是原型值）")
     func heatmapUnitGeometry() {
         #expect(ContributionHeatmap.rowCount == 7)
         #expect(abs(ContributionHeatmap.unitRatio - 2.5 / 11) < 1e-9)
 
-        // 53 列：53 格 + 52 个间距
-        let wide = ContributionHeatmap.aspectRatio(columnCount: 53)
-        #expect(abs(wide.width - (53 + 52 * (2.5 / 11))) < 1e-9)
-        // 7 行：7 格 + 6 个间距
-        #expect(abs(wide.height - (7 + 6 * (2.5 / 11))) < 1e-9)
+        // 2026-10-09 改：格子从"按可用宽度反算的 5.28pt"改成原型的 **11pt**。
+        // 这条断言把它冻在这儿 —— 它会决定"要不要横向滚动"（见下一条）。
+        #expect(ContributionHeatmap.cellSize == 11)
+        #expect(abs(ContributionHeatmap.gap - 2.5) < 1e-9)
+        #expect(abs(ContributionHeatmap.step - 13.5) < 1e-9)
 
-        // 一列时没有间距（`n-1 == 0`）—— 写成 `n * (1 + ratio)` 会在这里多出一个间距。
-        let single = ContributionHeatmap.aspectRatio(columnCount: 1)
-        #expect(abs(single.width - 1) < 1e-9)
-        #expect(abs(single.height - (7 + 6 * (2.5 / 11))) < 1e-9)
+        // 7 行：7 格 + 6 个间距 = 92pt（骨架屏那一行取的就是它）。
+        #expect(abs(ContributionHeatmap.gridHeight - 92) < 1e-9)
     }
 
-    @Test("⚠️ 空矩阵回落成 1×1，不是 0 —— 别让它变成一次除零")
-    func heatmapAspectRatioFallsBackOnEmpty() {
-        let none = ContributionHeatmap.aspectRatio(columnCount: 0)
-        #expect(none == CGSize(width: 1, height: 1))
-        #expect(ContributionHeatmap.cellSize(forWidth: 342, columnCount: 0) == 0)
-        // 负宽度（容器还没量出来时的 `-infinity` / 负数）也归零，不给负的边长。
-        #expect(ContributionHeatmap.cellSize(forWidth: -10, columnCount: 53) == 0)
+    @Test("⚠️ 内容宽 = `n` 格 + `n−1` 个间距；53 列**一定放不下**（所以要能横向滑）")
+    func heatmapContentWidth() {
+        // 53 列：53 × 11 + 52 × 2.5 = 583 + 130 = 713pt。
+        #expect(abs(ContributionHeatmap.contentWidth(columnCount: 53) - 713) < 1e-9)
+        // 一列时没有间距（`n-1 == 0`）—— 写成 `n * step` 会在这里多出 2.5pt。
+        #expect(abs(ContributionHeatmap.contentWidth(columnCount: 1) - 11) < 1e-9)
+        #expect(ContributionHeatmap.contentWidth(columnCount: 0) == 0)
+
+        // ⚠️⚠️ 这一条是本组件存在的理由：iPhone 上卡片可用宽最多约 430pt（最大机型），
+        //     而内容要 713pt ⇒ **横向滚动是必然的**（原型 `.hm-grid{overflow-x:auto}`）。
+        //     哪天有人把 `cellSize` 改小到"能放下"，这一条会红 —— 而那正是
+        //     "格子又变小了"这件事唯一的代码侧信号（用户的观感在走查单里）。
+        #expect(ContributionHeatmap.contentWidth(columnCount: 53) > 430)
     }
 
-    @Test("⚠️ 一格多大**只**由可用宽度算出来 —— 原型那个 `11px` 不许出现在结果里")
-    func heatmapCellSizeIsDerivedFromWidth() {
-        // 2026-10-09 实测的那一组：iPhone 17 Pro（402pt 宽）⇒ 卡片可用宽度 342pt。
-        let cell = ContributionHeatmap.cellSize(forWidth: 342, columnCount: 53)
-        #expect(abs(cell - 342 / (53 + 52 * (2.5 / 11))) < 1e-9)
-        #expect(abs(cell - 5.2763) < 0.001)
+    @Test("⚠️ 列的 x 坐标 = `column × step`，且**表头与网格共用同一个**（不许各算一遍）")
+    func heatmapColumnOffsets() {
+        #expect(ContributionHeatmap.xOffset(column: 0) == 0)
+        #expect(abs(ContributionHeatmap.xOffset(column: 1) - 13.5) < 1e-9)
+        #expect(abs(ContributionHeatmap.xOffset(column: 52) - 702) < 1e-9)
 
-        // 关键的一条：**它不等于原型那个 11**。照抄 11 会让 53 列要 715pt 才放得下，
-        // 而屏幕只有 402pt ⇒ 卡片右边写着「过去一年」，图上却只有半年。
-        #expect(cell < 11)
-
-        // 宽度翻倍 ⇒ 格子翻倍（线性），不是"夹在一个固定值上"。
-        let doubled = ContributionHeatmap.cellSize(forWidth: 684, columnCount: 53)
-        #expect(abs(doubled - cell * 2) < 1e-9)
-
-        // 列数越少格子越大 —— 同一宽度下。
-        let few = ContributionHeatmap.cellSize(forWidth: 342, columnCount: 10)
-        #expect(few > cell)
+        // 最后一列的右边缘必须**正好**等于内容宽 —— 差一个间距就是"滚动末端多出/少掉一条"。
+        let last = ContributionHeatmap.xOffset(column: 52) + ContributionHeatmap.cellSize
+        #expect(abs(last - ContributionHeatmap.contentWidth(columnCount: 53)) < 1e-9)
     }
 
     // MARK: - 档位 → 颜色

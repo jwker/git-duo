@@ -381,3 +381,217 @@ struct ContributionGridMapperTests {
         #expect(ProfileMapper.firstRow(in: weeks, firstDay: firstDay) == 3)
     }
 }
+
+// MARK: - 年份与窗口（2026-10-09 加，用户走查第 2 条）
+
+/// 热力图的**年份选项与窗口**（`ContributionYearBoard`、偏差第 44 条）。
+///
+/// ## 这一套守的是什么
+///
+/// 两处"看起来完全正常"的错：
+///
+/// 1. **窗口多算或少算一段** —— 当前年若取到 12/31，窗口就**声称**覆盖了还没发生的日子
+///    （返回值照样是 0，所以看不出）；若上一年的窗口漏掉 12 月 31 日那几个小时，
+///    那一天最深的那格会凭空消失；
+/// 2. **跨度超过一年** —— 官方对 `contributionsCollection(from:to:)` 的硬约束。
+///    超了不是 HTTP 4xx，而是 **200 + `errors`**（归到 `.graphQLErrors`），
+///    排查时很容易误以为是"热力图数据坏了"。
+///
+/// ⚠️ `now` 与 `calendar` 都钉死（文件头那两个字面量的说明）：日期算术挂真时间
+/// 必然在元旦/跨年那一刻偶发变红。
+@Suite("热力图 · 年份选项与窗口（`ContributionYearBoard`）")
+struct ContributionYearTests {
+
+    private var board: ContributionYearBoard {
+        ContributionYearBoard(now: { frozenNow }, calendar: frozenCalendar)
+    }
+
+    @Test("可切换的年份：**当前年 + 前 2 年**，当前年在第一位（用户 2026-10-09 拍板）")
+    func yearsStartFromTheCurrentOne() {
+        #expect(board.years.map(\.year) == [2026, 2025, 2024])
+        #expect(ContributionYearBoard.selectableCount == 3)
+        // 当前年不是"某一年"，而是"我现在这一年"—— 摆在第一项才能让"看回默认那一年"
+        // 永远只有一次点击（`ContributionYearBoard.years` 的说明）。
+        #expect(board.current == board.years[0])
+    }
+
+    @Test("每个选项自己带着屏幕上那几个字，文案**取自 `ProfileCopy`**")
+    func labelsComeFromCopy() {
+        // `label` 只做转发（两处各拼一遍，早晚出现"菜单写 2026 年、a11y 念 26 年"）。
+        #expect(board.years.map(\.label) == ["2026 年", "2025 年", "2024 年"])
+        // `id` 就是年份本身 —— `Menu` 的勾选与 `ForEach` 的去重都靠它。
+        #expect(ContributionYear(year: 2026).id == 2026)
+    }
+
+    @Test("⚠️ 窗口是**自然年**：往年 1/1 0 点 → 12/31 23:59:59（不再是「过去一年」）")
+    func pastYearsAreWholeYears() {
+        let interval = board.interval(of: ContributionYear(year: 2025))
+
+        #expect(
+            interval.start
+                == frozenCalendar.date(from: DateComponents(year: 2025, month: 1, day: 1))
+        )
+        // ⚠️ 终点是 23:59:59 而不是 1/1 00:00（那会把 12 月 31 日整天漏掉）。
+        #expect(
+            interval.end == frozenCalendar.date(
+                from: DateComponents(year: 2025, month: 12, day: 31, hour: 23, minute: 59, second: 59)
+            )
+        )
+    }
+
+    @Test("⚠️ 当前年**截至今天**，不是到 12/31")
+    func currentYearStopsAtNow() {
+        // 给年末会让窗口**声称**覆盖那些还没发生的日子。那些天的贡献数照样是 0，
+        // 所以这个错在屏幕上**看不出来** —— 但窗口是我们对外声称的区间，
+        // 而卡片右上还写着"2026 年"（这一条与 `ProfileCopy.yearLabel` 是一对）。
+        let interval = board.interval(of: ContributionYear(year: 2026))
+
+        #expect(
+            interval.start
+                == frozenCalendar.date(from: DateComponents(year: 2026, month: 1, day: 1))
+        )
+        #expect(interval.end == frozenNow)
+    }
+
+    @Test("⚠️ 跨度**不超过一年**：官方上限（而「一年」**不是 365 天**）")
+    func windowsNeverExceedOneYear() {
+        // 超了的表现是 **HTTP 200 + `errors`**（⇒ `.graphQLErrors`），很容易被误读成
+        // "热力图数据坏了"。自然年天然满足 —— 这条断言挡的是"以后有人把窗口改成
+        // 过去 13 个月"那类改动（改一处、单测就红）。
+        //
+        // ⚠️⚠️ **"一年"不是 365 天**：2024 是闰年，它整年的窗口（1/1 0 点 → 12/31 23:59:59）
+        //    是 **366 天减 1 秒**。按"≤ 31,536,000 秒"去判会把一个**合法**窗口判成越界
+        //    —— 这条口径必须写下来：哪天有人把它实现成秒数比较，表现会是
+        //    **"2024 那一年的热力图永远切不过去"**，而错误只会说"贡献数据取不到"。
+        //    官方那条上限是**日历**意义的（`to` 省略时默认 = `from` 加一年，
+        //    见 `ContributionYear` 抬头的引用），所以断言也照日历写。
+        for option in board.years {
+            let interval = board.interval(of: option)
+            let bound = frozenCalendar.date(byAdding: .year, value: 1, to: interval.start)!
+            #expect(interval.end <= bound, "\(option.year) 年的窗口超过了一年")
+        }
+    }
+
+    @Test("⚠️ 时钟被调到过去：窗口退化成**零长度**，而不是一个负长度区间")
+    func futureYearUnderAPastClockIsEmptyNotNegative() {
+        // 负长度区间会让服务端**直接拒**。这一支真实数据到不了（谁的时钟会跳到 2020），
+        // 但它是一行 `max(start,…)` 的成本，而错误表现是"整个热力图卡片变成失败态"。
+        let past = ContributionYearBoard(
+            now: { frozenCalendar.date(from: DateComponents(year: 2020, month: 5, day: 1))! },
+            calendar: frozenCalendar
+        )
+
+        let interval = past.interval(of: ContributionYear(year: 2026))
+
+        #expect(interval.duration == 0)
+        // "看这一年的第一天"是那种情形下唯一说得通的答案。
+        #expect(
+            interval.start
+                == frozenCalendar.date(from: DateComponents(year: 2026, month: 1, day: 1))
+        )
+    }
+}
+
+/// x 轴月份表头**挂在哪一列**（`ContributionGrid.monthLabels`、偏差第 44 条）。
+///
+/// ## 这一套守的是什么
+///
+/// 月份表头是**原型里根本没有**的东西（原型只有一排格子），所以它没有可照抄的正本，
+/// 只能由规则定：**每个月挂在它第一次出现的那一列**。
+///
+/// 两处"看不出来"的错：
+///
+/// 1. **月份与列错位** —— 表头整体偏一格、或某几个月逐月漂移一点点
+///    （真实数据的表头是 12 个独立标签，偏一格在屏幕上像"整个日历不对齐"，
+///    但格子本身是对的，所以很难判断是哪一边错了）；
+/// 2. **认不出的日期编出一个月** —— `date` 是服务端给的字符串，畸形串必须只让
+///    **那一列不挂标签**，而不是让整排表头消失。
+@Suite("热力图 · 月份表头挂哪一列（`ContributionGrid.monthLabels`）")
+struct ContributionMonthLabelTests {
+
+    /// 一天一列 —— 于是"哪一列该挂标签"完全由 `dates` 的顺序决定，断言读起来就是它本身。
+    private func grid(_ dates: [String]) -> ContributionGrid {
+        let columns: [[ContributionDay?]] = dates.map { date in
+            var column = Array(repeating: Optional<ContributionDay>.none, count: ContributionGrid.rowCount)
+            column[0] = ContributionDay(date: date, count: 0, level: .none)
+            return column
+        }
+        return ContributionGrid(
+            columns: columns,
+            totalContributions: 0,
+            days: dates.map { ContributionDay(date: $0, count: 0, level: .none) }
+        )
+    }
+
+    @Test("每个月挂在**它第一次出现的那一列**（同月后续的列不重复挂）")
+    func eachMonthHangsOnItsFirstColumn() {
+        let grid = grid(["2026-01-31", "2026-02-01", "2026-02-08", "2026-03-01"])
+
+        #expect(
+            grid.monthLabels == [
+                MonthLabel(column: 0, month: 1),
+                MonthLabel(column: 1, month: 2),
+                MonthLabel(column: 3, month: 3),
+            ]
+        )
+    }
+
+    @Test("⚠️ 认不出的日期**只是那一列不挂标签**，不会编出一个月来")
+    func malformedDatesAreSkipped() {
+        // `date` 一路是服务端那串 `yyyy-MM-dd`（`ContributionDay` 的抬头讲了为什么不转
+        // `Date`）⇒ "取不出月份"是一个真实分支。
+        let grid = grid(["2026-00-01", "2026-13-01", "not-a-date", "2026-04-05"])
+
+        // 前三列各自跳过，且**不影响**"上一个月出现过"这个状态 ⇒ 4 月那一列照常挂。
+        #expect(grid.monthLabels == [MonthLabel(column: 3, month: 4)])
+    }
+
+    @Test("某列没有日子（补位 / 空串）⇒ 它不挂标签，也不打断后面")
+    func emptyColumnsCarryNoLabel() {
+        let grid = grid(["2026-01-01", "", "2026-01-20"])
+
+        // 中间那列取不出月份 ⇒ 跳过；末列仍是 1 月、且 1 月已经挂过 ⇒ 不重复。
+        #expect(grid.monthLabels == [MonthLabel(column: 0, month: 1)])
+    }
+
+    @Test("⚠️ 像真的一年（365 天、窗口从周中开始）⇒ 恰好 **12 个**标签，1 月在最左那一列")
+    func aRealYearProducesTwelveLabels() {
+        // 2026 不是闰年。日子按"平年各月天数"铺，列数按 `layout` 的规则算（首行偏移 4）。
+        let monthLengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        var days: [ContributionDay] = []
+        for (index, length) in monthLengths.enumerated() {
+            for day in 1...length {
+                days.append(
+                    ContributionDay(
+                        date: String(format: "2026-%02d-%02d", index + 1, day),
+                        count: 0,
+                        level: .none
+                    )
+                )
+            }
+        }
+        let grid = ContributionGrid(
+            columns: ContributionGrid.layout(days: days, firstRow: 4),
+            totalContributions: 0,
+            days: days
+        )
+
+        #expect(grid.columnCount == 53, "4 格偏移 + 365 天 ⇒ 53 列")
+        #expect(grid.monthLabels.map(\.month) == Array(1...12))
+        // 窗口从 1/1 开始 ⇒ 1 月必然落在第 0 列（这条同时钉住"表头与网格共用同一个坐标系"）。
+        #expect(grid.monthLabels.first == MonthLabel(column: 0, month: 1))
+        // 2 月 1 日 = 首行偏移 4 + 1 月的 31 天 = 第 35 格 ⇒ 第 5 列、第 0 行。
+        #expect(grid.monthLabels[1] == MonthLabel(column: 5, month: 2))
+
+        // 列号严格递增（相等或倒退会让两个标签叠在一起，而格子照常画）。
+        #expect(
+            zip(grid.monthLabels, grid.monthLabels.dropFirst()).allSatisfy { $0.column < $1.column }
+        )
+        // ⚠️ `monthLabels` 抬头里那条"不处理重叠"的**前提**：一个月最少 4 列
+        //    （28 天 = 4 整周），而 `{n}月` 约 22pt、4 列约 50pt ⇒ 真实数据撞不上。
+        //    这条断言把那个前提写下来：哪天窗口不再是自然年，这里会先红。
+        #expect(
+            zip(grid.monthLabels, grid.monthLabels.dropFirst()).allSatisfy { $1.column - $0.column >= 4 }
+        )
+    }
+}

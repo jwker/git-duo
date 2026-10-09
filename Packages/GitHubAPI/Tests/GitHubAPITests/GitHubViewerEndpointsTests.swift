@@ -3,6 +3,30 @@ import Testing
 
 @testable import GitHubAPI
 
+// MARK: - 固定的窗口端点
+
+/// GraphQL 那一路的窗口端点 —— **2026-01-01 0 点 → 2026-12-31 23:59:59（GMT）**。
+///
+/// ⚠️ 窗口端点自 2026-10-09 起是**必传**（热力图要能切年份，用户走查第 2 条）
+/// —— 每一次 `loadActivity` 调用都要给一对瞬间。取哪两个瞬间不重要，
+/// 但必须固定：`buildsQueryShape` 要断言它们**序列化出来的字符串**。
+///
+/// ⚠️ 日历显式设成 GMT：端点本身是 `Date`（绝对时刻），拿本机时区去构造
+/// 会让断言随跑测试那台机器而变。
+private let windowCalendar: Calendar = {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    return calendar
+}()
+
+private let windowFrom = windowCalendar.date(
+    from: DateComponents(year: 2026, month: 1, day: 1)
+)!
+
+private let windowTo = windowCalendar.date(
+    from: DateComponents(year: 2026, month: 12, day: 31, hour: 23, minute: 59, second: 59)
+)!
+
 /// 「我的」页的资料头部 —— `GET /user`（TECH_SPEC §9.14、PRD §4.17、决策 #76）。
 ///
 /// 本套件盯三件事：
@@ -203,12 +227,12 @@ struct GitHubViewerActivityEndpointTests {
 
     // MARK: - 查询形状
 
-    @Test("请求形状：POST /graphql，**没有变量**（`first: 1` 与 affiliations 都在文本里）")
+    @Test("请求形状：POST /graphql，**窗口进变量**（`first: 1` 与 affiliations 仍写死在文本里）")
     func buildsQueryShape() async throws {
         let harness = StubURLProtocol.makeHarness()
         harness.stub(.json(envelope(viewerJSON)))
 
-        _ = try await makeEndpoint(harness: harness).loadActivity()
+        _ = try await makeEndpoint(harness: harness).loadActivity(from: windowFrom, to: windowTo)
 
         let request = try #require(harness.lastRequest)
         #expect(request.httpMethod == "POST")
@@ -226,7 +250,24 @@ struct GitHubViewerActivityEndpointTests {
             query.components(separatedBy: "first: 1").count - 1 == 2,
             "恰好两个计数连接，且各写死 `first: 1`"
         )
-        #expect(json["variables"] is [String: Any], "没有变量 ⇒ 空对象，不是缺键")
+
+        // ⚠️ 2026-10-09 改口径：`$from` / `$to` **必须是变量**（切年份要改的就是这两个值，
+        //    写死在文本里就没法切）。但"加变量"**不增加点数** —— 请求数仍由那两个
+        //    `first: 1` 决定 ⇒ 这一次仍是 **1 点**（切换一次年份 = 1 点，与进页同价）。
+        #expect(query.contains("$from: DateTime!") && query.contains("$to: DateTime!"))
+        #expect(
+            query.contains("contributionsCollection(from: $from, to: $to)"),
+            "变量要真的用在窗口上 —— 声明了不用，服务端会报「变量未使用」"
+        )
+
+        let variables = try #require(json["variables"] as? [String: Any])
+        // 线上形状固定按 **GMT** 序列化（`dateTime(_:)` 的说明）：按本机时区写带偏移量的
+        // 字符串会让同一个瞬间有 24 种写法，对着两行日志要自己换算。
+        #expect(variables["from"] as? String == "2026-01-01T00:00:00Z")
+        #expect(variables["to"] as? String == "2026-12-31T23:59:59Z")
+        // ⚠️ **只有这两个变量**：`$from` / `$to` 只出现在 `contributionsCollection` 一处，
+        //    别把"窗口进了变量"顺手扩成"什么都能进变量"。
+        #expect(variables.count == 2)
 
         // ⚠️ 决策 #76：默认只算 OWNER，不写全就会与仓库列表（决策 #35）静默对不上。
         #expect(
@@ -253,7 +294,7 @@ struct GitHubViewerActivityEndpointTests {
         let harness = StubURLProtocol.makeHarness()
         harness.stub(.json(envelope(viewerJSON)))
 
-        let dto = try await makeEndpoint(harness: harness).loadActivity()
+        let dto = try await makeEndpoint(harness: harness).loadActivity(from: windowFrom, to: windowTo)
 
         #expect(dto.contributionsCollection.contributionCalendar.totalContributions == 1_024)
         #expect(dto.starredRepositories.totalCount == 318)
@@ -282,7 +323,7 @@ struct GitHubViewerActivityEndpointTests {
         """#))
 
         await #expect(throws: GitHubError.self) {
-            _ = try await self.makeEndpoint(harness: harness).loadActivity()
+            _ = try await self.makeEndpoint(harness: harness).loadActivity(from: windowFrom, to: windowTo)
         }
     }
 
@@ -292,7 +333,7 @@ struct GitHubViewerActivityEndpointTests {
         harness.stub(.json(#"{"errors":[{"message":"Something went wrong"}]}"#))
 
         do {
-            _ = try await makeEndpoint(harness: harness).loadActivity()
+            _ = try await makeEndpoint(harness: harness).loadActivity(from: windowFrom, to: windowTo)
             Issue.record("本该抛错")
         } catch let error as GitHubError {
             guard case let .graphQLErrors(messages, partialData) = error else {
@@ -310,7 +351,7 @@ struct GitHubViewerActivityEndpointTests {
         harness.stub(.failing(.notConnectedToInternet))
 
         await #expect(throws: GitHubError.self) {
-            _ = try await self.makeEndpoint(harness: harness).loadActivity()
+            _ = try await self.makeEndpoint(harness: harness).loadActivity(from: windowFrom, to: windowTo)
         }
     }
 }

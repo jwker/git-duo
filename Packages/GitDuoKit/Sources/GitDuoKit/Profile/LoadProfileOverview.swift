@@ -36,21 +36,45 @@ public struct LoadProfileOverview: Sendable {
 
     private let source: any ProfileDataSource
     private let mapper: ProfileMapper
+    private let board: ContributionYearBoard
 
-    public init(source: any ProfileDataSource, mapper: ProfileMapper = ProfileMapper()) {
+    public init(
+        source: any ProfileDataSource,
+        mapper: ProfileMapper = ProfileMapper(),
+        board: ContributionYearBoard = ContributionYearBoard()
+    ) {
         self.source = source
         self.mapper = mapper
+        self.board = board
     }
 
-    public func load() async -> ProfileOverview {
+    /// 可切换的年份（顺序 = 菜单顺序，当前年在第一个）—— 2026-10-09 加，用户走查第 2 条。
+    ///
+    /// ⚠️ 选项由**取数这一侧**给出（而不是让视图自己算年份）：窗口的计算与"这一年怎么取"
+    /// 必须是同一个口径，分两处就会有一天出现"菜单里写着 2025、取的却是 2024"。
+    public var years: [ContributionYear] { board.years }
+
+    /// 进页默认看的那一年。
+    public var currentYear: ContributionYear { board.current }
+
+    /// 取某一年的两路数据（并发、各降级）。窗口由 `board` 按本机日历算。
+    ///
+    /// ⚠️ `year` **不是可选的**：默认值会造出"忘了说看哪一年也能跑"的调用，
+    /// 而那正是"右上写着 2025、图是 2026"这类错误的温床。要当前年就传 `currentYear`。
+    public func load(year: ContributionYear) async -> ProfileOverview {
+        let interval = board.interval(of: year)
+
         // 两路并发。`async let` 一写出来两个请求就都发出去了。
         async let profileAttempt = attempt { try await source.loadProfile() }
-        async let activityAttempt = attempt { try await source.loadActivity() }
+        async let activityAttempt = attempt {
+            try await source.loadActivity(from: interval.start, to: interval.end)
+        }
 
         let profileDTO = await profileAttempt
         let activityDTO = await activityAttempt
 
         return ProfileOverview(
+            year: year,
             identity: profileDTO.map { mapper.profile($0) },
             grid: activityDTO.map { mapper.grid($0) },
             // ⚠️ 三个数**各取各的来源**：仓库 / Star 来自 GraphQL（没拿到就是 `nil`），

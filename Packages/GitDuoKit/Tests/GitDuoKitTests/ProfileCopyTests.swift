@@ -23,13 +23,37 @@ struct ProfileCopyTests {
 
     // MARK: - 我的页
 
-    @Test("我的页与热力图那三句逐字（原型 `SCR.me`）")
+    @Test("我的页与热力图那两句逐字（原型 `SCR.me`）")
     func profilePageIsVerbatim() {
         #expect(ProfileCopy.pageTitle == "我的")
-        #expect(ProfileCopy.contributionRange == "过去一年")
+        // ⚠️ 原型卡片右上那句「过去一年」**已被年份切换器取代**（2026-10-09，用户走查第 2 条）：
+        //    滚动窗口（一年前 → 现在）跨着两个年份、给不出年份标签，所以那句话连同
+        //    `ProfileCopy.contributionRange` 一起删了。接替它的是 `yearLabel(_:)`
+        //    —— **它不再是"照原型逐字"，而是本片新定的**（下一套断言守着它）。
+        //    这条注释留在这里，是因为"少了一行断言"本身看不出是删的还是漏的。
         // ⚠️ 千分位**照原型**（它自己就带逗号），而这个数动辄四位数。
         #expect(ProfileCopy.contributionCount(1024) == "1,024 次贡献")
         #expect(ProfileCopy.contributionCount(0) == "0 次贡献")
+    }
+
+    @Test("⚠️ 热力图年份与月份那三句（取代了「过去一年」，偏差第 44 条）")
+    func heatmapCopyReplacesTheRollingWindowPhrase() {
+        // ⚠️ 年份那句**必须带"年"字**：卡片上不再有第二处说范围的地方
+        //    —— 它同时是"范围声明"与"控件标签"，只写 `2026` 会让范围那句话消失。
+        #expect(ProfileCopy.yearLabel(2026) == "2026 年")
+
+        // ⚠️ 月份表头**数字与"月"之间不留空格**：它是坐标轴上的刻度，`1月` 是中文图表的写法
+        //    （与 `contributionCount` 那种"给人读的数"——`1,024 次贡献`，**带空格**——有意不同）。
+        //    ⚠️ 理由**不是"省宽度"**（表头不参与布局），见 `ProfileCopy.monthLabel` 的说明。
+        #expect(ProfileCopy.monthLabel(1) == "1月")
+        #expect(ProfileCopy.monthLabel(12) == "12月")
+
+        // ⚠️ **规格未给**（自拟，登记在偏差第 44 条）：原型没有这个控件、PRD 也没给措辞。
+        //    它要把两件事都说了 —— 这个控件做什么（切年份）+ 现在在哪一年：
+        //    只说动作会让读屏用户不知道现在是哪一年，只说年份又听不出它能点。
+        let label = ProfileCopy.heatmapYearAccessibilityLabel(year: 2025)
+        #expect(label.contains("切换年份"))
+        #expect(label.contains(ProfileCopy.yearLabel(2025)))
     }
 
     @Test("五条菜单逐字（原型两张卡片）")

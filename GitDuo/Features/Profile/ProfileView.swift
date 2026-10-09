@@ -32,7 +32,7 @@ import SwiftUI
 /// 本页有 `.refreshable`，与**其余每一个取数页**一致（首页 / 仓库 / 探索 / 四个详情页
 /// 都挂了它）。⚠️ 原型里一个都没有 —— 它是静态 HTML，没有下拉刷新这回事 ⇒
 /// 这是本 App 的**页面级约定**，不是原型的偏离。它顺带把两个失败块的重试
-/// 变成"整页重取"，两者走的是同一个 `model.load()`。
+/// 变成"整页重取"，两者走的是同一个 `model.refresh()`（**取的是当前屏幕上那一年**）。
 struct ProfileView: View {
 
     /// 登录名。**不可空** —— 它来自 `authState`（`RootView` 只在已认证时才构建主界面），
@@ -64,7 +64,7 @@ struct ProfileView: View {
         }
         .background(Theme.Palette.background)
         .navigationTitle(ProfileCopy.pageTitle)
-        .refreshable { await model.load() }
+        .refreshable { await model.refresh() }
         .task { await model.loadIfNeeded() }
     }
 
@@ -89,7 +89,7 @@ struct ProfileView: View {
         // `/user` 那一路失败 ⇒ 在头部块内给一行灰字 + 重试（TECH_SPEC §9.14「两处降级」）。
         // 位置贴着失败的那一块，而不是塞进热力图卡片里 —— 那张卡说的是贡献数据。
         if let error = model.overview?.identity.error {
-            SectionFailure(error: error) { Task { await model.load() } }
+            SectionFailure(error: error) { Task { await model.refresh() } }
         }
     }
 
@@ -119,13 +119,44 @@ struct ProfileView: View {
                 ContributionHeatmap(
                     levels: grid.levelMatrix,
                     totalText: ProfileCopy.contributionCount(grid.totalContributions),
-                    rangeText: ProfileCopy.contributionRange
+                    // 月份表头 = 领域层给的"第几列 + 几月" × 文案层的"1月"（文案是契约）。
+                    monthMarks: grid.monthLabels.map {
+                        ContributionHeatmap.MonthMark(
+                            column: $0.column,
+                            title: ProfileCopy.monthLabel($0.month)
+                        )
+                    },
+                    // ⚠️ 年份与总数**必须来自同一份数据**（`overview.year`，不是"用户刚点的那一年"）
+                    //    —— 否则切换的那一瞬间屏幕上会出现"写着 2025、画着 2026"。
+                    yearTitle: overview.year.label,
+                    yearOptions: yearOptions,
+                    selectedYear: overview.year.year,
+                    yearAccessibilityLabel: ProfileCopy.heatmapYearAccessibilityLabel(
+                        year: overview.year.year
+                    ),
+                    onSelectYear: select(year:)
                 )
 
             case let .failure(error):
                 // 这一张卡是**内容层** ⇒ 实色，不加 Liquid Glass（§10.2）。
                 CardBox(vertical: 14) {
-                    SectionFailure(error: error) { Task { await model.load() } }
+                    VStack(alignment: .leading, spacing: 0) {
+                        // ⚠️ 失败态**也要有年份切换器**：这一年的数取不到时，用户要做的
+                        //    第一件事就是切回能看的那一年（或换个年份再试）。
+                        //    没有它，卡片就成了一堵没有出口的墙（`HeatmapHeader` 的说明）。
+                        HeatmapHeader(
+                            // `nil`（不是 `0 次贡献`）：没拿到 ≠ 这一年没有贡献。
+                            totalText: nil,
+                            yearTitle: overview.year.label,
+                            yearOptions: yearOptions,
+                            selectedYear: overview.year.year,
+                            yearAccessibilityLabel: ProfileCopy.heatmapYearAccessibilityLabel(
+                                year: overview.year.year
+                            ),
+                            onSelectYear: select(year:)
+                        )
+                        SectionFailure(error: error) { Task { await model.refresh() } }
+                    }
                 }
             }
         } else {
@@ -134,19 +165,41 @@ struct ProfileView: View {
         }
     }
 
-    /// 热力图卡片的骨架 —— 照着它的真实布局画那两行（§8.5 第 1 条纪律：尺寸要匹配）。
+    /// 年份切换器的选项（领域层的年份 × 文案层的 `{年份} 年`）。
+    private var yearOptions: [HeatmapYear] {
+        model.years.map { HeatmapYear(year: $0.year, title: $0.label) }
+    }
+
+    /// 选了某一年 —— 把设计包那个 `Int` 换回领域层的 `ContributionYear`。
+    ///
+    /// ⚠️ 跨包只走基础类型（设计包不认识领域包），所以这一层转换必须在这里做，
+    /// 而且只有这一处：`HeatmapYear.year` 与 `ContributionYear.year` 是同一个数。
+    private func select(year: Int) {
+        Task { await model.select(year: ContributionYear(year: year)) }
+    }
+
+    /// 热力图卡片的骨架 —— 照着它的真实布局画那三行（§8.5 第 1 条纪律：尺寸要匹配）。
+    ///
+    /// ⚠️ 网格那一行的高度从 `ContributionHeatmap.gridHeight` 取（**不是**写死 44）：
+    /// 2026-10-09 格子改成固定的 11pt 之后，整张图是 `7 × 11 + 6 × 2.5 = 92pt`，
+    /// 骨架写死旧值会让首帧与内容差出整整一倍（那正是切片 10 修的那一类失配）。
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 头部那行：左边「1,024 次贡献」、右边「过去一年」。
+            // 头部那行：左边「1,024 次贡献」、右边年份切换器（`2026 年` + 小箭头）。
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
                 SkeletonBar(height: 13, width: 104)
                 Spacer(minLength: 0)
                 SkeletonBar(height: 11, width: 48)
             }
-            // 网格：53 列 × 7 行铺满宽度后的高度量得约 44pt（见 `ContributionHeatmap` 的说明）。
             .padding(.bottom, 10)
 
-            SkeletonBar(height: 44)
+            // 月份表头那一行（caption 11pt ⇒ 14pt 高，宽度按几个标签估）。
+            SkeletonBar(height: 11, width: 148)
+                .padding(.bottom, Theme.Spacing.xs)
+
+            // 网格。⚠️ 横向一定溢出（内容约 713pt）⇒ 骨架也不该铺满卡片宽度，
+            //    但宽度是次要维度（真实内容会滚动），高度必须准。
+            SkeletonBar(height: ContributionHeatmap.gridHeight)
         }
     }
 
