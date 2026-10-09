@@ -104,7 +104,7 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 | # | 前置条件 | 谁给 | 卡住什么 | 当前状态 |
 |---|---|---|---|---|
 | **P1** | 🔒 **GitHub App 已创建**（Settings → Developer settings → GitHub Apps） | 你 | 切片 1 全部 | ✅ **已建**（2026-10-06 凭据在手） |
-| **P2** | 🔒 **App 权限勾选 6 项**：`Contents(RW)` · `Issues(RW)` · `Pull requests(RW)` · `Metadata(R)` · `Starring(RW)` · `Followers(RW)` | 你 | 缺 Starring/Followers 会让 Star / 关注 **直接 403** | ✅ **已确认**（2026-10-06 授权页目视 6 条 —— ⚠️ 状态列 2026-10-09 才改正，见下） |
+| **P2** | 🔒 **App 权限勾选 6 项**：`Contents(RW)` · `Issues(RW)` · `Pull requests(RW)` · `Metadata(R)` · `Starring(RW)` · `Followers(RW)` | 你 | 缺 Starring/Followers 会让 Star / 关注 **直接 403** | ⚠️ **名字级已确认**（2026-10-06 授权页目视 6 条）；**级别级未确认** —— 2026-10-09 走查报回"读通、写 403"，指向 **`Starring` 的级别是 Read-only**（见下） |
 | **P3** | 🔒 **回调 URL 已配置** `gitduo://oauth/callback`（**不要**勾 "Request user authorization during installation"——勾了会绕过 `state` + PKCE） | 你 | 切片 1 回调收不到 | ✅ **已确认**（2026-10-06 真机实测反证 —— 同上） |
 | **P4** | `InMemoryTokenStore` → **Keychain 实现** | 我（切片 1 内） | 骨架期为跑通 UI 用内存实现，**必须在切片 1 替换** | ✅ **已完成**（2026-10-06：`KeychainTokenStore`，真实 Keychain 往返 9 项单测） |
 | **P5** | 🔒 **`Secrets.xcconfig` 填真实 `client_id` + `client_secret`** | 你 | 只填一项会在换令牌那步失败（决策 #30 强制 secret） | ✅ **已完成**（2026-10-06 实测：格式干净 + 已注入构建产物） |
@@ -126,28 +126,52 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 > 我读到这行「⬜ 待自查」，就当成"App 缺 `Starring` 权限"、把这一条定性为**外部配置没做**。
 > 而 P2 其实早就确认过 6 条 ⇒ **"声明里有"与"手里那张令牌里有"是两件事**（真实成因见下）。
 
-### 🔴 P2 已过 ≠ 令牌带 `Starring`（走查 #3 那条 403 的处置）
+### 🔴 P2 已过 ≠ 令牌带 `Starring` ≠ `Starring` 的**级别**够（走查 #3 那条 403 的处置）
 
 **现象**：走查 #129 / #3 —— 点「已 Star」报 `操作失败 请重试`；且**仓库详情页那一颗也失败**（两处同一个通道）。
 
-**为什么会这样**（官方原文 + 逐字出处见 `GITHUB-APP-SETUP.md §2.10` 的 🔴 块）：
-`Starring` 是**账号级**（Account）权限。账号级权限变更时 ——
-**GitHub 不通知你**、**旧令牌继续有效**（登录 / 浏览 / 看仓库全都正常）⇒ 屏幕上只表现成"这一颗按钮坏了"。
-修法只有一条：**重新走一遍授权，拿一张新令牌**。
+**⏳ 2026-10-09 进度：那条"1 分钟自查"（退出登录 → 重新登录 → 点一颗已 Star）用户已做，`仍然报错`。**
+⇒ **"旧令牌"这一层被排除**，成因在**下一层**（下面第 ② 条）。这一步没白做：它把三选一砍成了二选一。
 
-**1 分钟自查（零成本，先做这一步）**：
+#### ⚠️ 而且现象本身就带答案 —— **"读"通不通**能把剩下两种成因分开
 
-| 步 | 做什么 | 看到什么 = 什么结论 |
+这条是本次查明的最有用的一点。`Starring` 这一项**读**与**写**是同一个下拉框的两个值，
+而这个 App 用它的地方刚好两半都有：
+
+| 用到的地方 | 需要 | 本次表现 |
 |---|---|---|
-| 1 | GitDuo 里**退出登录**（设置 → 退出登录） | 顺带会撤销 GitHub 侧授权（`TECH_SPEC §3.6`），重新登录才是全新授权 |
-| 2 | **重新登录**（重走一次授权） | ⇒ 拿到的新令牌是按 App **当前**声明签发的 |
-| 3 | 找一个**本来就已 Star 过**的仓库，点那颗「已 Star」 | **变回「Star」+ 数字 −1** ⇒ ✅ 就是"旧令牌"这一层，本条**结案** |
-| — | 若第 3 步**仍然**报错 | 说明不在这一层 ⇒ 照 `GITHUB-APP-SETUP.md §7` 最后两行往下查（授权页是否真列 6 条 / curl 看 403 的**响应体** / 是否只有私有仓库失败） |
+| 仓库详情页那颗按钮"我 Star 过没有"（`GET /user/starred/{o}/{r}`）+「我的 Star」列表 | **read** | ✅ **通过**（那颗按钮显示的是「**已 Star**」而不是「Star」，列表也有内容） |
+| 点下去那一下（`PUT` / `DELETE /user/starred/{o}/{r}`） | **write** | ❌ 403 ⇒ `操作失败 · 请重试` |
 
-> ⚠️ **第 3 步要挑"本来就已 Star 过"的仓库**，这不是讲究 —— 那颗按钮**先查一次真实状态再切**（决策 #41），
-> 拿一个没 Star 过的仓库试，看到的会是"Star 成功"，**验不出这条通道的权限**（走查单 #129 的判据里写着同一句）。
+⇒ **读得到、写不了** ⇒ 令牌带着 `Starring` 的**读**，缺的是**写**。而这两种权限由**同一个下拉框**一起授予 ⇒
+**App 申报的级别就是 `Read-only`**（或这张令牌是"级别还是 Read-only"那会儿签发的）。
+依据是官方对这个端点写的那句：*"The fine-grained token must have the following permission set:
+**`Starring` user permissions (write)** …"*（逐字出处见 `GITHUB-APP-SETUP.md §2.10`）。
 
-> ⏳ **待你回报**：上面的第 3 步结果（通过 / 仍失败）。P1 / P4 / P5 / P6 按现状，P2 / P3 已结。
+> ⚠️ **注意官方原文里那一项叫 "user permissions"（用户级），而 App 设置页上它在 "Account permissions" 分组里**
+> —— 同一个东西的两个叫法。别在设置页上找 "user permissions" 找不到就以为没有这一项。
+
+#### 处置（两步，顺序不能换）
+
+| 步 | 做什么 | 为什么 |
+|---|---|---|
+| 1 | App 设置页（`https://github.com/settings/apps`）→ 你的 App → **Permissions & events** → *Account permissions* → **`Starring`**：确认/改成 **Read and write** | ⚠️ **授权页只列权限名、不列级别** —— §6 那次"目视 6 条"看不出这一层 |
+| 2 | 改完**再**在 GitDuo 里**退出登录 → 重新登录** | **改声明 ≠ 换令牌**：旧的 user token 不会自动获得新级别（`GITHUB-APP-SETUP.md §2.10` 那条 🔴） |
+
+> ⚠️ **第 2 步必须在 App 里做**：在 GitHub 网页上点"批准新权限"不算 —— 那个流程会把浏览器送回我们的回调 URL，
+> 而它带的 `state` 不是我们签的那一个，本 App 会按 CSRF 防线拒收 ⇒ 手机上那张令牌**还是旧的**。
+> 只有"退出登录（连带撤销授权）→ 重新登录（重走我们自己的授权流程）"才会真的落一张新令牌。
+
+> ✅ **已排除（2026-10-09，实测）**：**不是**请求组装的问题。官方对 `PUT /user/starred/{o}/{r}` 写着
+> *"you'll need to set `Content-Length` to zero when calling out to this endpoint"*，所以我们那条
+> **无 body 的写请求**（`HTTPTransport.makeURLRequest` 在 `body == nil` 时**不设** `Content-Length`）是头号嫌疑。
+> 用本地 socket 抓包实测：**`URLSession` 自己就会发 `Content-Length: 0`**（`PUT` / `DELETE` 都是，请求头与
+> GitHub 文档要的一模一样）⇒ 不必改 `HTTPTransport`，也别再往这条路上查。
+
+> ⏳ **待你回报**：① 设置页上 `Starring` 现在是哪个值（**Read-only** / **Read and write**）；
+> ② 改完 + 重新登录之后那一下是否成功。若**本来就已经是 Read and write** ⇒ 停在"读通写不通"这个矛盾上，
+> 下一步是拿到 403 的**响应体与 `X-Accepted-GitHub-Permissions` 响应头**（到时我加一处**临时**诊断把这两个值显示出来，
+> 用完就撤）。P1 / P4 / P5 / P6 按现状，P3 已结。
 
 ---
 

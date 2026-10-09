@@ -201,6 +201,17 @@ gitduo://oauth/callback
 >
 > ⇒ **"授权页列出 6 条"（P2 过了）与"手里这张令牌带 Starring"是两件事**：
 > 前者看的是 App **当前的声明**，后者是**授权那一刻**的快照。**两者不一致时，屏幕上只看得见后者。**
+
+> 🔴 **而"权限名勾了"与"级别够了"又是第三件事（2026-10-09 补）**：`Starring` 这一项的下拉框有
+> **Read-only** 与 **Read and write** 两个值。⚠️ **授权页只列权限名、不列级别** ⇒ "目视 6 条"这一手
+> **看不出级别**。而这一层的症状极好认、也极容易被读错方向：
+>
+> | 症状 | 说明 |
+> |---|---|
+> | **读**正常（详情页显示「已 Star」）、**写** 403 | 令牌有 `Starring` 的读、缺写 ⇒ **声明就是 Read-only** |
+> | **读**也不通（按钮显示 `Star`） | 令牌里根本没有 `Starring` ⇒ 上一条那个"旧令牌"的情形 |
+>
+> 分辨它的价值：**"改声明"与"换令牌"是两个动作**，猜错一个就白跑一轮。逐条处置见 §7。
 > （这正是走查 #3 那条 403 最可能的成因，处置步骤见 `REVIEW-CHECKLIST.md` 清单 C 的 P2 段。）
 
 > **为什么不需要 Email addresses / Profile**：本期界面不展示邮箱，资料页只用登录名与头像。
@@ -374,8 +385,10 @@ make gen && make build
 | `incorrect_client_credentials` | `client_id` / `client_secret` 写错（如误用了 App ID） | 用设置页上的 **Client ID**，两者不同 |
 | `bad_verification_code` | `code` 过期（**10 分钟**）或已用过 | 重新发起授权；`code` 一次性 |
 | Star / 关注 **403** | 漏勾 `Starring` / `Followers` | §2.10 勾上；**改权限后已安装用户需重新批准** |
-| Star **勾了 `Starring` 还是 403** | 手里那张令牌是**授权早于权限变更**那一刻签发的。⚠️ **账号级**权限（`Starring` / `Followers`）变更时 GitHub **既不通知、旧令牌也不会自动获得**（§2.10 那条 🔴）⇒ 登录 / 浏览全正常，只有 Star 这一处 403，看着像"按钮坏了" | **在 GitDuo 里退出登录 → 重新登录**（重走授权 ⇒ 拿到含 `Starring` 的新令牌）。**这一步零成本，先做它** |
-| 重新授权后 Star **仍然** 403 | 说明不在"令牌旧"这一层了 | 往下查三处：① §6 第 1 项的授权页是不是真列出 6 条（列不出 = 声明错了）；② curl 看**响应体**而不只是状态码，403 的 `message` 会区分"权限不足"与"被限制"；③ 若**只有私有仓库**失败 ⇒ 是 §4 的安装范围（但那时更该是 404、不是 403） |
+| 🔴 **写** Star 报 `操作失败 · 请重试`，而**读**一切正常（仓库详情页那颗按钮显示的是 **`已 Star`**、不是 `Star`） | 令牌带着 `Starring` 的**读**、却缺**写** ⇒ ### App 申报的级别是 **Read-only**（或者这张令牌是"级别还是 Read-only"那会儿签发的）。依据：官方对这个端点写的是 *"The fine-grained token must have the following permission set: **`Starring` user permissions (write)**"*，而"查有没有 Star 过 / 列 Starred 列表"只要 **read** ⇒ **读得到、写不了，正好是级别不够的形状** | ① App 设置页 → **Permissions & events** → *Account permissions* → **`Starring`** 改成 **Read and write**；② **再**在 GitDuo 里**退出登录 → 重新登录**（改声明 ≠ 换令牌，见 §2.10 那条 🔴） |
+| Star **连"读"也不通**（详情页那颗按钮显示 `Star` 而不是 `已 Star`；「我的 Star」列表空 / 失败） | 令牌里**完全没有** `Starring`：授权发生在权限变更**之前**。⚠️ **账号级**权限（`Starring` / `Followers`）变更时 GitHub **既不通知、旧令牌也不会自动获得**（§2.10 那条 🔴）⇒ 登录 / 浏览全正常，只有 Star 这一处 403 | **在 GitDuo 里退出登录 → 重新登录**（重走授权 ⇒ 拿到含 `Starring` 的新令牌）。**这一步零成本，先做它** |
+| ✅ **已排除（2026-10-09，实测）**：请求形状 | 官方对 `PUT /user/starred/{o}/{r}` 有一句 *"you'll need to set `Content-Length` to zero when calling out to this endpoint"* ⇒ 怀疑过我们那条**无 body 的写请求**（`HTTPTransport.makeURLRequest` 在 `body == nil` 时不设 `Content-Length`）。**本地 socket 抓包实测：`URLSession` 自己就会发 `Content-Length: 0`**（`PUT` / `DELETE` 都一样） | 不必改 `HTTPTransport`；同时说明"写失败"**不是**请求组装的问题，别在这条路上再花时间 |
+| 重新授权后 Star **仍然** 403 | 先回到上一格看"**读**通不通" —— 那一步能把两种成因分开 | a) App 声明**逐项核对级别**（授权页只列**名字**、不列级别 —— §6 那次目视看不出这一层）；b) curl 看**响应体**与 **`X-Accepted-GitHub-Permissions`** 响应头（官方：权限不足回 403，该头会说明端点要什么）；c) 若**只有私有仓库**失败 ⇒ §4 的安装范围（但那更该是 404） |
 | 仓库相关 **404**（而非 403） | GitHub 对**无权限**的资源返回 404 以隐藏存在性；也可能是没安装 / 没勾该仓库 | 查 §4 的安装范围；`/user/installations` 可看当前可访问仓库 |
 | 换令牌返回的是 `access_token=ghu_...` 这种**表单串**而不是 JSON | 没带 `Accept: application/json` | 请求头加上 `Accept: application/json` |
 | 刷新报 `unsupported_grant_type` | `grant_type` 没写 `refresh_token` | 官方要求 `grant_type=refresh_token` |
