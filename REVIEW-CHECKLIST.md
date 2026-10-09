@@ -130,8 +130,22 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 
 **现象**：走查 #129 / #3 —— 点「已 Star」报 `操作失败 请重试`；且**仓库详情页那一颗也失败**（两处同一个通道）。
 
-**⏳ 2026-10-09 进度：那条"1 分钟自查"（退出登录 → 重新登录 → 点一颗已 Star）用户已做，`仍然报错`。**
-⇒ **"旧令牌"这一层被排除**，成因在**下一层**（下面第 ② 条）。这一步没白做：它把三选一砍成了二选一。
+**✅ 2026-10-09 结案（真机实测，抓到了服务端原话）**
+
+用户先做了那条"1 分钟自查"（退出登录 → 重新登录 → 点一颗已 Star）—— `仍然报错`；
+随后确认设置页上 `Starring` **本来就是 Read and write**。两条都不能解释现象 ⇒ 加了一处**临时**诊断
+（`GitDuo/App/StarProbe.swift`，DEBUG-only，**用完即删**），在这台真机上用与 App **逐字相同**的请求头把原话取回来：
+
+| 请求 | 结果 | `x-accepted-github-permissions` |
+|---|---|---|
+| `GET /user/starred?per_page=1` | **200** | `starring=read` |
+| `GET /user/starred/{o}/{r}` | **204** | `metadata=read,starring=read` |
+| `DELETE /user/starred/{o}/{r}` | **403** | `starring=write,metadata=read` |
+| `PUT /user/starred/{o}/{r}` | **403** | `starring=write,metadata=read` |
+
+两个 403 的体都是 `{"message":"Resource not accessible by integration"}` ——
+**这是 GitHub 对"App 令牌权限不足"的标准措辞**（不是"你这个人 / 这个仓库没权限"）。
+⇒ **定论：手里这张令牌满足 `starring=read`、不满足 `starring=write`。**
 
 #### ⚠️ 而且现象本身就带答案 —— **"读"通不通**能把剩下两种成因分开
 
@@ -143,35 +157,45 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 | 仓库详情页那颗按钮"我 Star 过没有"（`GET /user/starred/{o}/{r}`）+「我的 Star」列表 | **read** | ✅ **通过**（那颗按钮显示的是「**已 Star**」而不是「Star」，列表也有内容） |
 | 点下去那一下（`PUT` / `DELETE /user/starred/{o}/{r}`） | **write** | ❌ 403 ⇒ `操作失败 · 请重试` |
 
-⇒ **读得到、写不了** ⇒ 令牌带着 `Starring` 的**读**，缺的是**写**。而这两种权限由**同一个下拉框**一起授予 ⇒
-**App 申报的级别就是 `Read-only`**（或这张令牌是"级别还是 Read-only"那会儿签发的）。
-依据是官方对这个端点写的那句：*"The fine-grained token must have the following permission set:
-**`Starring` user permissions (write)** …"*（逐字出处见 `GITHUB-APP-SETUP.md §2.10`）。
+⇒ **读得到、写不了** ⇒ 令牌带着 `Starring` 的**读**，缺的是**写**。
+⚠️ **而"设置页上写着 Read and write"与它并不矛盾 —— 两者是两件事**：
+设置页看的是 App **当前的声明**，令牌带的是**授权那一刻的快照**；
+升级账号级权限**不会**让已发出去的令牌自动获得
+（`GITHUB-APP-SETUP.md §2.10` 那条 🔴，官方原文逐字在那一节）。
+依据是官方对本端点那句话：*"The fine-grained token must have the following permission set:
+**`Starring` user permissions (write)** …"*。
 
 > ⚠️ **注意官方原文里那一项叫 "user permissions"（用户级），而 App 设置页上它在 "Account permissions" 分组里**
 > —— 同一个东西的两个叫法。别在设置页上找 "user permissions" 找不到就以为没有这一项。
 
-#### 处置（两步，顺序不能换）
+#### 处置（三步，**顺序不能换**；第 2 步是关键）
 
 | 步 | 做什么 | 为什么 |
 |---|---|---|
-| 1 | App 设置页（`https://github.com/settings/apps`）→ 你的 App → **Permissions & events** → *Account permissions* → **`Starring`**：确认/改成 **Read and write** | ⚠️ **授权页只列权限名、不列级别** —— §6 那次"目视 6 条"看不出这一层 |
-| 2 | 改完**再**在 GitDuo 里**退出登录 → 重新登录** | **改声明 ≠ 换令牌**：旧的 user token 不会自动获得新级别（`GITHUB-APP-SETUP.md §2.10` 那条 🔴） |
+| 1 | App 设置页（`https://github.com/settings/apps`）→ 你的 App → **Permissions & events** → *Account permissions* → **`Starring`** = **Read and write** | 声明管的是"以后发的令牌" |
+| 2 | **把 GitHub 侧那条授权真正撤掉**：`https://github.com/settings/connections/applications/Iv23liKmpmDl65pKlS1p` → **Revoke access** | ⚠️ **只在 App 里退出登录可能不算数**（见下那条缺陷）——旧授权活着，下次登录就可能复用它的权限快照 |
+| 3 | 回 GitDuo **退出登录 → 重新登录**，**并留意浏览器有没有出现授权页** | 出现 ⇒ 点同意 ⇒ 新令牌才带上 `write`；**不出现就说明又在复用旧授权** ⇒ 回到第 2 步 |
 
-> ⚠️ **第 2 步必须在 App 里做**：在 GitHub 网页上点"批准新权限"不算 —— 那个流程会把浏览器送回我们的回调 URL，
-> 而它带的 `state` 不是我们签的那一个，本 App 会按 CSRF 防线拒收 ⇒ 手机上那张令牌**还是旧的**。
-> 只有"退出登录（连带撤销授权）→ 重新登录（重走我们自己的授权流程）"才会真的落一张新令牌。
+> ⚠️ **为什么"退出登录 → 重新登录"可能白做**（2026-10-09 查得的 **App 侧缺陷，待修**）
+> 登出撤销若没真的成功，GitHub 侧的授权（grant）会活着；下次登录就可能复用那条旧授权
+> ⇒ **新令牌仍带着旧的权限快照**。而 `AuthCoordinator.signOut` 有两处让"没成功"看不出来：
+> ① 撤销用的是 Keychain 里那张**可能已过期**的令牌（官方要求必须提供 **valid** `access_token`）
+>    —— 过期即失败，而失败只是降级成 `revokedLocallyOnly`；
+> ② `store.load()` 抛错时**根本没发撤销请求**，`outcome` 却仍是 `.revoked`（**谎报"已撤销"**）。
+> 在修好之前，用第 2 步那条**网页撤销**绕过去。
 
 > ✅ **已排除（2026-10-09，实测）**：**不是**请求组装的问题。官方对 `PUT /user/starred/{o}/{r}` 写着
 > *"you'll need to set `Content-Length` to zero when calling out to this endpoint"*，所以我们那条
 > **无 body 的写请求**（`HTTPTransport.makeURLRequest` 在 `body == nil` 时**不设** `Content-Length`）是头号嫌疑。
 > 用本地 socket 抓包实测：**`URLSession` 自己就会发 `Content-Length: 0`**（`PUT` / `DELETE` 都是，请求头与
 > GitHub 文档要的一模一样）⇒ 不必改 `HTTPTransport`，也别再往这条路上查。
+>
+> ✅ **同时排除**：API 版本头（`2026-03-10` 服务端接受，实测 `GET /rate_limit` 回 200）、
+> 令牌类型（实测 `ghu_` = user-to-server，正是这类端点要的那种）、URL 形状（实测打印出的 URL 正确）、
+> 配额（`x-ratelimit-remaining` 四千多）。
 
-> ⏳ **待你回报**：① 设置页上 `Starring` 现在是哪个值（**Read-only** / **Read and write**）；
-> ② 改完 + 重新登录之后那一下是否成功。若**本来就已经是 Read and write** ⇒ 停在"读通写不通"这个矛盾上，
-> 下一步是拿到 403 的**响应体与 `X-Accepted-GitHub-Permissions` 响应头**（到时我加一处**临时**诊断把这两个值显示出来，
-> 用完就撤）。P1 / P4 / P5 / P6 按现状，P3 已结。
+> ⏳ **待你回报**：第 2、3 步做完之后那一下是否成功。若**仍然 403** ⇒ 说明 App 声明的级别其实不是 `write`
+> （那就回到第 1 步逐字核对），届时我会把临时诊断再跑一次确认。P1 / P4 / P5 / P6 按现状，P3 已结。
 
 ---
 
