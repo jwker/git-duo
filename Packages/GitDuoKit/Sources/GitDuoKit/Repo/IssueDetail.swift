@@ -96,6 +96,39 @@ public struct IssueDetail: Sendable, Hashable, Identifiable {
     /// 必须有名字 —— 那里是一个头像 + 一行字的位置，空着看起来像加载失败。
     public var displayAuthor: String { AuthorName.display(authorLogin) }
 
+    /// 这条 Issue 是不是 `login` 这个人提的（决策 **#79** 的判据之一）。
+    ///
+    /// ## ⚠️ **大小写不敏感** —— 这不是洁癖
+    ///
+    /// GitHub 的登录名**本身大小写不敏感**（`JiangJiang` 与 `jiangjiang` 是同一个人，
+    /// 换大小写只是换个写法）。按 `==` 直接比的下场是：**我自己提的 Issue 认不出自己**
+    /// ⇒ 那一条被判成只读、少一颗「关闭 Issue」，而屏幕上**看起来完全正常**
+    /// （标题、状态胶囊、评论、元信息全对）—— 属"错了不会报错"的那一类。
+    ///
+    /// ⚠️ `nil`（作者账号已删除，或接口没给）**一律判为"不是我提的"**：
+    /// 宁可少给一颗按钮，也不要给一颗点下去必然 403 的。
+    public func isAuthored(by login: String?) -> Bool {
+        guard let author = authorLogin, let login else { return false }
+        return author.caseInsensitiveCompare(login) == .orderedSame
+    }
+
+    /// 本页操作区的档位（`IssueOperationAvailability`，唯一判据在那边）。
+    ///
+    /// - Parameter readOnly: 来自**入口**（`Route.issueDetail` 上那个参数）。
+    ///   ⚠️ 它的含义**比 PR 那边窄**：只表示"这个入口假定我没有仓库写权限"，
+    ///   **不是**"整页只读" —— 最终判据还要并上"我是不是这条 Issue 的作者"。
+    /// - Parameter viewerLogin: 当前登录名；`nil` 时判不出作者身份 ⇒ 取保守侧。
+    public func operationAvailability(
+        readOnly: Bool,
+        viewerLogin: String?
+    ) -> IssueOperationAvailability {
+        IssueOperationAvailability.decide(
+            readOnly: readOnly,
+            isAuthor: isAuthored(by: viewerLogin),
+            isOpen: isOpen
+        )
+    }
+
     /// 正文气泡头部的时间（`2 小时前`）。
     ///
     /// ⚠️ 用**创建时刻**而不是关闭时刻：这条气泡是"作者当初写下的那段话"，

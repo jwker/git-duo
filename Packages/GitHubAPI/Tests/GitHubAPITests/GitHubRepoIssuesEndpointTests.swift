@@ -372,4 +372,53 @@ struct GitHubRepoIssuesEndpointTests {
         #expect(comment.id == 903)
         #expect(comment.user?.login == "you")
     }
+
+    // MARK: - 切片 9 之后：关闭 / 重新打开（决策 #79）
+
+    @Test("关闭 / 重新打开：PATCH + 请求体**只有** state，回的是服务端给的那份详情")
+    func updateIssueStateSendsPatchAndReturnsServerDetail() async throws {
+        // ⚠️ 两个取值都走一遍：`updateIssueState` **故意不校验**取值，
+        //    拼错一个（`"close"` / `"reopen"`）不会有任何编译期或运行期提示。
+        for state in ["closed", "open"] {
+            let harness = StubURLProtocol.makeHarness()
+            harness.stub(
+                .json(
+                    """
+                    {"number":42,"title":"登录按钮在真机上不可点","state":"\(state)",
+                     "body":"正文","user":{"login":"jiangjiang"},"created_at":"2026-10-06T08:00:00Z",
+                     "closed_at":\(state == "closed" ? "\"2026-10-09T08:00:00Z\"" : "null")}
+                    """
+                )
+            )
+
+            let detail = try await makeEndpoint(harness: harness)
+                .updateIssueState(owner: "o", repo: "r", number: 42, state: state)
+
+            #expect(harness.lastRequest?.httpMethod == "PATCH")
+            #expect(harness.lastRequest?.url?.path == "/repos/o/r/issues/42")
+
+            let body = try #require(harness.lastBody)
+            let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+            // ⚠️ 请求体**恰好**一个键：多带 `title` / `body` 会把它们一起改掉
+            //    （PATCH 的语义是"只改我给的那几个字段"，但我们只想改状态）。
+            #expect(json == ["state": state])
+            #expect(detail.state == state)
+            // 状态与关闭时间都跟着服务端走 —— 不是本地拼出来的。
+            // ⚠️ `GitHubDate.parse` **不抛**（它回 `Date?`），别写成 `try` ——
+            //    多写的 `try` 会报一条 `#UnnecessaryEffectMarker` 警告，而本项目要求零警告。
+            let expectedClosedAt = GitHubDate.parse("2026-10-09T08:00:00Z")
+            #expect(detail.closedAt == (state == "closed" ? expectedClosedAt : nil))
+        }
+    }
+
+    @Test("⚠️ 关闭失败（403）照常抛 —— **不悄悄当成成功**")
+    func updateIssueStateSurfacesForbidden() async {
+        let harness = StubURLProtocol.makeHarness()
+        harness.stub(.json(#"{"message":"Forbidden"}"#, status: 403))
+
+        await #expect(throws: GitHubError.self) {
+            _ = try await makeEndpoint(harness: harness)
+                .updateIssueState(owner: "o", repo: "r", number: 42, state: "closed")
+        }
+    }
 }

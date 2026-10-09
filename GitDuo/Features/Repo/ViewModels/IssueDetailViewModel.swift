@@ -67,8 +67,26 @@ final class IssueDetailViewModel {
     /// 见 `draft` 的 `didSet`。
     private var isRestoringDraft = false
 
+    /// 本页的弹层路由（目前只有一张：§5.18 关闭确认）。
+    ///
+    /// ⚠️ **只有"关闭"那一档有弹层**（PRD §4.9 操作区末条：重开没有可损失的东西）。
+    /// 做成 `Identifiable` 枚举而不是布尔量，与其余几页同一条处置 ——
+    /// 将来真给重开也加确认时，这里是**加一个 case**，而不是改类型
+    /// （改类型会牵动 `.sheet(item:)` 的写法与所有调用点）。
+    enum SheetRoute: Identifiable, Hashable, Sendable {
+        case closeConfirm
+
+        var id: String { "closeConfirm" }
+    }
+
+    var sheet: SheetRoute?
+
+    /// 关闭 / 重新打开在途（按钮转圈 + 防重复提交）。
+    private(set) var isWorking = false
+
     private let loader: LoadIssueDetail
     private let sender: PostIssueComment
+    private let actions: IssueAction
     private let drafts: any CommentDraftStore
     private let toast: ToastCenter
 
@@ -77,6 +95,7 @@ final class IssueDetailViewModel {
         number: Int,
         loader: LoadIssueDetail,
         sender: PostIssueComment,
+        actions: IssueAction,
         drafts: any CommentDraftStore,
         toast: ToastCenter
     ) {
@@ -84,6 +103,7 @@ final class IssueDetailViewModel {
         self.number = number
         self.loader = loader
         self.sender = sender
+        self.actions = actions
         self.drafts = drafts
         self.toast = toast
     }
@@ -205,6 +225,54 @@ final class IssueDetailViewModel {
                 headers: page.headers
             )
         )
+    }
+
+    // MARK: - 关闭 / 重新打开（§4.9 操作区、决策 #79）
+
+    /// 关闭这条 Issue。**弹层确认之后才调用**（确认那一步在视图上 —— 同 §5.11 的处置）。
+    func close() async {
+        await update(successToast: IssueCopy.closedToast(number: number)) {
+            try await actions.close(fullName: fullName, number: number)
+        }
+    }
+
+    /// 重新打开这条 Issue。
+    ///
+    /// ⚠️ **它不弹确认**（PRD §4.9 操作区末条，有意不对称）：重开只是把状态还原，
+    /// 没有可损失的东西。
+    func reopen() async {
+        await update(successToast: IssueCopy.reopenedToast(number: number)) {
+            try await actions.reopen(fullName: fullName, number: number)
+        }
+    }
+
+    /// 两个操作共用的骨架（差别只有"调哪个用例"与"报哪句话"）。
+    ///
+    /// ## ⚠️ 失败时**一个字都不改** —— 所以顺序是"先成功、再改"
+    ///
+    /// `PATCH` 没成功 ⇒ 本地那份详情原样留着。若反过来先把 `detail` 改成"已关闭"、
+    /// 失败了再改回来，中间那一瞬界面就在说假话（头部那句会变成"已于 {时间}关闭"），
+    /// 而失败回滚之后用户很可能只看到"闪了一下"⇒ 之后他会以为真的关掉了。
+    /// 同 `PullDetailViewModel.updateState` 的处置。
+    ///
+    /// ⚠️ 失败走**页面级提示条**（`ActionCopy.failed`）：这一页没有弹层盖着它
+    /// （关闭弹层在确认那一刻就关了），所以提示条看得见 —— 与决策 #77 那条
+    /// "弹层留着才画在弹层里"的边界正好相反，别混用。
+    private func update(
+        successToast: String,
+        _ operation: () async throws -> IssueDetail
+    ) async {
+        guard !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+
+        do {
+            // ⚠️ 用**服务端回的那份详情**（`PATCH` 的响应是完整的 Issue 对象）。
+            detail = .loaded(try await operation())
+            toast.show(successToast)
+        } catch {
+            toast.show(ActionCopy.failed)
+        }
     }
 
     // MARK: - 草稿

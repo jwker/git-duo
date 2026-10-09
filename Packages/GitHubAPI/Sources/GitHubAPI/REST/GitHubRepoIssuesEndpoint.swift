@@ -9,10 +9,13 @@ import Foundation
 /// 两条写（新建 Issue、发评论）—— 与 `GitHubRepoBranchEndpoint` 同一个理由：
 /// **同一屏的读写放在一起**更好核对（Issue 详情页的"读评论 + 发评论"就是同一屏）。
 ///
-/// ## ⚠️ 关闭 / 重新打开 Issue **不在这里**
+/// ## ⚠️ 2026-10-09 起它也有了「关闭 / 重新打开」
 ///
-/// 决策 #62：PRD §4.9 与原型都没有这个入口，`PATCH …/issues/{n}` 虽在 §4.6.2 的端点表里，
-/// 但那只是端点清单、不等于产品范围 ⇒ 本期不做。**不是遗漏。**
+/// 决策 #62 原先写的是"本期不做"，依据只有一条：PRD §4.9 与原型都没有这个入口。
+/// 用户走查报回「从「我的 Issue」进详情后不能改状态」之后，决策 **#79** 推翻了它
+/// ⇒ 本类型加上了 `updateIssueState`。
+/// ⚠️ 那条旧依据失效的地方值得记一句：**"原型里没有"在原型没画过的场景上没有说服力** ——
+/// 「我的 Issue」这一屏原型里根本没有。
 public struct GitHubRepoIssuesEndpoint: Sendable {
 
     /// 列表页大小（与其余列表一致，§4.4）。
@@ -199,6 +202,42 @@ public struct GitHubRepoIssuesEndpoint: Sendable {
             )
         )
         return try response.decode(IssueCommentDTO.self)
+    }
+
+    // MARK: - 写：关闭 / 重新打开
+
+    /// 关闭或重新打开 Issue —— `PATCH /repos/{o}/{r}/issues/{n}`
+    /// （PRD §4.9 操作区、TECH_SPEC §9.8、决策 #79）。
+    ///
+    /// - Parameter state: **只允许 `open` / `closed`**。
+    ///   ⚠️ 本方法**故意不做校验**（同 `updatePullState`）："谁是作者、谁有仓库写权限"
+    ///   是**产品口径**，它属于领域层（`IssueOperationAvailability`）。
+    ///   数据层照发，把服务端的话带回来。
+    ///
+    /// - Returns: 更新后的详情。⚠️ **调用方必须用这一份**，不要在本地改一个 `state` 字段 ——
+    ///   PATCH 的响应是**完整的 Issue 对象**，"界面说已关闭、服务端说还开着"那种不一致
+    ///   只会在下一次刷新时才暴露，而那时已经没人记得是哪一次操作造成的。
+    public func updateIssueState(
+        owner: String,
+        repo: String,
+        number: Int,
+        state: String
+    ) async throws -> IssueDetailDTO {
+        let body = try JSONSerialization.data(
+            withJSONObject: ["state": state],
+            options: [.sortedKeys]
+        )
+        let response = try await client.send(
+            .sending(
+                .patch,
+                to: client.url("repos/\(owner)/\(repo)/issues/\(number)"),
+                body: body,
+                // 关 / 重开都会改列表里那一行的状态 ⇒ 整棵 Issue 子树失效。
+                // 粗粒度是有意的，与上面发评论那条同一个取舍。
+                invalidating: [Self.issuesPrefix(owner: owner, repo: repo)]
+            )
+        )
+        return try response.decode(IssueDetailDTO.self)
     }
 
     // MARK: - 缓存前缀

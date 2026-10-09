@@ -134,17 +134,22 @@ struct RouteView: View {
                 memory: env.branchMemory,
                 toast: env.toast
             )
-        case let .issueDetail(fullName, number):
-            // PRD §4.9。
-            // ⚠️ 本页**不收 `readOnly`**，而 `Route.issueDetail` 也没有这个参数 ——
-            //    这不是漏了：Issue 的「关闭 / 重新打开」本期不做（决策 #62），
-            //    所以这一页上没有任何写操作，只读态在它身上没有落点。
-            //    （PR 那边就不一样：操作区四档全由 `readOnly` 决定。）
+        case let .issueDetail(fullName, number, readOnly):
+            // PRD §4.9、TECH_SPEC §9.8、决策 #79。
+            // ⚠️ 两个参数都**显式传**：
+            //    · `readOnly` —— 入口给的可写性（铁律 #7），同 PR 那一处；
+            //    · `viewerLogin` —— 判"这条 Issue 是不是我提的"要用它（GitHub 的规则：
+            //      谁提的谁可关，所以作者身份本身就是权限的一半）。
+            //      ⚠️ 取自 `authState`，**不再打一次 `/user`**（同 §9.15 给设置页那一条口径）。
+            //      已认证分支里它必然有值，但类型上是 Optional ⇒ 取不到时详情页取保守侧。
             IssueDetailView(
                 fullName: fullName,
                 number: number,
+                readOnly: readOnly,
+                viewerLogin: env.authState.login,
                 loader: env.issueDetail,
                 sender: env.postIssueComment,
+                actions: env.issueAction,
                 drafts: env.commentDrafts,
                 toast: env.toast
             )

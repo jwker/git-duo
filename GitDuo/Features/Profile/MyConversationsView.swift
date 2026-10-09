@@ -144,12 +144,21 @@ struct MyConversationsView: View {
     /// 取保守侧。代价如实说：自己的 PR 点进去也是只读的（没有合并 / 关闭那几颗按钮）。
     /// 铁律 #7：不在这里用"仓库全名是不是以我的登录名开头"补判断。
     ///
-    /// Issue 那一边没有这个问题：`Route.issueDetail` 根本没有 `readOnly` 这个参数
-    /// （Issue 的关闭 / 重新打开本期不做，决策 #62），两种情形下都是同一页。
+    /// ⚠️ **Issue 那一边现在也走同一条**（2026-10-09，决策 **#79**）：`Route.issueDetail`
+    /// 同样带 `readOnly`、同样取保守侧。它此前说的是"本页不做关闭 / 重开"（决策 #62）——
+    /// 那条已被用户的走查报回推翻。
+    ///
+    /// ## ⚠️⚠️ 但 Issue 这一边有一处**关键的不同**：保守侧在这里几乎不起作用
+    ///
+    /// 本页 Issue 列表的口径是 `author:@me` ⇒ **每一条都是我提的**，而 GitHub 的规则是
+    /// *"Anyone can close an issue they opened"* ⇒ 详情页会把 `readOnly: true` 这个
+    /// 保守假设**抵消掉**，于是这里几乎每一条**都能操作**（哪怕它落在别人的仓库里）。
+    /// ⚠️ 这正是用户报回那条的修法：若照 PR 那样把 `readOnly` 理解成"整页只读"，
+    /// 这一页就会**继续改不了状态**。
     private func open(_ hit: ConversationHit) {
         switch model.kind {
         case .issue:
-            env.router.push(.issueDetail(fullName: hit.repoFullName, number: hit.number))
+            env.router.push(.issueDetail(fullName: hit.repoFullName, number: hit.number, readOnly: true))
         case .pullRequest:
             env.router.push(.prDetail(
                 fullName: hit.repoFullName,

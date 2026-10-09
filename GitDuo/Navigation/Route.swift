@@ -38,7 +38,14 @@ enum Route: Hashable, Sendable {
     case editor(fullName: String, path: String?, mode: EditorMode)
     case commitDetail(fullName: String, sha: String, readOnly: Bool)
     case branches(fullName: String)
-    case issueDetail(fullName: String, number: Int)
+    /// Issue 详情。
+    ///
+    /// ⚠️ `readOnly` 的含义**比 `.prDetail` 那个窄**（决策 **#79**）：它只表示
+    /// "**这个入口假定我没有仓库写权限**"，**不是**"整页只读" —— 详情页的操作区
+    /// 还要并上"我是不是这条 Issue 的作者"（GitHub 的规则：谁提的谁可关）。
+    /// ⇒ 从「我的 Issue」进来时它是 `true`，而那里几乎每一条**都能操作**；
+    /// 若把它写成"`readOnly` ⇒ 什么都不给"，用户就又改不了状态了（那正是本片要修的）。
+    case issueDetail(fullName: String, number: Int, readOnly: Bool)
     case newIssue(fullName: String)
     case prDetail(fullName: String, number: Int, readOnly: Bool)
     case exploreIssueList(fullName: String)

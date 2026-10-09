@@ -345,7 +345,9 @@ struct RepoDetailView: View {
                     Task { await model.removeIssueLabel(label) }
                 },
                 onOpen: { number in
-                    env.router.push(.issueDetail(fullName: fullName, number: number))
+                    // ⚠️ `readOnly: false` **显式传**（铁律 #7）—— 与下面 PR 那一处同一条：
+                    //    本页是"自己的仓库"（本页的可写性在别处也是这么写的）。
+                    env.router.push(.issueDetail(fullName: fullName, number: number, readOnly: false))
                 },
                 onCreate: {
                     env.router.push(.newIssue(fullName: fullName))

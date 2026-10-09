@@ -272,7 +272,11 @@ struct SearchView: View {
         case let .conversation(hit):
             switch hit.kind {
             case .issue:
-                env.router.push(.issueDetail(fullName: hit.repoFullName, number: hit.number))
+                // `readOnly: true` —— 同一个理由：搜索给不出可写性（`/search/issues`
+                // 不返回 `permissions`），而结果可能落在任何一个仓库里 ⇒ 取保守侧。
+                // ⚠️ 决策 #79 之后它**不等于整页只读**：万一搜到的这条恰好是我提的，
+                // Issue 详情页仍然给得出「关闭 Issue」。
+                env.router.push(.issueDetail(fullName: hit.repoFullName, number: hit.number, readOnly: true))
             case .pullRequest:
                 // `readOnly: true` —— 同一个理由：搜索给不出可写性，取保守侧。
                 // （PR 详情页本身属切片 7，届时它自己会决定要不要按这个旗标收口。）

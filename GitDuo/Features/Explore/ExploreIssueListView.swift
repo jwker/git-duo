@@ -134,7 +134,11 @@ struct ExploreIssueListView: View {
         return VStack(spacing: Theme.Spacing.s) {
             ForEach(items) { row in
                 Button {
-                    env.router.push(.issueDetail(fullName: fullName, number: row.number))
+                    // ⚠️ `readOnly: true` —— 这一页是**他人仓库**的 Issue（页脚那句就写着
+                    //    "关闭 Issue 需维护者权限"）。但决策 #79 之后它**不等于整页只读**：
+                    //    万一这一页里有一条恰好是我提的，那一页仍然给得出「关闭 Issue」
+                    //    （GitHub 的规则是"谁提的谁可关"）。
+                    env.router.push(.issueDetail(fullName: fullName, number: row.number, readOnly: true))
                 } label: {
                     IssueCard(row: row, now: now)
                 }

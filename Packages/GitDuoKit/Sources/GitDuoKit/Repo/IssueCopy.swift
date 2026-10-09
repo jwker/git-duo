@@ -198,4 +198,54 @@ public enum IssueCopy {
     public static func labelCreatedToast(name: String) -> String {
         "已创建标签 “\(name)”"
     }
+
+    // MARK: - §4.9 操作区（2026-10-09 起做；决策 #79）
+
+    /// 操作区那颗「关闭 Issue」。
+    ///
+    /// ⚠️ **§5.18 弹层里的确认按钮也用这一串**：同一个动作、同一个词
+    /// （PR 那边同理 —— 操作区那颗和弹层里那颗都叫 `合并 Pull Request`）。
+    public static let closeAction = "关闭 Issue"
+
+    /// 操作区那颗「重新打开 Issue」。
+    ///
+    /// ⚠️ **它不弹确认**（与关闭有意不对称）：重开只是把状态还原，没有可损失的东西
+    /// （PRD §4.9 操作区末条）。所以这一串**只出现在页面那颗按钮上**。
+    public static let reopenAction = "重新打开 Issue"
+
+    /// 操作区**一颗按钮都没有**时的那一行提示（PRD §4.9 操作区表第一行）。
+    ///
+    /// ## ⚠️ 它与探索 Issues 列表的页脚（`OpenIssueIndicator.footer`）**不是同一句**
+    ///
+    /// 两句只差一个分隔符（这里 ` · `、那句 `：`），而且都出现在"Issue"这个词旁边 ——
+    /// 正因如此更不能合并：**那句说的是"这个列表能做什么"（列表页脚），
+    /// 这一句说的是"这一页的操作区为什么没有按钮"（详情页）**。
+    /// `PullCopy.readOnlyHint` 的说明早就把这条规矩写下来了（PR 那边也是两句），
+    /// 这里只是把同一条规矩搬到 Issue 这一边。
+    ///
+    /// ⚠️ **原型给不出这一句**：`SCR.issueDetail` 里连操作区都没有（偏差第 **47** 条）。
+    /// 取的是**同位置的既有写法** —— 原型在 PR 详情页那一处用的是 ` · ` 分隔
+    /// （`08-pr.js:50`），两个列表页脚用的是 `：`（`10-explore-repo.js:126` / `:141`）。
+    /// 这一句站在"详情页操作区"那个位置上 ⇒ 跟详情页那一处走。
+    public static let readOnlyHint = "他人仓库 · 可评论参与讨论，关闭 Issue 需维护者权限"
+
+    /// §5.18 弹层的标题。
+    public static let closeSheetTitle = "关闭这条 Issue？"
+
+    /// §5.18 弹层的说明段（**规格未给**，自拟）。
+    ///
+    /// ⚠️ 「仍然可以重新打开」不是客套，它是一个**可验证的承诺** ——
+    /// 页面上真的有一颗「重新打开 Issue」，而且作者身份本身就够了（决策 #79）。
+    /// 把它说出来的用处是让用户**敢按下去**：不说的话，"关闭"这个动作看起来
+    /// 与"删除"没什么区别。
+    public static let closeSheetHint = "关闭之后仍然可以重新打开，评论都会保留。"
+
+    /// 关闭成功。
+    ///
+    /// ⚠️ 带编号不是啰嗦：这一页的导航标题就是 `#42`，而"已关闭"三个字单独出现时
+    /// 用户没法确认关的是不是他手上这一条（尤其是从列表连着点进来几条时）。
+    public static func closedToast(number: Int) -> String { "已关闭 #\(number)" }
+
+    /// 重新打开成功。
+    public static func reopenedToast(number: Int) -> String { "已重新打开 #\(number)" }
 }

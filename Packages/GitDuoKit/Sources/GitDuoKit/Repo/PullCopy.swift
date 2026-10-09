@@ -107,6 +107,9 @@ public enum PullCopy {
     /// ⚠️ 它与探索 PR 列表的页脚（`PullListIndicator.footer`）**是两句不同的话**：
     /// 那句说"这个列表能做什么"，这句说"这一页的操作区为什么没有按钮"。
     /// 两者都有存在的理由，不要合并。
+    ///
+    /// ⚠️ Issue 详情页也有一句同位置的（`IssueCopy.readOnlyHint`，2026-10-09 补）——
+    /// 那边**同样不复用**它自己的列表页脚，处置与这一处逐字相同。
     public static let readOnlyHint = "他人仓库 · 可评论 Review，合并 / 关闭需维护者权限"
 
     // MARK: - §4.11 评论输入区

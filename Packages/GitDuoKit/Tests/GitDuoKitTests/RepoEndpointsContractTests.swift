@@ -30,7 +30,7 @@ import Testing
 /// ## 关于"一个端点对多个协议"
 ///
 /// `GitHubRepoPullsEndpoint` 一个类型就对着 **4 条**接缝（列表 / 详情 / 建 PR / 动作），
-/// `GitHubRepoIssuesEndpoint` 同样 4 条 —— 这是有意的：接缝是按**用例需要哪些动作**切的，
+/// `GitHubRepoIssuesEndpoint` 同样 5 条 —— 这是有意的：接缝是按**用例需要哪些动作**切的，
 /// 不是按端点切的（见 `RepoEndpoints` 的类型说明）。
 /// 本文件把同一端点的多条接缝**分开列**，就是为了让"它到底服务几个用例"看得见。
 @Suite("接缝清点 · 领域层与网络层之间")
@@ -74,6 +74,10 @@ struct RepoEndpointsContractTests {
         let _: any IssueDetailDataSource = GitHubRepoIssuesEndpoint(client: client)
         let _: any IssueCommentReading = GitHubRepoIssuesEndpoint(client: client)
         let _: any IssueComposerDataSource = GitHubRepoIssuesEndpoint(client: client)
+        // ⚠️ 2026-10-09 新增（决策 #79）：关闭 / 重新打开走同一个端点。
+        //    ⚠️ 这一行不能少：`extension GitHubRepoIssuesEndpoint: IssueActionDataSource {}`
+        //    是个空扩展体，删掉之后**编译照过、其余测试照绿**，一直到组合根装配时才炸。
+        let _: any IssueActionDataSource = GitHubRepoIssuesEndpoint(client: client)
 
         // PR 侧
         let _: any PullDetailDataSource = GitHubRepoPullsEndpoint(client: client)

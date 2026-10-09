@@ -112,6 +112,12 @@ final class AppEnvironment {
     /// Issue 详情首屏（详情 + 评论两条独立数据 —— 决策 #57）。
     let issueDetail: LoadIssueDetail
 
+    /// 关闭 / 重新打开 Issue（§4.9 操作区、决策 **#79**）。
+    ///
+    /// ⚠️ 与 `issueDetail` **共用同一个端点实例**（`GitHubRepoIssuesEndpoint` 无状态），
+    /// 理由同下面发评论那一条。
+    let issueAction: IssueAction
+
     /// 发一条评论。**Issue 详情与 PR 详情两页共用**（服务端本来就是同一个资源）。
     let postIssueComment: PostIssueComment
 
@@ -346,6 +352,8 @@ final class AppEnvironment {
         //    `GitHubRepoIssuesEndpoint` 无状态，所以共用它零成本。
         let issuesEndpoint = GitHubRepoIssuesEndpoint(client: client)
         self.issueDetail = LoadIssueDetail(source: issuesEndpoint)
+        // ⚠️ 关闭 / 重新打开也走同一个实例（决策 #79）：同屏的读写放在一起更好核对。
+        self.issueAction = IssueAction(source: issuesEndpoint)
         // ⚠️ Issue 详情页与 PR 详情页**共用这一个实例**：评论是同一个端点
         //    （PR 在服务端就是一种 Issue），两页各造一个只是把同一份规则抄两遍。
         self.postIssueComment = PostIssueComment(source: issuesEndpoint)

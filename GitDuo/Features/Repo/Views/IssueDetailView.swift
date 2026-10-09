@@ -33,6 +33,28 @@ import SwiftUI
 /// 这里不新造文案：正文气泡下面直接是输入区，读起来很自然
 /// （一个只有正文、还没人回复的 Issue 本来就该长这样）。已登记。
 ///
+/// ## ⚠️ 操作区在评论流**下方**、提示条**上方**（PRD §4.9 结构第 5 条）
+///
+/// 位置与 `PullDetailView` 那一处逐字对齐：正文气泡 → 评论流 → **操作区** → 提示条 → 输入区。
+///
+/// 三档判据**只有一处**（`IssueOperationAvailability.decide`，经
+/// `IssueDetail.operationAvailability(readOnly:viewerLogin:)` 进来）—— 本件只画，
+/// 不在这边再写一次 `if readOnly`。
+///
+/// ⚠️ **`readOnly` 不等于"整页只读"**（决策 #79）：它只是入口那半个条件，
+/// 另外半个来自详情自己（"这条 Issue 是不是我提的"）。「我的 Issue」那一屏里
+/// 每条都是我提的 ⇒ 哪怕入口传的是 `readOnly: true`，这一页照样给得出「关闭 Issue」。
+///
+/// ### 那颗按钮的**样式**照 PR 详情页逐档对齐（规格未给）
+///
+/// PRD §4.9 只写了有哪两颗按钮，没写用什么样式；原型连操作区都没有。
+/// 于是取同一族里已经在做同一件事的那一页（`PullDetailView.operations`）：
+/// **关闭 = `.ghost`、重新打开 = `.primary`**。
+/// 理由不只是"照抄"：`.primary` 在本项目里是**推荐的主操作**（合并 PR、
+/// 提交表单那一类），而关闭一条 Issue 不是 —— 它甚至不是破坏性的
+/// （§5.18 特意不用红底），只是把这条从活跃列表里移开。
+/// 同一族的两页在做同一件事时长得不一样，比"少一条规格"更糟。
+///
 /// ## 它是内容层
 ///
 /// 全部实色，**不加 Liquid Glass**（§10.2）。
@@ -40,6 +62,17 @@ struct IssueDetailView: View {
 
     let fullName: String
     let number: Int
+
+    /// 入口给的**保守可写性**（铁律 #7）。⚠️ 它的含义见 `Route.issueDetail` 的说明：
+    /// 只表示"这个入口假定我没有仓库写权限"，**不是**"整页只读" ——
+    /// 最终判据还要并上"我是不是这条 Issue 的作者"（决策 #79）。
+    let readOnly: Bool
+
+    /// 当前登录名，用来判"这条 Issue 是不是我提的"。
+    ///
+    /// ⚠️ 由 `RouteView` 从 `authState` 取（**不再打一次 `/user`**，同 §9.15 那条口径）。
+    /// `nil` 时判不出作者身份 ⇒ 取保守侧（少给一颗按钮，不给一颗点下去必 403 的）。
+    let viewerLogin: String?
 
     @State private var model: IssueDetailViewModel
 
@@ -50,18 +83,24 @@ struct IssueDetailView: View {
     init(
         fullName: String,
         number: Int,
+        readOnly: Bool,
+        viewerLogin: String?,
         loader: LoadIssueDetail,
         sender: PostIssueComment,
+        actions: IssueAction,
         drafts: any CommentDraftStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
         self.number = number
+        self.readOnly = readOnly
+        self.viewerLogin = viewerLogin
         _model = State(initialValue: IssueDetailViewModel(
             fullName: fullName,
             number: number,
             loader: loader,
             sender: sender,
+            actions: actions,
             drafts: drafts,
             toast: toast
         ))
@@ -88,6 +127,20 @@ struct IssueDetailView: View {
             await model.start()
             // 取完之后再对一次表：网速慢时"2 天前"可能已经跨过了一个整点。
             now = Date()
+        }
+        .sheet(item: $model.sheet) { route in
+            switch route {
+            case .closeConfirm:
+                CloseIssueSheet {
+                    // ⚠️ **先关弹层、再发请求**（同 `MergePRSheet` 与设置页那张）：
+                    //    提示条挂在根容器上，弹层盖着时弹出的提示用户看不见。
+                    //    在途状态由操作区那颗按钮表达（`model.isWorking`）。
+                    model.sheet = nil
+                    Task { await model.close() }
+                }
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+            }
         }
     }
 
@@ -116,6 +169,8 @@ struct IssueDetailView: View {
                     }
 
                     commentsSection
+
+                    operations(detail)
 
                     if let notice = model.sendNotice {
                         NoticeBar(text: notice)
@@ -169,6 +224,61 @@ struct IssueDetailView: View {
         case let .failed(error):
             // **降级**：正文与头部照常显示，只有这一块是失败态（决策 #57）。
             SectionFailure(error: error) { Task { await model.retryComments() } }
+        }
+    }
+
+    // MARK: - 操作区
+
+    /// 三档（`IssueOperationAvailability`）。判据只有一处，本件只画。
+    ///
+    /// ⚠️ 那一行只读提示**不是**探索 Issues 列表的页脚（两句只差一个分隔符，
+    /// 说的却不是一件事）—— 取舍写在 `IssueCopy.readOnlyHint` 的文档里。
+    @ViewBuilder
+    private func operations(_ detail: IssueDetail) -> some View {
+        // 判据只算一次（`decide` 是纯函数，算两遍不会不一致，但读起来像有两处判据）。
+        let availability = detail.operationAvailability(readOnly: readOnly, viewerLogin: viewerLogin)
+
+        switch availability {
+        case .readOnly:
+            // 原型 `08-pr.js:50` 那个 `t3` + `text-align:center;padding:10px 0 0`
+            // —— 与 PR 详情页那一处取同一档（`PullDetailView.operations` 的 `.readOnly`）。
+            Text(IssueCopy.readOnlyHint)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 10)
+
+        case .close, .reopen:
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                // PR 详情页操作区那个 `.section-label` 自带 16/2/8 外边距 ⇒ 用默认档。
+                // ⚠️ 标题复用 PR 那一串（`PullCopy.operationsSectionTitle`）：同一块东西、
+                //    同一个词，再写一个 `IssueCopy` 的副本只会多一处将来要同步的字。
+                SectionHeader(title: PullCopy.operationsSectionTitle)
+
+                if availability == .close {
+                    ActionButton(
+                        title: IssueCopy.closeAction,
+                        style: .ghost,
+                        // 那两颗满宽按钮在原型的 PR 页上都是 `padding:12px` ⇒ 取同一档。
+                        verticalPadding: 12,
+                        // 在途（确认之后请求还在飞）⇒ 按钮内联转圈 + 防重复提交。
+                        isWorking: model.isWorking
+                    ) {
+                        model.sheet = .closeConfirm
+                    }
+                } else {
+                    ActionButton(
+                        title: IssueCopy.reopenAction,
+                        style: .primary,
+                        verticalPadding: 12,
+                        isWorking: model.isWorking
+                    ) {
+                        // ⚠️ **不弹确认**，直接发（PRD §4.9 操作区末条）。
+                        Task { await model.reopen() }
+                    }
+                }
+            }
         }
     }
 
@@ -239,8 +349,13 @@ struct IssueDetailView: View {
         IssueDetailView(
             fullName: "my-git/gitduo",
             number: 42,
+            // 自己的仓库 ⇒ 操作区会出「关闭 Issue」（换成 `true` 且 `viewerLogin` 换个名字，
+            // 就能看到底那一行只读提示）。
+            readOnly: false,
+            viewerLogin: "jiangjiang",
             loader: environment.issueDetail,
             sender: environment.postIssueComment,
+            actions: environment.issueAction,
             drafts: environment.commentDrafts,
             toast: environment.toast
         )
