@@ -21,11 +21,12 @@ struct ViewerProfileDTOTests {
         try GitHubJSON.decoder().decode(ViewerProfileDTO.self, from: Data(json.utf8))
     }
 
-    @Test("完整响应：登录名 / 昵称 / 简介 / 关注者数")
+    @Test("完整响应：登录名 / 昵称 / 简介 / 关注者数 / 头像地址")
     func decodesFullResponse() throws {
         let dto = try decode(
             #"""
-            {"login":"octocat","name":"小明","bio":"写 Swift 的","followers":126}
+            {"login":"octocat","name":"小明","bio":"写 Swift 的","followers":126,
+             "avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}
             """#
         )
 
@@ -33,6 +34,7 @@ struct ViewerProfileDTOTests {
         #expect(dto.name == "小明")
         #expect(dto.bio == "写 Swift 的")
         #expect(dto.followers == 126)
+        #expect(dto.avatarURL == "https://avatars.githubusercontent.com/u/1?v=4")
     }
 
     @Test("⚠️ `name` / `bio` 是 `null` ⇒ 解成 `nil`，**不是空串**（PRD §4.17：取不到时整行不渲染）")
@@ -46,6 +48,25 @@ struct ViewerProfileDTOTests {
         #expect(dto.name == nil)
         #expect(dto.bio == nil)
         #expect(dto.followers == 3, "`followers` 与它们无关，照常解出来")
+        #expect(dto.avatarURL == nil, "`avatar_url` 缺席同样是 `nil`（不是空串）")
+    }
+
+    @Test("⚠️ `avatar_url` 收的是**原样字符串**：缺席 / `null` ⇒ `nil`，空串**原样保留**")
+    func avatarURLStaysRawString() throws {
+        // 这一条钉的是 DTO 那一侧的**类型选择**：它收 `String?` 而不是 `URL?`
+        // （理由见 `ViewerProfileDTO` 的说明 —— 同一份响应里 `gravatar_id` 真的会发空串，
+        //  而空串对 `URL` 解码会抛错、连带整条 `/user` 失败）。
+        // ⚠️ 空串**在这里不是 `nil`**（DTO 只做原样收），收窄发生在下一个注释点名的那一步。
+        #expect(try decode(#"{"login":"a","name":null,"bio":null,"followers":0}"#).avatarURL == nil)
+        #expect(
+            try decode(#"{"login":"a","name":null,"bio":null,"followers":0,"avatar_url":null}"#).avatarURL
+                == nil
+        )
+        #expect(
+            try decode(#"{"login":"a","name":null,"bio":null,"followers":0,"avatar_url":""}"#).avatarURL
+                == "",
+            "空串原样收下来，「空串 → 没有头像」是 `ProfileMapper.avatarURL(from:)` 的事"
+        )
     }
 
     @Test("⚠️ 少了 `followers` ⇒ 解码失败（不许静默当成 0）")
@@ -57,15 +78,16 @@ struct ViewerProfileDTOTests {
         }
     }
 
-    @Test("多余的字段（`avatar_url` / `public_repos` / …）被忽略，不影响解码")
+    @Test("多余的字段（`public_repos` / `total_private_repos` / …）被忽略，不影响解码")
     func unknownFieldsAreIgnored() throws {
-        // 界面上的头像一律由 `UserAvatar` 从 `login` 现算 —— 本类型**有意**不声明
-        // `avatar_url`。这一条钉住"不声明也能解"（而不是"服务端不许发"）。
+        // ⚠️ 本条**原来拿 `avatar_url` 当"多余字段"的例子**，理由写的是"本类型有意不声明它"。
+        // 那个理由已于 2026-10-09 作废（用户走查报回 #1 ⇒ 偏差第 43 条），
+        // 于是例子换成一个**真的不声明**的字段。⚠️ 这一步值得记：一条测试用例
+        // 可以**因为被测的规格变了而变成在守一句错话** —— 它照样会绿。
         let dto = try decode(
             #"""
             {"login":"octocat","name":"小明","bio":null,"followers":1,
-             "avatar_url":"https://example.com/a.png","public_repos":42,
-             "total_private_repos":7,"created_at":"2011-01-25T18:44:36Z"}
+             "public_repos":42,"total_private_repos":7,"created_at":"2011-01-25T18:44:36Z"}
             """#
         )
 

@@ -12,12 +12,21 @@ import SwiftUI
 ///                    max-width:280px;line-height:1.5}
 /// ```
 ///
-/// ## ⚠️ 头像**不是**网络图片
+/// ## ⚠️ 头像：真实图片 + **同一个首字母块**兜底（2026-10-09 起）
 ///
 /// 原型画的是一块首字母方块（`<div class="big-avatar" style="…">J</div>`），
-/// 而领域模型 `ViewerProfile` **有意不装头像地址**（它的抬头写着理由）。
-/// 所以这里直接走 `UserAvatar` 的首字母兜底路径 —— 不传 `avatarURL`，
-/// 也就不存在"图片加载失败"这个状态。
+/// 而真实头像是 `GET /user` 的 `avatar_url` ⇒ 这里把它交给 `UserAvatar` 的
+/// `avatarURL` 那一档，**边界条件一个字都没变**：
+///
+/// | 情形 | 画什么 |
+/// |---|---|
+/// | 地址有值、图取回来了 | 那张图（圆形裁切） |
+/// | 地址有值、**还在加载** | 首字母块（`AsyncImage` 的 `default` 分支） |
+/// | 地址有值、**加载失败** | 同上（**不给失败提示**：一个头像取不到不该打断整页） |
+/// | 地址是 `nil` | 同上 |
+///
+/// 所以"头像取不到"这件事在界面上**没有独立的失败态** —— 四种情形收敛到两种观感，
+/// 而这两种都不需要用户做什么（`ViewerProfile.avatarURL` 同口径）。
 ///
 /// ## ⚠️ 昵称与简介：`nil` ⇒ **整行不渲染**
 ///
@@ -38,7 +47,7 @@ import SwiftUI
 /// **实色，不加 Liquid Glass**（§10.2）。
 public struct ProfileHeader: View {
 
-    /// 登录名。**不可空** —— 它是头像与 `@…` 那一行的唯一来源，也永远拿得到
+    /// 登录名。**不可空** —— 它是头像兜底块与 `@…` 那一行的唯一来源，也永远拿得到
     /// （取自 `authState`，连 `/user` 那条路失败时都在）。
     public let login: String
 
@@ -48,10 +57,19 @@ public struct ProfileHeader: View {
     /// 简介。`nil`（或空串）⇒ 那一行不渲染，连它上面那 8pt 一起不留。
     public let bio: String?
 
-    public init(login: String, name: String? = nil, bio: String? = nil) {
+    /// 头像地址。`nil` ⇒ 回落成首字母块（见类型说明）。
+    public let avatarURL: URL?
+
+    public init(
+        login: String,
+        name: String? = nil,
+        bio: String? = nil,
+        avatarURL: URL? = nil
+    ) {
         self.login = login
         self.name = name
         self.bio = bio
+        self.avatarURL = avatarURL
     }
 
     /// 简介的最大宽度（原型 `.bio{max-width:280px}`）。
@@ -64,8 +82,12 @@ public struct ProfileHeader: View {
         VStack(spacing: 0) {
             // 86pt 那一档，连首字母字号一起（原型 `font-size:30px;font-weight:800`）。
             // ⚠️ 不传 `initialFont` 的话这里是一个 86pt 的圆里放一个 11pt 的字。
+            // `avatarURL` 有值时画真实图片，加载中 / 失败 / 为 `nil` 都落回同一个首字母块
+            // —— 那两个字号参数在两种情形下都要传，否则"图片没回来"那一瞬间会出现
+            // 一个 11pt 的字在那个 86pt 的圆里（同一个头像两种观感的唯一来源）。
             UserAvatar(
                 login: login,
+                avatarURL: avatarURL,
                 diameter: UserAvatar.profileDiameter,
                 initialFont: UserAvatar.profileInitialFont
             )
@@ -129,7 +151,7 @@ public struct ProfileHeader: View {
         )
         // 没填简介 ⇒ 只剩头像、昵称与 `@登录名`（`.login` 下面那 8pt 也不留）
         ProfileHeader(login: "jiangjiang", name: "Jiang Jiang")
-        // 只拿得到登录名（`/user` 那一路失败时的样子）
+        // 只拿得到登录名（`/user` 那一路失败时的样子）—— 头像回落成首字母块
         ProfileHeader(login: "jiangjiang")
         // 空白串当没有：`name` 与 `bio` 那两行都不出现
         ProfileHeader(login: "jiangjiang", name: "   ", bio: "")

@@ -732,6 +732,11 @@ enum GitHubError: Error {
 - 【已定】头像按展示尺寸降采样后再入缓存（避免为 32pt 圆头像缓存 460px 原图）；GitHub 头像 URL 支持 `?s=<size>` 参数，直接请求所需尺寸。
 - 列表滚动中禁止同步解码大图。
 
+> ⚠️ **落地现状（2026-10-09 核实）**：上面那条 `?s=<size>` **三处头像消费点一处都还没做**
+> （「我的」页大头像 / 提交行作者头像 / 贡献者堆叠，全都直接用了服务端给的 URL）。**如实记为欠账**，
+> 不并进"头像接真实图片"这次改动里 —— 那要给三处各定一个尺寸并把 URL 改写收在一处（`URLComponents` 追 `?s=`），
+> 是一次独立的整理（读者按同一条先例：`AGENTS.md §5` 的"欠账要写在明面上"）。
+
 ### 5.4 缓存失效与清理
 
 | 触发 | 动作 |
@@ -1462,7 +1467,7 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
 
 | 模块 | 方案 |
 |---|---|
-| 个人资料头部 | `GET /user`（`avatar_url` / `name` / `login` / `bio`）。⚠️ `name` / `bio` 可能为 `null` ⇒ **整行不渲染，也不占位**（`nil` = 不知道，不是空字符串） |
+| 个人资料头部 | `GET /user`（`avatar_url` / `name` / `login` / `bio`）。⚠️ `name` / `bio` 可能为 `null` ⇒ **整行不渲染，也不占位**（`nil` = 不知道，不是空字符串）。⚠️ **`avatar_url` 是本期唯一的网络头像消费点**（2026-10-09 落地，偏差第 43 条）：走 `AsyncImage`（§5.3），**加载中与取不到都回落成同一个首字母块**（`UserAvatar` 的兜底路径）—— 这一项**永远不该让头部空一块**，也不该把它算进"整块降级"的判据里（登录名取自 `authState`，头像取不到时头部照样成立） |
 | 三统计项（仓库 / Star / Follower） | **与热力图合并成一次 GraphQL 查询**（决策 #76）：`viewer.repositories(first:1, affiliations:[OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) { totalCount }` · `viewer.starredRepositories(first:1) { totalCount }` · 加 `GET /user` 的 `followers`。⚠️ **`affiliations` 不写会默认只算 `OWNER`** ⇒ 与仓库列表（决策 #35）对不上 |
 | 贡献热力图 | **GraphQL** `viewer.contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount contributionLevel } } } }`（决策 #74）：**画满 API 给的一年（≈53 周）** · 5 档**直接用 `contributionLevel`** · 配色走设计令牌（**不用** API 的 `color` / `colors`，理由见 #74③）。⚠️ `weeks` 与 `contributionDays` **是数组不是连接** ⇒ 不能写 `first:`；⚠️ 只有 GraphQL 提供（§4.6.5 的四个场景之一） |
 | 菜单卡片一 | Star 管理 → `.stars`（§4.18）· 我的收藏 → `.folders`（§4.19）· **我的 Pull Request / 我的 Issue → `.myConversations(kind:)`**（决策 #73；关联值直接复用**已有的 `ConversationKind`**，不新造类型） |

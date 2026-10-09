@@ -13,12 +13,22 @@ import GitDuoCore
 /// 屏幕上看起来像"排版坏了"，而真相是"这个人没填昵称"。
 /// （同 `SearchUserDTO` 那条「**绝不把缺席填成 0**」的纪律。）
 ///
-/// ## 有意**不装头像地址**
+/// ## 头像地址：2026-10-09 补上（此前"有意不装"，那是个错）
 ///
-/// 与 `AuthorDTO` 同一条判据：界面上的头像一律由 `UserAvatar` 从 `login` **现算**
-/// （首字母 + 由登录名派生的兜底色）。原型 `12-me.js` 画的也正是
-/// `<div class="big-avatar" style="…">J</div>` 这样一个首字母块，不是网络图片。
-/// 装一个没有消费端的字段，等于多一处会因为服务端形状变化而炸的地方。
+/// 本条原先写的是"与 `AuthorDTO` 同一条判据：头像一律由 `UserAvatar` 从 `login` 现算"。
+/// 那条判据**在「我的」页这一处与正本矛盾**：`TECH_SPEC §9.14` 从切片 9.0 起就把
+/// `avatar_url` 写进了「个人资料头部」的字段清单，`§5.3` 更早就定了头像走 `AsyncImage`。
+/// 2026-10-09 用户走查报回"我的 Tab 下没有正确显示头像图片"（偏差第 43 条）⇒ 这里补上。
+///
+/// ⚠️ **`AuthorDTO` 那条没变**：搜索结果行 / Issue·PR 作者 / 评论**仍走首字母块**，
+/// 那一侧确实没有消费端。本类型是**唯一**收头像地址的账号模型。
+///
+/// ## `avatarURL` 为 `nil` 是**正常态**，不是异常
+///
+/// 三种情形都落到 `nil`，而它们的渲染**完全一样**（同一个首字母块）：
+/// 服务端没发 / 发了空串（`ViewerProfileDTO` 的说明里讲了为什么这真的会发生）/
+/// 字符串解不成 `URL`。所以视图侧**不许**给 `nil` 安排任何提示或占位 ——
+/// "头像取不到"是这一页**永远不需要告诉用户**的事（`ProfileHeader` 同口径）。
 public struct ViewerProfile: Sendable, Hashable {
 
     /// 登录名。**它同时是头像的种子**。
@@ -30,10 +40,19 @@ public struct ViewerProfile: Sendable, Hashable {
     /// 简介。`nil` ⇒ 那一行不渲染。
     public let bio: String?
 
-    public init(login: String, name: String? = nil, bio: String? = nil) {
+    /// 头像地址。`nil` ⇒ 头像回落成首字母块（见类型说明）。
+    public let avatarURL: URL?
+
+    public init(
+        login: String,
+        name: String? = nil,
+        bio: String? = nil,
+        avatarURL: URL? = nil
+    ) {
         self.login = login
         self.name = name
         self.bio = bio
+        self.avatarURL = avatarURL
     }
 }
 

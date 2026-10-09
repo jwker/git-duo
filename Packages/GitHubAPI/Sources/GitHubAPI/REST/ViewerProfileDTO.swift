@@ -32,12 +32,30 @@ import Foundation
 /// 3. `total_private_repos` 在 `public-user` 下**整个键可能不在** ⇒ 若将来要用它，
 ///    必须按可选解码（决策 #76 已经把这条写进判据了）。
 ///
-/// ## 有意**不声明** `avatar_url`
+/// ## `avatar_url` —— 2026-10-09 补上（此前**有意不声明**，那是个错）
 ///
-/// 同 `AuthorDTO` 的判据：界面上的头像一律由 `UserAvatar` 从 `login` **现算**
-/// （首字母 + 由登录名派生的底座色 —— 原型 `12-me.js` 画的也正是
-/// `<div class="big-avatar" style="…">J</div>` 这样一个首字母块）。
-/// 声明一个没有消费端的字段，等于多一处会因为服务端形状变化而炸的地方。
+/// 本类型原先在这里写着"有意不声明 `avatar_url`"，理由是"声明一个没有消费端的字段，
+/// 等于多一处会因为服务端形状变化而炸的地方"。那条理由**当时就与正本矛盾**：
+/// `TECH_SPEC §9.14` 的「个人资料头部」那一行一直把 `avatar_url` 列在字段清单里，
+/// `§5.3` 更早就定了"头像走 `AsyncImage`"。2026-10-09 用户走完全屏走查报回
+/// 「我的 Tab 下没有正确显示头像图片」⇒ 翻两处正本才确认这是**欠账**、不是新要求
+/// （`REVIEW-CHECKLIST` 偏差第 43 条）。
+///
+/// ⚠️ 值得记的教训：**"某个字段没有消费端"这句话会过期** —— 写它的时候（切片 9.1）
+/// 确实没有消费端，而同一批规格已经把消费端写进去了。这类矛盾**编译器不报、测试也不报**。
+///
+/// ## 为什么是 `String?` 而不是 `URL?`
+///
+/// 同 `RepoContributorDTO`（那份也是 `String?`）。判据不是"哪个更好看"，而是
+/// **同一份响应里 GitHub 真的会发空串**：`GET /user` 的官方示例里 `gravatar_id` 就是 `""`。
+/// 空串对 `URL` 解码是**会抛错**的（`URL(string: "")` 解不出来），一旦 `avatar_url` 哪天也这样，
+/// 后果是**整条 `/user` 解码失败** ⇒ 昵称、简介、关注者数**一起消失**（正是 `RepoContributorDTO`
+/// 那条"一个匿名贡献者让整块消失"的同型事故）。
+/// 交给映射层 `String?.flatMap(URL.init(string:))` 之后，空串自然变成 `nil`，
+/// 而 `nil` 有一个现成的正确渲染（首字母块）—— **失败半径从"整块头部"缩到"一个头像"**。
+///
+/// ⚠️ 可选而非必需：官方两个形状的示例里它都是非空字符串，但**它们的 required 清单没核实到**
+/// （docs 页只给示例、不给 schema 的 `required` 列表）⇒ 取失败半径小的那一侧。
 public struct ViewerProfileDTO: Sendable, Equatable, Decodable {
 
     /// 登录名。**它同时是头像的种子**（`UserAvatar` 的首字母与兜底色都由它派生）。
@@ -52,10 +70,28 @@ public struct ViewerProfileDTO: Sendable, Equatable, Decodable {
     /// 关注者数。官方两个形状都列为必需，所以不写可选分支。
     public let followers: Int
 
-    public init(login: String, name: String? = nil, bio: String? = nil, followers: Int) {
+    /// 头像地址（**原样收字符串**，解释成 `URL` 是映射层的事，见类型说明）。
+    public let avatarURL: String?
+
+    public init(
+        login: String,
+        name: String? = nil,
+        bio: String? = nil,
+        followers: Int,
+        avatarURL: String? = nil
+    ) {
         self.login = login
         self.name = name
         self.bio = bio
         self.followers = followers
+        self.avatarURL = avatarURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case login
+        case name
+        case bio
+        case followers
+        case avatarURL = "avatar_url"
     }
 }

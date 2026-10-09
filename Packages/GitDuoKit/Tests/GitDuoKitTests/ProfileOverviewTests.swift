@@ -120,9 +120,19 @@ struct LoadProfileOverviewTests {
         )
     }
 
-    private func profile(login: String = "octocat", name: String? = "小明", followers: Int = 126)
-        -> ViewerProfileDTO {
-        ViewerProfileDTO(login: login, name: name, bio: nil, followers: followers)
+    private func profile(
+        login: String = "octocat",
+        name: String? = "小明",
+        followers: Int = 126,
+        avatar: String? = nil
+    ) -> ViewerProfileDTO {
+        ViewerProfileDTO(
+            login: login,
+            name: name,
+            bio: nil,
+            followers: followers,
+            avatarURL: avatar
+        )
     }
 
     @Test("两路都成 ⇒ 三块都有值，三个数各取各的来源")
@@ -140,6 +150,34 @@ struct LoadProfileOverviewTests {
         // 两路**并发**：各问一次，不多不少（串行会让这一页白等一次往返）。
         #expect(await source.profileCalls == 1)
         #expect(await source.activityCalls == 1)
+    }
+
+    @Test("头像地址：原样翻译成 `URL`；**空串与缺席都落到 `nil`**（偏差第 43 条）")
+    func avatarURLTranslation() async {
+        // ⚠️ 空串这一档**不是假想**：`GET /user` 的同一份响应里 `gravatar_id` 就是 `""`
+        // （`ViewerProfileDTO` 的说明里以它为由把字段收成 `String?`）⇒
+        // "服务端给了个空串"必须被当成"没有头像"，而不是让 `URL` 解码抛错、整条 `/user` 失败。
+        let cases: [(String?, URL?)] = [
+            ("https://avatars.githubusercontent.com/u/1?v=4",
+             URL(string: "https://avatars.githubusercontent.com/u/1?v=4")),
+            ("", nil),
+            ("   ", nil),
+            (nil, nil),
+        ]
+
+        for (raw, expected) in cases {
+            let source = ScriptedProfileSource(
+                profile: .success(profile(avatar: raw)),
+                activity: .success(activity())
+            )
+
+            let overview = await LoadProfileOverview(source: source).load()
+
+            #expect(overview.profile?.avatarURL == expected, "输入 `\(raw ?? "nil")`")
+            // 头像这一项**无论如何都不影响**其余字段（昵称与关注者数照常在）。
+            #expect(overview.profile?.name == "小明")
+            #expect(overview.stats.followers == 126)
+        }
     }
 
     @Test("`GET /user` 失败 ⇒ 资料头部降级，**热力图与两个计数照常在**")

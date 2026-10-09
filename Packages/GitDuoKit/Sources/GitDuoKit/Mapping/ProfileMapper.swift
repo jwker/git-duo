@@ -19,8 +19,35 @@ public struct ProfileMapper: Sendable {
 
     // MARK: - 资料头部
 
+    /// ## 头像地址为什么要在这里"翻译"一次
+    ///
+    /// DTO 收的是**原样字符串**（`ViewerProfileDTO` 的说明讲了为什么 —— 同一份响应里
+    /// GitHub 真的会发空串，而空串对 `URL` 解码是会抛错的）。这里把它变成 `URL?`：
+    /// `nil`（字段缺席 / 值是 `null`）与空串**都落到同一个 `nil`**，
+    /// 视图那边于是只有一条路可走（首字母块）。
+    ///
+    /// ⚠️ 这一步是**纯函数**（`URL(string:)` 与 `trimming` 都不碰网络），
+    /// 所以它必须在领域层、必须可单测 —— 放在 App 层的视图里就再也测不到
+    /// （App target 没有测试 target，决策 #34）。
     public func profile(_ dto: ViewerProfileDTO) -> ViewerProfile {
-        ViewerProfile(login: dto.login, name: dto.name, bio: dto.bio)
+        ViewerProfile(
+            login: dto.login,
+            name: dto.name,
+            bio: dto.bio,
+            avatarURL: dto.avatarURL.flatMap(Self.avatarURL(from:))
+        )
+    }
+
+    /// 头像字符串 → `URL`。空白串当成"没有"。
+    ///
+    /// `avatars.githubusercontent.com` 的地址不含空格，所以 `trimming` 之后为空
+    /// 只可能是"服务端给了个空串"这一种情形（`gravatar_id` 就是这么发的）。
+    /// ⚠️ **不补 `?s=<size>`**：§5.3 那条降采样规则三处消费点都还没做，属独立的整理
+    /// （`TECH_SPEC §5.3` 已登记为欠账）—— 在这里单方面补上会让同一个头像在
+    /// 三处走两种 URL。
+    static func avatarURL(from raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : URL(string: trimmed)
     }
 
     // MARK: - 热力图

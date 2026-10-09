@@ -20,7 +20,7 @@ import SwiftUI
 ///
 /// | 块 | 失败时 |
 /// |---|---|
-/// | 大头像 + `@登录名` | **不可能失败** —— 本机从登录名画出来的（取自 `authState`） |
+/// | 大头像 + `@登录名` | **不会失败** —— 登录名取自 `authState`；头像取不到（或还没加载完）时回落成本机画的首字母块（偏差第 43 条）。这一块**任何情形下都画得出来** |
 /// | 昵称 / 简介 | 整行不渲染（PRD §4.17 第 2 条逐字）＋ 头部块内一行灰字 + 重试 |
 /// | 三个统计项 | 逐项降级（缺的那项整项不画，**不填 0**） |
 /// | 热力图 | 卡片内一行灰字 + 重试 |
@@ -74,10 +74,14 @@ struct ProfileView: View {
     private var identityBlock: some View {
         // ⚠️ `name` / `bio` 传的是 `ProfileOverview` 里那一份（拿不到就是 `nil`）
         //    —— `ProfileHeader` 对 `nil` 与空串的处置都是"整行不渲染"，见它的说明。
+        // ⚠️ `avatarURL` 同理：`/user` 那一路失败时它是 `nil` ⇒ 头像回落成首字母块。
+        //    **两种情形都不需要额外分支**（把 `nil` 一路传下去就行），
+        //    所以这里没有 `if let` —— 一写就变成"两条渲染路径"，而它们该长得一样。
         ProfileHeader(
             login: login,
             name: model.overview?.profile?.name,
-            bio: model.overview?.profile?.bio
+            bio: model.overview?.profile?.bio,
+            avatarURL: model.overview?.profile?.avatarURL
         )
 
         ProfileStatBar(stats: statItems)
