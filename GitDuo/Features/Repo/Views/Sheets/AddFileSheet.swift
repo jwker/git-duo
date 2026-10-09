@@ -17,20 +17,24 @@ struct UploadDraft: Equatable, Sendable {
     let source: CommitSource
 
     /// 落在**仓库根**的文件名（§5.8：上传出口的路径是 App 定的）。
+    ///
+    /// ⚠️ **转码那一档它已经被换过扩展名**（决策 #72④：`IMG_1234.HEIC` → `IMG_1234.jpg`）——
+    /// 这一格收的是 `UploadIntake` 给的**最终**名字，调用点**不要**再自己拼一次原名字
+    /// （拼回去的后果是"内容转了、名字没转"，而那正好等于白转：GitHub 按扩展名渲染）。
     let fileName: String
 
     /// 要写上去的字节。
     ///
-    /// ⚠️ **多数情况下它就是相册 / 文件 App 给的那一份原文**（§5.8：不重编码）；
-    /// **只有 >1MB 的图片例外** —— 那时它已经被 `UploadIntake` 压过（决策 #71），
-    /// 而"压过"这件事由下面那个字段如实带出来。
+    /// ⚠️ **多数情况下它就是相册 / 文件 App 给的那一份原文**（§5.8）；
+    /// **两类例外** —— >1MB 的图片被压过（决策 #71）、**网页端显示不出来的格式被转过**
+    ///（**决策 #72**，且 **≤1MB 也转**）。"动过什么"由下面那个字段如实带出来。
     let data: Data
 
-    /// 压过的摘要（原字节 → 现在字节）；**`nil` = 没压过**（≤1MB 的图 / 非图片）。
+    /// "我们动了你选中的东西"的摘要；**`nil` = 一个字节都没动**（≤1MB 且格式显示得出来 / 非图片）。
     ///
-    /// ⚠️ 它一路带到提交弹层（`CommitSheet.compression`）—— **不能只在这里用掉**：
+    /// ⚠️ 它一路带到提交弹层（`CommitSheet.adjustment`）—— **不能只在这里用掉**：
     /// 用户需要在他按下确认的那一刻看到"要写上去的不是我选的那张原图"。
-    let compression: UploadCompression?
+    let adjustment: UploadAdjustment?
 }
 
 /// 添加文件弹层（PRD §5.8、原型 `scripts/15-sheets.js` 的 `openAddSheet`）。
@@ -63,29 +67,30 @@ struct UploadDraft: Equatable, Sendable {
 /// `itemIdentifier` / `supportedContentTypes` / `loadTransferable` —— **没有文件名**。
 /// 规则落在 `UploadFileName.photo(fileExtension:now:)`（有单测）。
 ///
-/// ## ⚠️ 超过 1MB：**图片先压、其余当场拦**（决策 #71）
+/// ## ⚠️ 超过 1MB：**图片先压、其余当场拦**（决策 #71）；显示不出来的格式**一律转**（决策 #72）
 ///
 /// 这一档原本只有一句"提示并引导网页端"，而那让**相册这条出口对真实照片形同虚设**
 /// （照片动辄好几 MB）。现在两条路：
 ///
 /// | 选中的东西 | 走哪条 |
 /// |---|---|
-/// | >1MB 的**图片** | 交给 `intake.prepare` → 自适应压缩（`GitDuoImageCompressor`）→ 压下来就进提交弹层 |
+/// | >1MB 的**图片** | 交给 `intake.prepare` → 自适应压缩（`GitDuoCore.ImageProcessor`）→ 压下来就进提交弹层 |
 /// | >1MB 的**其他文件** | 当场拦下（`tooLargeHint`）—— 大 PDF / zip 没有"压一道"这回事 |
 /// | **压不下来的图片** | 同上：`intake` 回 `.tooLarge` ⇒ 同一句提示 |
+/// | **网页端显示不出来的格式**（HEIC / TIFF / BMP / RAW…） | **一律转码 —— ≤1MB 也转**（**决策 #72**）；转完**文件名扩展名跟着换**（`IMG_1234.HEIC` → `IMG_1234.jpg`），提交弹层那行只读落点下会说明动过什么 |
 ///
 /// ⚠️ 拦截点放在**选中那一刻**（而不是等用户在提交弹层里写完信息、按下提交）有两个理由：
 /// 用户不必白填一次；而一个 100MB 的文件**根本不会被读进内存**（下面先看 `fileSize` 再读）。
-/// ⚠️ 压缩要时间（最多 13 次编码）⇒ 有 `isPreparing` 那一档转圈 + 三行暂时不可点。
+/// ⚠️ 压缩 / 转码要时间（最多 13 次编码）⇒ 有 `isPreparing` 那一档转圈 + 三行暂时不可点。
 /// 这一条**不是装饰**：没有它，用户按下去之后会以为弹层死了，然后再点一次。
 struct AddFileSheet: View {
 
     /// 当前分支 —— 标题里那一句要它（原型 `添加文件 · ${curBranch()}`）。
     let branch: String
 
-    /// 取件与预处理（压缩）—— 由组合根装配（`AppEnvironment.uploadIntake`）。
+    /// 取件与预处理（压缩 #71 / 转码 #72）—— 由组合根装配（`AppEnvironment.uploadIntake`）。
     ///
-    /// ⚠️ 从外面传进来而不是在这里 `UploadIntake(compressor: ImageCompressor())`：
+    /// ⚠️ 从外面传进来而不是在这里 `UploadIntake(processor: ImageProcessor())`：
     /// 那会多出一处"App 层知道 `GitDuoCore` 有什么"的装配点（`AGENTS.md §3`）。
     let intake: UploadIntake
 
@@ -101,7 +106,7 @@ struct AddFileSheet: View {
     @State private var isPickingPhoto = false
     @State private var pickedPhoto: PhotosPickerItem?
 
-    /// 正在压缩（切片 8.7）。见类型说明：这一档必须有动静，且三行要暂时不可点。
+    /// 正在压缩 / 转码（切片 8.7 · 8.8）。见类型说明：这一档必须有动静，且三行要暂时不可点。
     @State private var isPreparing = false
 
     @State private var failure: String?
@@ -127,11 +132,12 @@ struct AddFileSheet: View {
             }
             .disabled(isPreparing)
 
-            // 压缩要几百毫秒到一两秒（最多 13 次编码）⇒ 必须有个动静，
+            // 压缩 / 转码要几百毫秒到一两秒（最多 13 次编码）⇒ 必须有个动静，
             // 否则用户按下去之后会以为弹层死了、然后再点一次。
             //
-            // ⚠️ 刻**不加文字**：底部那句已经写着"超过 1MB 的图片会自动压缩"，
-            //    在这里再编一句就是第二处说同一件事（而那一句要跟着 `maxContentBytes` 走）。
+            // ⚠️ 刻**不加文字**：底部那句已经写着"超过 1MB 的图片会自动压缩 ·
+            //    HEIC 等格式会自动转换"，在这里再编一句就是第二处说同一件事
+            //   （而那一句要跟着 `maxContentBytes` 与白名单走）。
             if isPreparing {
                 ProgressView()
                     .controlSize(.small)
@@ -225,6 +231,8 @@ struct AddFileSheet: View {
         // 而先进内存一趟。拿不到大小时按"读"处理（"交出结果"那一步还有一次判据兜底）。
         //
         // ⚠️ 但**图片不能在这里就拒**（切片 8.7 / 决策 #71）：它还有"先压一道"那条路。
+        //    ⚠️ 而 **≤1MB 的**图片照样不能在这里就放过去（切片 8.8 / 决策 #72）：
+        //    它可能是 HEIC，得读进来才知道要不要转。
         //    而"像不像图片"在这一步只能按**扩展名**猜 —— 那是**预检**不是判据
         //   （`UploadIntake.mightBeImage` 的说明：两种猜错里取"宁可多读"那一边）。
         let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
@@ -239,7 +247,7 @@ struct AddFileSheet: View {
         do {
             let data = try Data(contentsOf: url)
             // ⚠️ 读**必须在 `defer` 收掉 security scope 之前完成**（就在上一行），
-            //    所以这里只把已经到手的字节丢进 `Task` 去做压缩那一步。
+            //    所以这里只把已经到手的字节丢进 `Task` 去做压缩 / 转码那一步。
             Task { await finish(source: .uploadFile, fileName: url.lastPathComponent, data: data) }
         } catch {
             failure = ActionCopy.failed
@@ -278,7 +286,7 @@ struct AddFileSheet: View {
     /// 那个 `Bool` 由系统在选择器关掉时写回 `false`，而回调与它谁先谁后**没有保证**
     /// （反推出来的值会在"两个出口只差一次时序"时错成另一个）。
     private func finish(source: CommitSource, fileName: String, data: Data) async {
-        // 压缩期间三行已经不可点了，但还有一档能走到这里：系统选择器的回调与那个
+        // 压缩 / 转码期间三行已经不可点了，但还有一档能走到这里：系统选择器的回调与那个
         // `Bool` 写回 `false` 的先后没有保证 ⇒ 用户理论上能连点两下。
         // 放行第二次的后果是"同一张图进两次提交弹层"，而进的是**后到的那一次**。
         guard !isPreparing else { return }
@@ -288,23 +296,27 @@ struct AddFileSheet: View {
         }
 
         isPreparing = true
-        // ⚠️ **「≤1MB 就不编码」那条判据在 `UploadIntake` 里，不在这一层** ——
-        //    见那里的说明：它要能在单测里被断言"压缩器**一次都没被调用**"。
+        // ⚠️ **"要不要动"那条判据在 `UploadIntake` 里，不在这一层** —— 见那里的说明：
+        //    它需要看得见**字节的类型**（≤1MB 的 HEIC 也要转，决策 #72③），
+        //    而这里手里只有文件名，扩展名可以是错的。
         let outcome = await intake.prepare(data, fileName: fileName)
         isPreparing = false
 
         switch outcome {
-        case let .accepted(prepared, compression):
+        case let .accepted(finalName, prepared, adjustment):
+            // ⚠️ 用 `intake` 给的 `finalName`，**不是**上面那个入参 ——
+            //    转码那一档它已经换过扩展名（决策 #72④），这里拼回原名字就等于白转
+            //   （GitHub 按扩展名决定渲染方式）。
             onPicked(UploadDraft(
                 source: source,
-                fileName: fileName,
+                fileName: finalName,
                 data: prepared,
-                compression: compression
+                adjustment: adjustment
             ))
 
         case .tooLarge:
-            // ⚠️ 三档原因（根本不是图片 / 动图 / 压不动）给的是**同一句话** ——
-            //    用户能做的动作是同一个（去网页端），而"为什么没压成"对他没有第二个用处。
+            // ⚠️ 几档原因（根本不是图片 / 动图 / 处理不动）给的是**同一句话** ——
+            //    用户能做的动作是同一个（去网页端），而"为什么没成"对他没有第二个用处。
             failure = CommitSheetCopy.tooLargeHint
         }
     }
@@ -313,7 +325,7 @@ struct AddFileSheet: View {
 #Preview {
     AddFileSheet(
         branch: "feature/auth-refresh",
-        intake: UploadIntake(compressor: ImageCompressor()),
+        intake: UploadIntake(processor: ImageProcessor()),
         onNewFile: {},
         onPicked: { _ in }
     )

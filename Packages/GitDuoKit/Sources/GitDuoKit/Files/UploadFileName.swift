@@ -38,6 +38,32 @@ public enum UploadFileName {
         "photo-\(stamp(now)).\(normalized(fileExtension) ?? fallbackExtension)"
     }
 
+    /// 把文件名的扩展名换成另一个（**决策 #72④**）。
+    ///
+    /// ## ⚠️ 为什么必须换
+    ///
+    /// GitHub 是**按扩展名**决定怎么渲染一个文件的。一张 HEIC 被我们转成了 JPEG，
+    /// 而名字还叫 `IMG_1234.HEIC` ⇒ 网页端仍按 HEIC 那一套去处理它 ⇒ **这次转换白做**。
+    /// 所以"换了格式"与"换了扩展名"是同一件事的两面，**必须成对发生**。
+    ///
+    /// ⚠️ 它**只动最后一段**（`a/b/IMG_1234.HEIC` → `a/b/IMG_1234.jpg`）——
+    /// 上传出口落在仓库根、本来就没有目录，但**目录重命名**那条路（§5.16）用的是同一个
+    /// 名字概念，写死"整串替换"会在那一天安静地改错东西。
+    ///
+    /// - Parameters:
+    ///   - fileName: 原文件名。
+    ///   - fileExtension: 新扩展名（小写、不带点，取 `ImageOutputFormat.fileExtension`）。
+    public static func replacingExtension(of fileName: String, with fileExtension: String) -> String {
+        // 空扩展名是"没东西可换" ⇒ 原样返回，别造出一个以点结尾的名字。
+        guard !fileExtension.isEmpty else { return fileName }
+        let name = fileName as NSString
+        // ⚠️ 没有扩展名时（`photo` / `.gitignore`）**接**上去而不是换掉什么：
+        //    `deletingPathExtension` 对这两种都原样返回，而"先删再拼"的写法
+        //    会把 `.gitignore` 变成一个叫 `jpg` 的文件（原来那个隐藏文件就这么没了）。
+        guard !name.pathExtension.isEmpty else { return "\(fileName).\(fileExtension)" }
+        return "\(name.deletingPathExtension).\(fileExtension)"
+    }
+
     /// 扩展名落空时的兜底。
     ///
     /// `jpg` 而不是 `png`：相册里绝大多数是照片（HEIC / JPEG），

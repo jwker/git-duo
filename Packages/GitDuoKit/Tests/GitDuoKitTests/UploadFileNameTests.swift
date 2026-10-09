@@ -49,8 +49,11 @@ struct UploadFileNameTests {
         #expect(UploadFileName.photo(fileExtension: "jpeg", now: base).hasSuffix(".jpg"))
         #expect(UploadFileName.photo(fileExtension: "JPEG", now: base).hasSuffix(".jpg"))
         #expect(UploadFileName.photo(fileExtension: "  jpeg ", now: base).hasSuffix(".jpg"))
-        // ⚠️ `heic` **不**改成 `jpg`：§5.8 明写"取原始字节、不重编码"，
-        //    改了名字而字节还是 HEIC，就是让名字说谎。
+        // ⚠️ `heic` **不**在这里改成 `jpg`：这一层只按系统给的类型拼名字，
+        //    而改了名字而字节还是 HEIC，就是让名字说谎。
+        //    ⚠️ **2026-10-09（决策 #72）之后仍然成立、但多了一步**：HEIC 确实会变成 JPEG ——
+        //    而那个改名发生在**转码真的做完之后**（`UploadFileName.replacingExtension`），
+        //    名字与字节始终对得上。**两步不许合并**：这一层还不知道会不会转。
         #expect(UploadFileName.photo(fileExtension: "HEIC", now: base).hasSuffix(".heic"))
         #expect(UploadFileName.photo(fileExtension: "PNG", now: base).hasSuffix(".png"))
     }
@@ -74,5 +77,33 @@ struct UploadFileNameTests {
         let a = UploadFileName.photo(fileExtension: "jpg", now: base)
         let b = UploadFileName.photo(fileExtension: "jpg", now: base)
         #expect(a == b)
+    }
+
+    // MARK: - 换扩展名（决策 #72④）
+
+    @Test("⚠️ 换扩展名：只动**最后一段**，前面的点分段原样保留")
+    func replacingExtensionKeepsTheRestOfTheName() {
+        #expect(UploadFileName.replacingExtension(of: "IMG_1234.HEIC", with: "jpg") == "IMG_1234.jpg")
+        // ⚠️ 大小写混着的原扩展名照样换掉（`pathExtension` 不认大小写）。
+        #expect(UploadFileName.replacingExtension(of: "shot.HEIC", with: "png") == "shot.png")
+        // ⚠️ 名字里本来就有两个点：只换**最后**那一段（`archive.tar.gz` → `archive.tar.png`）。
+        #expect(UploadFileName.replacingExtension(of: "archive.tar.gz", with: "png") == "archive.tar.png")
+        // ⚠️ 带目录时目录那段不许被碰 —— 上传出口落在仓库根，但同一个名字概念在
+        //    §5.16 重命名那条路上是带目录的，写死"整串替换"会在那一天安静地改错东西。
+        #expect(UploadFileName.replacingExtension(of: "docs/IMG_1234.HEIC", with: "jpg") == "docs/IMG_1234.jpg")
+    }
+
+    @Test("⚠️ 没有扩展名时是**接**上去，不是把整个名字换掉")
+    func replacingExtensionOnNamesWithoutOne() {
+        #expect(UploadFileName.replacingExtension(of: "photo", with: "jpg") == "photo.jpg")
+        // ⚠️ `.gitignore` 这种"整个名字就是一个点开头"的：`deletingPathExtension` 会
+        //    原样返回，照它写会得到一个**叫 `png` 的文件**（原来那个隐藏文件就没了）。
+        //    所以这一档必须走"接上去"那条路。
+        #expect(UploadFileName.replacingExtension(of: ".gitignore", with: "png") == ".gitignore.png")
+    }
+
+    @Test("空扩展名 = 没东西可换 ⇒ **原样返回**（别造出一个以点结尾的名字）")
+    func replacingExtensionWithEmptyIsIdentity() {
+        #expect(UploadFileName.replacingExtension(of: "IMG_1234.HEIC", with: "") == "IMG_1234.HEIC")
     }
 }

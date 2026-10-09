@@ -50,7 +50,8 @@ struct RouteView: View {
                 starToggle: env.starToggle,
                 // 切片 8.4：§5.8 后两个上传出口的写通道（§4.4 的「＋ 添加」）。
                 saver: env.saveFile,
-                // 切片 8.7：选中之后、写之前的那一步（>1MB 的图片先压缩，决策 #71）。
+                // 切片 8.7 / 8.8：选中之后、写之前的那一步
+                //（>1MB 的图片先压缩 #71；显示不出来的格式一律转码 #72）。
                 intake: env.uploadIntake,
                 memory: env.branchMemory,
                 visits: env.recentVisits,

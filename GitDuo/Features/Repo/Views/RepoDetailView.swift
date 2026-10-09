@@ -255,9 +255,9 @@ struct RepoDetailView: View {
             // ⚠️ 上传出口**必须露出落点**：路径是 App 定的（§5.8 / 决策 #70②），
             //    不露出来用户就只能靠猜 —— 而"东西存到哪"是这一步唯一可能搞错的事。
             destinationPath: RepoPath(path: draft.fileName),
-            // ⚠️ 压过了才非 nil（切片 8.7）—— 那一句 `已压缩 3.2MB → 0.8MB` 就是
-            //    "App 改了你选中的字节"这件事的唯一出口（决策 #71⑤）。
-            compression: draft.compression,
+            // ⚠️ 动过才非 nil（切片 8.7 / 8.8）—— 那一句 caption 就是"App 改了你选中的
+            //    字节 / 甚至文件名"这件事的唯一出口（决策 #71⑤ · #72⑤）。
+            adjustment: draft.adjustment,
             defaultBranchName: FileWriteTarget.defaultNewBranchName(now: Date()),
             onSubmit: { commit, _ in
                 // ⚠️ 那个 `sha` 参数在这里**有意丢掉**：上传恒为新建

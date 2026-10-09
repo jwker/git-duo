@@ -14,7 +14,7 @@ import Foundation
 /// - 弹层标题、占位、分段、提示条、按钮、页脚、两条成功提示 → 原型
 ///   `scripts/15-sheets.js` 的 `openCommitSheet` / `doCommit`（逐字）；
 /// - 两行输入与 409 两个出口、以及多步操作的两句 → PRD §5.9 ①–④（2026-10-08 补入）；
-/// - `compressedNotice`（`已压缩 3.2MB → 0.8MB`）→ `PRD §5.8` / **决策 #71⑤**（2026-10-09 补入）；
+/// - `adjustmentNotice`（`已压缩 3.2MB → 0.8MB` 等**三种**说法）→ `PRD §5.8` / **决策 #71⑤ · #72⑤**（2026-10-09 补入）；
 /// - 标了「**规格未给**」的几条是本片自拟的，已在 `REVIEW-CHECKLIST` 登记。
 public enum CommitSheetCopy {
 
@@ -82,24 +82,49 @@ public enum CommitSheetCopy {
 
     // MARK: - 「已压缩」那一句（决策 #71⑤）
 
-    /// 提交弹层里那行只读落点下的一句：`已压缩 3.2MB → 0.8MB`。
+    /// 提交弹层里那行只读落点下的一句 —— "App 动过你选中的东西"这件事的**唯一出口**。
+    ///
+    /// ## ⚠️ 为什么是**三种**说法（不许合成一句）
+    ///
+    /// 因为发生过的是**两件互不包含**的事：体积被压小了（决策 #71）、格式被换掉了（决策 #72）。
+    /// 合成一句必然有一处说假话 —— 最典型的是"只换了格式、体积反而变大"那一档，
+    /// 管它叫"已压缩 1.2MB → 1.4MB"是在**说反话**。
+    ///
+    /// | 发生了什么 | 那一句 |
+    /// |---|---|
+    /// | 只是压小了 | `已压缩 3.2MB → 0.8MB` |
+    /// | 压小了，**而且**换了格式 | `已压缩并转为 JPEG · 3.2MB → 0.8MB` |
+    /// | **只换了格式**（体积可能反而变大） | `已转为 JPEG · 1.2MB → 1.4MB` |
+    ///
+    /// ⚠️ 换过格式时那句里**带上目标格式名**（`JPEG` / `PNG`）不是装饰：
+    /// 文件名里的扩展名同时被换掉了，而"为什么名字变了"只有这一句能回答。
     ///
     /// ## ⚠️ 这一句为什么必须有
     ///
-    /// 决策 #71 让 App 在上传前**改掉了用户选中的那份字节**（重编码、有损、还会剥掉
-    /// EXIF 含 GPS）。不写这一句，用户拿到的是一张**他自己没同意改过**的图 ——
+    /// 决策 #71 / #72 让 App 在上传前**改掉了用户选中的那份字节**（重编码、有损、
+    /// 还会剥掉 EXIF 含 GPS）。不写这一句，用户拿到的是一张**他自己没同意改过**的图 ——
     /// 而"App 替你决定了什么"这条在 #70② 那行「将写入 `{path}`」上已经立过一次
     /// （路径是 App 定的 ⇒ 露出来）。这里同一个理由，只是被决定的东西从"存到哪"变成了"存的是什么"。
     ///
     /// ## ⚠️ 两个数都是**真的**
     ///
-    /// 前一个是选中那一刻的字节数、后一个是**真正要写上去的**字节数（`UploadCompression`
+    /// 前一个是选中那一刻的字节数、后一个是**真正要写上去的**字节数（`UploadAdjustment`
     /// 的两个字段都由 `UploadIntake` 实测填进去，没有一处是估的）。
     /// 印一个编出来的"省了多少"很容易，但那句话会在某次改动之后安静地变成假话。
     ///
-    /// ⚠️ 没压过（≤1MB 的图 / 非图片）时**这一句不出现** —— 调用方传 `nil` 即可（`CommitSheet`）。
-    public static func compressedNotice(_ compression: UploadCompression) -> String {
-        "已压缩 \(sizeLabel(compression.originalBytes)) → \(sizeLabel(compression.finalBytes))"
+    /// ⚠️ 没动过（≤1MB 且格式显示得出来 / 非图片）时**这一句不出现** ——
+    /// 调用方传 `nil` 即可（`CommitSheet`）。
+    public static func adjustmentNotice(_ adjustment: UploadAdjustment) -> String {
+        let sizes = "\(sizeLabel(adjustment.originalBytes)) → \(sizeLabel(adjustment.finalBytes))"
+        guard let newFormat = adjustment.newFormat else {
+            // ⚠️ 走到这里只可能是"压小了、格式没变"。理论上不存在"既没压小又没换格式"
+            //    的那一档（那样根本不会有摘要）—— 真有的话这一句会印成 `0.3MB → 0.3MB`，
+            //    看起来怪，但两个数都是真的，不算撒谎。
+            return "已压缩 \(sizes)"
+        }
+        return adjustment.didShrink
+            ? "已压缩并转为 \(newFormat.displayName) · \(sizes)"
+            : "已转为 \(newFormat.displayName) · \(sizes)"
     }
 
     /// 一位小数的 MB（`3.2MB`）。
