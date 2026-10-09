@@ -1201,8 +1201,8 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 ⚠️ **本次这一批没有 AI 侧的记录**（用户自行走完、只回传"零条目"）⇒ 结论已收下，但**它不构成"某一行被真验过"的证据**，
 与切片 6 / 7 那两批（逐条回传）在证据强度上不同，如实留痕。
 
-**验证闭环已就绪**：`make verify` = **五包单测（当前 1468 项全过 / 123 套件）** + 模拟器构建，一条命令，**零编译警告**。
-（**GitHubAPI 377** · GitDuoAuth 57 · **GitDuoCore 63** · GitDuoDesign **88** · **GitDuoKit 883**）
+**验证闭环已就绪**：`make verify` = **五包单测（当前 1640 项全过 / 144 套件）** + 模拟器构建，一条命令，**零编译警告**。
+（**GitHubAPI 406** · GitDuoAuth 57 · **GitDuoCore 63** · GitDuoDesign **103** · **GitDuoKit 1011**）
 ⚠️ **这两个数都要照 `make verify` 的输出抄，别自己加**（2026-10-09 实录：8.8 那一次把套件数写成了 **145**，而实测是 **123** ——
 五包 `Test run with N tests in M suites` 的 `M` 加起来才是套件数，测试项数**不是**套件数）。
 ⚠️ **宣布"零警告"前必须强制全量重编**（`find Packages GitDuo -name '*.swift' -print0 | xargs -0 touch && make verify`）——
