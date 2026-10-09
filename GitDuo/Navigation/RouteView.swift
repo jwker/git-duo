@@ -48,6 +48,9 @@ struct RouteView: View {
                 issues: env.repoIssues,
                 pulls: env.repoPulls,
                 starToggle: env.starToggle,
+                // 决策 #80：头部那颗星"写不写得动"的判定来源（§3.5.5）。
+                // ⚠️ 传组合根那**同一个**缓存 —— 那里在冷启动 / 换账号时就预热过。
+                starScope: env.starWriteScope,
                 // 切片 8.4：§5.8 后两个上传出口的写通道（§4.4 的「＋ 添加」）。
                 saver: env.saveFile,
                 // 切片 8.7 / 8.8：选中之后、写之前的那一步
@@ -68,6 +71,8 @@ struct RouteView: View {
                 treeLoader: env.repoTree,
                 branches: env.branches,
                 starToggle: env.starToggle,
+                // 决策 #80：**本页几乎每一条都是别人的仓库** ⇒ 这一档在这里是常态。
+                starScope: env.starWriteScope,
                 memory: env.branchMemory,
                 visits: env.recentVisits,
                 // 切片 9：② 「我的收藏」分区（§5.5 / §5.6）。

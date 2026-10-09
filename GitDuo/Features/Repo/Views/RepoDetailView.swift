@@ -88,6 +88,10 @@ struct RepoDetailView: View {
         issues: LoadRepoIssues,
         pulls: LoadRepoPulls,
         starToggle: ToggleStar,
+        // ⚠️ 决策 #80 那一档判定的来源（"这个仓库写不写得动"）。与 `intake` 一样是**过一手**：
+        //    传的必须是组合根里那**同一个**缓存 —— 另 new 一个的代价是每次进页白问一次
+        //    `GET /user/installations`，而且它拿不到组合根预热过的那份结果。
+        starScope: StarWriteScopeCache,
         saver: SaveFile,
         intake: UploadIntake,
         memory: any BranchMemoryStore,
@@ -107,6 +111,7 @@ struct RepoDetailView: View {
             issues: issues,
             pulls: pulls,
             starToggle: starToggle,
+            starScope: starScope,
             saver: saver,
             memory: memory,
             visits: visits,
@@ -287,6 +292,10 @@ struct RepoDetailView: View {
                     RepoDetailHero(
                         detail: snapshot.detail,
                         star: snapshot.star,
+                        // 决策 #80：确定写不了时头部那颗星标变灰 + 下方一行说明。
+                        // ⚠️ 本页多半恒为 `true`（自己的仓库必然在安装范围内），
+                        //    唯一的例外是"组织仓库且那个组织没装 GitDuo"。
+                        canStar: model.starWritable,
                         isTogglingStar: model.isTogglingStar
                     ) {
                         Task { await model.toggleStar() }

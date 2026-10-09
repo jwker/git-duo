@@ -46,6 +46,16 @@ final class ExploreRepoViewModel {
     /// Star 请求在途 ⇒ 按钮内联 loading + 禁用（§8.5「操作类」）。
     private(set) var isTogglingStar = false
 
+    /// **这个仓库的 Star 点得动吗**（TECH_SPEC §3.5.5、决策 #80）。
+    ///
+    /// ⚠️ **本页是这条限制影响最大的屏** —— 它出现的每一条数据（趋势榜 / 搜索）
+    /// 都是**别人的仓库**，而别人的仓库**写不了**。所以这里大量条目会是灰的，
+    /// 那不是坏了，是如实。
+    ///
+    /// ⚠️ 初值 `true` 与 `RepoDetailViewModel` 同一个理由：`StarWriteScope` 的规则是
+    /// "**还没查到就不拦**"。差别在于本页**真的会用到 `false`**（那一页基本用不到）。
+    private(set) var starWritable = true
+
     /// 这个仓库现在在哪个收藏夹里；`nil` = 没收藏过（PRD §4.13 的 ② 分区）。
     ///
     /// ## ⚠️ 它是**纯本地**的，与 Star 那一套完全不同
@@ -75,6 +85,7 @@ final class ExploreRepoViewModel {
 
     private let loader: LoadRepoInsights
     private let starToggle: ToggleStar
+    private let starScope: StarWriteScopeCache
     private let visits: any RecentVisitStore
     private let folders: any FolderStore
     private let toast: ToastCenter
@@ -88,6 +99,7 @@ final class ExploreRepoViewModel {
         treeLoader: LoadRepoTree,
         branches: LoadBranches,
         starToggle: ToggleStar,
+        starScope: StarWriteScopeCache,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         folders: any FolderStore,
@@ -96,6 +108,7 @@ final class ExploreRepoViewModel {
         self.fullName = fullName
         self.loader = loader
         self.starToggle = starToggle
+        self.starScope = starScope
         self.visits = visits
         self.folders = folders
         self.toast = toast
@@ -126,6 +139,10 @@ final class ExploreRepoViewModel {
         //    是我们**还没去读**（那正是 §8.5 说的"加载中 ≠ 无数据"那种错）。
         await loadFavorite()
 
+        // ⚠️ 「Star 写不写得动」也排在这里（稳态下是缓存命中，组合根冷启动就预热过）。
+        //    本页这一问**基本上每次都是有意义的** —— 它进来的多半是别人的仓库。
+        await resolveStarWritable()
+
         guard !insights.hasFinished else { return }
         await load()
     }
@@ -134,6 +151,9 @@ final class ExploreRepoViewModel {
         // 收藏也重读一次：它可能在**另一个入口**被改过（「我的收藏」管理页、
         // 或别的仓库详情页），而这两处读的是同一份本地数据（§9.12 末段）。
         await loadFavorite()
+        // 可写范围同理：稳态下白做不了什么，但**第一次没问到**时（断网进的页）
+        // 这里是唯一的重试出口 —— `StarWriteScopeCache` 有意不缓存失败。
+        await resolveStarWritable()
         await load()
     }
 
@@ -152,8 +172,16 @@ final class ExploreRepoViewModel {
         } catch {
             // ⚠️ 失败**不改动任何计数**（`ToggleStar.toggle` 保证这一点），
             //    按钮恢复可点（`defer` 收起 loading），并给一条提示。
-            toast.show(ActionCopy.failed)
+            //    ⚠️ 提示按**成因**分流（决策 #80）：本页的失败**绝大多数就是**
+            //       "越出安装范围" —— 这一页里基本全是别人的仓库。
+            //       而通用句 `操作失败 · 请重试` 会把用户送向一条永远不会成功的重试。
+            toast.show(StarCopy.failureMessage(for: error))
         }
+    }
+
+    /// 问一次「这个仓库写不写得动」（口径同 `RepoDetailViewModel.resolveStarWritable`）。
+    private func resolveStarWritable() async {
+        starWritable = await starScope.current().canWrite(fullName: fullName)
     }
 
     // MARK: - 目录（转发给会话）

@@ -83,6 +83,63 @@ public enum StarCopy {
     public static func accessibilityLabel(isStarred: Bool, starCount: Int) -> String {
         isStarred ? "已 Star，\(starCount) 个 Star，点按取消" : "Star，\(starCount) 个 Star，点按加星"
     }
+
+    // MARK: - 写不了这个仓库时（TECH_SPEC §3.5.5、决策 #80）
+
+    /// **写不了这个仓库**时给用户的那一句。
+    ///
+    /// 出处：PRD §7（2026-10-09 新定）、TECH_SPEC §3.5.5、决策 #80。
+    ///
+    /// ## ⚠️ 同一句话承担三个角色，所以它必须是一句**成因说明**
+    ///
+    /// | 用在哪 | 形态 |
+    /// |---|---|
+    /// | §4.4 / §4.13 的头部大卡 | **置灰说明**（统计按钮下面一行） |
+    /// | 同上那颗按钮 | **读屏标签**（此刻"点按加星"是不成立的，那句要换掉） |
+    /// | 三处共用的失败提示 | 用户真的点下去（范围还没查到 / `selected` 那一档）时的那句 toast |
+    ///
+    /// ## ⚠️ 措辞为什么不是"该仓库所属账号未安装 GitDuo"
+    ///
+    /// 那句话会**断言过头**：安装确实可能装了、只是安装时勾的是
+    /// `repository_selection == "selected"` 而**没勾这个仓库**（`StarWriteScope` 的说明里记着这一档）。
+    /// "未被授权访问该仓库"两种情形都说得通，而且**不猜是哪一个**。
+    ///
+    /// ⚠️ 逐字不许改：它同时出现在两个详情页的头部，改一处就会两页不一致。
+    public static let unavailableHint = "GitDuo 未被授权访问该仓库，暂不能 Star"
+
+    /// 写 Star 失败时该说哪一句。
+    ///
+    /// ## ⚠️ 为什么不能一律用 `ActionCopy.failed`
+    ///
+    /// 那一句是 `操作失败 · 请重试`，而**这一种失败重试永远不会成功**
+    /// （仓库不在安装范围里，范围不会自己变）—— 说"请重试"是把用户送向一条死路。
+    /// 所以这里按**成因**分流：说得更准的成因就说那一句，其余回落通用句
+    /// （同 `ActionCopy` 类型说明里那条"具体的失败成因各操作自己说得更准"）。
+    ///
+    /// ## ⚠️ 匹配的是**响应体里的那句话**，代价如实登记
+    ///
+    /// `Resource not accessible by integration` 是 GitHub 对"App 令牌越出安装范围 / 权限不足"
+    /// 的标准措辞（2026-10-09 真机实测，两个写请求的体逐字都是它）。
+    /// **它是唯一**能把"范围不足"与"二级限流 / 主桶耗尽 / 其余 403"分开的信号
+    /// （后三者由 `GitHubError.from` 优先归一化掉，落到这里的 403 已经不是配额问题）。
+    ///
+    /// ⚠️ 代价：**GitHub 改措辞时会失配** ⇒ 退化成通用句。
+    /// **最坏情况就是回到今天的样子**，不会更糟 —— 这是能接受失配的前提。
+    /// ⚠️ 别把它改成"凡 403 就说这句"：那样"你没有权限"会被说成"GitDuo 没被授权"，
+    /// 而在**别人的私有仓库**上这是两句意思相反的话。
+    public static func failureMessage(for error: any Error) -> String {
+        guard
+            let githubError = error as? GitHubError,
+            case let .forbidden(message) = githubError,
+            message == integrationDeniedMessage
+        else {
+            return ActionCopy.failed
+        }
+        return unavailableHint
+    }
+
+    /// GitHub 对「App 令牌权限不足 / 越出安装范围」的标准措辞（2026-10-09 实测逐字）。
+    private static let integrationDeniedMessage = "Resource not accessible by integration"
 }
 
 /// Star 的数据来源 —— 领域层与网络层之间的接缝。

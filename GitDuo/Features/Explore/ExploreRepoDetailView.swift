@@ -85,6 +85,9 @@ struct ExploreRepoDetailView: View {
         treeLoader: LoadRepoTree,
         branches: LoadBranches,
         starToggle: ToggleStar,
+        // ⚠️ 决策 #80：本页**几乎每一条都写不了**（都是别人的仓库），
+        //    所以这个缓存比在 §4.4 更要紧 —— 传组合根那**同一个**（预热过的那份）。
+        starScope: StarWriteScopeCache,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         folders: any FolderStore,
@@ -99,6 +102,7 @@ struct ExploreRepoDetailView: View {
             treeLoader: treeLoader,
             branches: branches,
             starToggle: starToggle,
+            starScope: starScope,
             memory: memory,
             visits: visits,
             // ⚠️ 组合根那**唯一一个** `FolderStore`（与「我的收藏」管理页共用）。
@@ -210,6 +214,10 @@ struct ExploreRepoDetailView: View {
                 detail: insights.detail,
                 now: now,
                 star: model.star,
+                // 决策 #80：确定写不了 ⇒ 那颗星变灰、下方多一行说明。
+                // ⚠️ 本页是这条限制影响最大的屏 —— 它进来的多半是别人的仓库，
+                //    所以"灰的"才是常态、"能点"才少见。
+                canStar: model.starWritable,
                 isTogglingStar: model.isTogglingStar
             ) {
                 Task { await model.toggleStar() }
@@ -601,6 +609,7 @@ struct ExploreRepoDetailView: View {
             treeLoader: environment.repoTree,
             branches: environment.branches,
             starToggle: environment.starToggle,
+            starScope: environment.starWriteScope,
             memory: environment.branchMemory,
             visits: environment.recentVisits,
             folders: environment.folders,

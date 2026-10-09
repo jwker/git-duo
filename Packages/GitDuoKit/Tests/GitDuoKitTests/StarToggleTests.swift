@@ -242,4 +242,47 @@ struct StarToggleTests {
         #expect(StarCopy.accessibilityLabel(isStarred: true, starCount: 12).contains("已 Star"))
         #expect(StarCopy.accessibilityLabel(isStarred: false, starCount: 12).contains("点按加星"))
     }
+
+    // MARK: - 写不了这个仓库时（TECH_SPEC §3.5.5、决策 #80）
+
+    @Test("那句说明**逐字**钉住（它同时是两个详情页头部的置灰说明、读屏标签与失败提示）")
+    func unavailableHintIsPinned() {
+        #expect(StarCopy.unavailableHint == "GitDuo 未被授权访问该仓库，暂不能 Star")
+        // ⚠️ 不许出现"失败"/"错误"这类字样 —— 它是一句**成因说明**，不是一次报错。
+        #expect(!StarCopy.unavailableHint.contains("失败"))
+    }
+
+    @Test("⚠️ 只有「App 越出安装范围」那一种 403 才换成专用句")
+    func failureMessageOnlyForIntegrationDenied() {
+        #expect(StarCopy.failureMessage(for: GitHubError.forbidden(
+            "Resource not accessible by integration"
+        )) == StarCopy.unavailableHint)
+    }
+
+    @Test(
+        "⚠️ 其余失败一律回落通用句 —— 别把「你没有权限」说成「GitDuo 没被授权」",
+        arguments: [
+            // 措辞不完全一致的 403（GitHub 改过词的那一天走这一支 ⇒ 退化成通用句，最坏就是今天的样子）
+            GitHubError.forbidden("Resource not accessible by integration."),
+            GitHubError.forbidden("You do not have permission"),
+            GitHubError.forbidden(""),
+            // 配额与网络 —— 与范围毫不相干
+            GitHubError.rateLimited(resetAt: Date(timeIntervalSince1970: 0), isSecondary: true),
+            GitHubError.transport(URLError(.notConnectedToInternet)),
+            GitHubError.unauthorized,
+            GitHubError.notFound,
+            GitHubError.serverError(status: 500),
+            GitHubError.decoding(URLError(.cannotParseResponse))
+        ]
+    )
+    func failureMessageFallsBackForEverythingElse(_ error: GitHubError) {
+        #expect(StarCopy.failureMessage(for: error) == ActionCopy.failed)
+    }
+
+    @Test("非 `GitHubError` 的失败也回落通用句（不猜）")
+    func failureMessageHandlesForeignErrors() {
+        struct Weird: Error {}
+
+        #expect(StarCopy.failureMessage(for: Weird()) == ActionCopy.failed)
+    }
 }

@@ -31,12 +31,43 @@ import SwiftUI
 /// `star` 为 `nil`（进页那次 `GET /user/starred/{o}/{r}` 还没回来或失败了）
 /// 时按未 Star 画 —— 这是 `StarState` 的既定降级（决策 #41），
 /// 本件不自己造第二套判断。
+///
+/// ## ⚠️ Star 按钮的**第二档**：确定写不了 ⇒ 置灰 + 一行说明（决策 #80）
+///
+/// 2026-10-09 起（走查 #3 定案，`TECH_SPEC §3.5.5`）：GitHub App 的用户令牌
+/// **只能 Star 安装范围内（也就是在册账号名下）的仓库**，别人的仓库一律 403。
+/// 查到并确定不在范围内时，这里画成 `.disabled(true)` + 下方一行 `StarCopy.unavailableHint`。
+///
+/// ⚠️ 这一档与 `watchButton` / `forkButton` 的 `allowsHitTesting(false)` **有意不同**：
+/// 那两个是"**这一屏本来就只展示计数**"（点了也没这功能），Star 是"**本该能点、此刻不能**"
+/// —— 后者必须让用户看得出"是权限问题"，而不是"这功能还没做"。
+///
+/// | | Watch / Fork | Star（确定不可写） |
+/// |---|---|---|
+/// | 修饰符 | `.allowsHitTesting(false)` | **`.disabled(true)`** |
+/// | 看起来 | 与可点的一模一样 | **灰的** |
+/// | 为什么 | 它**永远**不可点 ⇒ 灰了反而像"暂时不可用" | 它本来能点 ⇒ 必须显出这一档差别 |
+/// | 说明放哪 | 读屏 `hint` | **屏幕上那一行**（这一屏放得下） |
+///
+/// ⚠️ 判据只有一条：**这一处放得下说明吗**。放得下就置灰（本件与 §4.13 的头部），
+/// 放不下就照常可点、失败时再说（§4.18 的列表行，见 `MyStarsViewModel.toggleStar`）。
 struct RepoDetailHero: View {
 
     let detail: RepositoryDetail
 
     /// Star 的当前状态。`nil` = 基准还没确认（见类型说明）。
     let star: StarState?
+
+    /// Star 现在**写不写得动**（决策 #80 / `TECH_SPEC §3.5.5`）。
+    ///
+    /// ⚠️ `false` 只有一个含义：**已经确定**写不了 —— 查到了安装范围、而本仓库
+    /// 不在其中。"**还没查到 / 拉取失败**"一律是 `true`：`StarWriteScope` 的口径是
+    /// **不确定就不拦**（灰掉它是替用户断言一件我们手里没有依据的事，同 §8.5）。
+    ///
+    /// ⚠️ 本页大概率永远看不到 `false`（这里的仓库多半是自己的，而自己的必然在范围内）。
+    /// **唯一的例外是组织仓库**：你对它有 push、而那个组织没装 GitDuo ——
+    /// 那一档正是这个参数存在的理由。
+    let canStar: Bool
 
     /// Star 请求在途（按钮内联 loading + 禁用，§8.5）。
     let isTogglingStar: Bool
@@ -49,6 +80,7 @@ struct RepoDetailHero: View {
             description
             statRow
                 .padding(.top, Theme.Spacing.m)
+            unavailableHint
         }
         // 原型 `.repo-hero{padding:16px;border-radius:16px}`。
         .padding(Theme.Spacing.l)
@@ -117,13 +149,38 @@ struct RepoDetailHero: View {
             activeTint: Theme.Palette.starActive,
             action: onToggleStar
         )
-        .disabled(isTogglingStar)
+        // 两档共用这一个修饰符：**在途**（§8.5"操作类"防重复提交）与**确定写不了**（§3.5.5）。
+        .disabled(isTogglingStar || !canStar)
         .overlay {
             if isTogglingStar {
                 ProgressView().controlSize(.small)
             }
         }
         .accessibilityLabel(StarCopy.accessibilityLabel(isStarred: isStarred, starCount: count))
+        // ⚠️ 灰掉那一档把**原因**交给读屏 —— 否则用户只听到"一个变暗的按钮"，
+        //    而下面那行说明是**另一个**元素（要再滑一下才听得到）。
+        //    可点那一档不给 hint（空串 = 没有提示），否则每次念按钮都要多一句无用的。
+        .accessibilityHint(canStar ? "" : StarCopy.unavailableHint)
+    }
+
+    /// 「写不了」时按钮下方那一行（决策 #80）。
+    ///
+    /// ⚠️ 文案取自 `StarCopy.unavailableHint` —— 与**失败提示**是同一句，
+    /// 而这是有意的：用户在两处读到同一个原因，才不会再试第三次。
+    /// 两处说的是同一件事的两种到达方式（"事先拦下"与"写了被拒"）。
+    ///
+    /// ⚠️ 形态与 `RepoHeroCard` 那一处逐字相同（`caption` / `textTertiary`），
+    /// 差别只在**下面有没有页脚** —— 那边要多留一个 `Spacing.s` 把它与页脚隔开。
+    @ViewBuilder
+    private var unavailableHint: some View {
+        if !canStar {
+            Text(StarCopy.unavailableHint)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Theme.Spacing.s)
+        }
     }
 
     private var watchButton: some View {
@@ -166,6 +223,7 @@ struct RepoDetailHero: View {
                 star: StarState(
                     fullName: "my-git/gitduo", isStarred: true, starCount: 129, baselineConfirmed: true
                 ),
+                canStar: true,
                 isTogglingStar: false,
                 onToggleStar: {}
             )
@@ -181,7 +239,31 @@ struct RepoDetailHero: View {
                     watcherCount: 0
                 ),
                 star: nil,
+                canStar: true,
                 isTogglingStar: true,
+                onToggleStar: {}
+            )
+
+            // 确定写不了 ⇒ Star 变灰 + 下方一行说明（决策 #80）。
+            // ⚠️ 本页真要看到这一档，得是"你对某个组织仓库有 push、而那个组织没装 GitDuo"
+            //    —— 少见但可达，所以留一张在这儿当评审底图（走查单 #152 的对照组就在上面那张）。
+            RepoDetailHero(
+                detail: RepositoryDetail(
+                    fullName: "org/private-tools",
+                    description: "这个组织没有安装 GitDuo",
+                    defaultBranch: "main",
+                    starCount: 412,
+                    forkCount: 7,
+                    watcherCount: 3
+                ),
+                star: StarState(
+                    fullName: "org/private-tools",
+                    isStarred: false,
+                    starCount: 412,
+                    baselineConfirmed: true
+                ),
+                canStar: false,
+                isTogglingStar: false,
                 onToggleStar: {}
             )
         }

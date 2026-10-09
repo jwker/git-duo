@@ -24,6 +24,27 @@ import GitDuoKit
 /// 文案走 `StarCopy.buttonTitle`（领域层，千分位全量 `2,341` —— 与卡片上的 `2.3k` 有意不同），
 /// 图标由这里显式给出 `star` / `star.fill`
 /// （⚠️ SF Symbols 里**不是每个符号都有 `.fill` 变体**，靠追加推导会静默拿到不存在的名字）。
+///
+/// ## 🔴 Star 按钮的**第二档**：确定写不了 ⇒ 置灰 + 一行说明（决策 #80）
+///
+/// 2026-10-09 起（走查 #3 定案，`TECH_SPEC §3.5.5`）：GitHub App 的用户令牌**只能 Star
+/// 安装范围内（在册账号名下）的仓库**，别人的仓库一律 403。
+///
+/// ⚠️ **本页是这条限制影响最大的屏**：这里出现的每一条都是**别人的仓库**
+/// （趋势榜 / 搜索点进来的 / 别人的 Star），也就是**几乎每一条都写不了**。
+/// 这不是异常分支，它就是这一页的常态。
+///
+/// 形态与 §4.4 的 `RepoDetailHero` 一致（`.disabled(true)` + 下方一行 `StarCopy.unavailableHint`），
+/// 唯一的差别是**这一张卡下面有页脚**：
+///
+/// ```
+/// statRow
+/// unavailableHint   ← 新增的这一行排在这里
+/// footer            ← 「他人仓库 · 只读浏览，Fork 后可编辑与提交」，PRD §4.13 逐字，一个字都不能动
+/// ```
+///
+/// ⚠️ 所以是**加一行**、不是改页脚那一句 —— 它与页脚的语义不冲突（页脚说"能做什么"，
+/// 这一行说"这一次为什么不能"）。
 struct RepoHeroCard: View {
 
     let detail: RepositoryDetail
@@ -34,6 +55,13 @@ struct RepoHeroCard: View {
 
     /// Star 的当前状态。`nil` = 基准还没确认（此时按未 Star 显示 —— 见 `StarState`）。
     let star: StarState?
+
+    /// Star 现在**写不写得动**（决策 #80 / `TECH_SPEC §3.5.5`）。
+    ///
+    /// ⚠️ `false` 只有一个含义：**已经确定**写不了（查到了安装范围、而本仓库不在其中）。
+    /// "还没查到 / 拉取失败"一律是 `true` —— `StarWriteScope` 的口径是**不确定就不拦**：
+    /// 误灰一个本来能点的按钮，比漏灰一个不能点的更糟（同 §8.5「还没加载出来 ≠ 确实没有」）。
+    let canStar: Bool
 
     /// Star 请求在途（按钮内联 loading + 禁用，§8.5）。
     let isTogglingStar: Bool
@@ -47,6 +75,7 @@ struct RepoHeroCard: View {
             topics
             statRow
                 .padding(.top, Theme.Spacing.m)
+            unavailableHint
             footer
                 .padding(.top, Theme.Spacing.s)
         }
@@ -131,13 +160,37 @@ struct RepoHeroCard: View {
             action: onToggleStar
         )
         // ⚠️ §8.5「操作类」：在途时**禁用**（防重复提交）并给内联 loading。
-        .disabled(isTogglingStar)
+        //    与下面那一档共用同一个修饰符 —— 两者都表现为"灰"，但原因完全不同：
+        //    在途是**等一会儿就好**，不可写是**换个人来点也不行**。
+        .disabled(isTogglingStar || !canStar)
         .overlay {
             if isTogglingStar {
                 ProgressView().controlSize(.small)
             }
         }
         .accessibilityLabel(StarCopy.accessibilityLabel(isStarred: isStarred, starCount: count))
+        // ⚠️ 灰掉那一档把**原因**交给读屏（否则只听到一个"变暗的按钮"，
+        //    而下面那行说明是另一个元素、要再滑一下才听到）。
+        .accessibilityHint(canStar ? "" : StarCopy.unavailableHint)
+    }
+
+    /// 「写不了」时按钮下方那一行（决策 #80）。
+    ///
+    /// ⚠️ 它**排在 `statRow` 与 `footer` 之间** —— 页脚那句是 PRD §4.13 逐字给的原型文案，
+    /// 一个字都不能动，所以这里只**加一行**。
+    ///
+    /// ⚠️ 文案就是 `StarCopy.unavailableHint`（与失败提示同一句，有意如此 ——
+    /// 用户在两处读到同一个原因，才会接受"这不是偶发故障"）。
+    @ViewBuilder
+    private var unavailableHint: some View {
+        if !canStar {
+            Text(StarCopy.unavailableHint)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Theme.Spacing.s)
+        }
     }
 
     /// Watch —— **纯展示**。计数读 `subscribers_count`（`detail.watcherCount`），
@@ -204,6 +257,9 @@ struct RepoHeroCard: View {
                 star: StarState(
                     fullName: "kuda/ui-craft", isStarred: true, starCount: 11_241, baselineConfirmed: true
                 ),
+                // ⚠️ 置灰那一档**才是本页的常态**（这里装的都是别人的仓库）——
+                //    所以拿它当第一张预览图，而不是拿"能点"的那一档。
+                canStar: false,
                 isTogglingStar: false,
                 onToggleStar: {}
             )
@@ -222,6 +278,8 @@ struct RepoHeroCard: View {
                 ),
                 now: Date(),
                 star: nil,
+                // 对照组：可写 ⇒ 按钮正常、**且没有那一行说明**（走查单 #152 的判据）。
+                canStar: true,
                 isTogglingStar: true,
                 onToggleStar: {}
             )

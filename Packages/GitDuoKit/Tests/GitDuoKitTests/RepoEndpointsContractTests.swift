@@ -107,6 +107,15 @@ struct RepoEndpointsContractTests {
         let _: any SearchDataSource = GitHubSearchDataSource(client: client)
     }
 
+    // MARK: - 切片 11（Star 写范围的如实降级 · 决策 #80）
+
+    @Test("⚠️ 切片 11 的接缝 —— 空扩展体，删掉之后编译照过、其余测试照绿")
+    func sliceElevenSeam() {
+        // `extension GitHubInstallationsEndpoint: StarScopeDataSource {}`（在 `StarWriteScope.swift`）——
+        // 它是空的那一类，**必须有这一行**才守得住（同 `IssueActionDataSource` 那条）。
+        let _: any StarScopeDataSource = GitHubInstallationsEndpoint(client: client)
+    }
+
     // MARK: - 切片 9（我的页 / 我的会话）
 
     @Test("⚠️ 切片 9 的两条接缝 —— 9.1 立协议、9.2 接上，这里钉住它们**没有掉下来**")

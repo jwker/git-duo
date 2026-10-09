@@ -74,6 +74,21 @@ final class AppEnvironment {
     /// Star 的领域用例（先确认基准，再幂等切换 —— 决策 #41）。
     let starToggle: ToggleStar
 
+    /// Star 的**可写范围**（TECH_SPEC §3.5.5、决策 #80）—— 「这个仓库点得动那颗星标吗」。
+    ///
+    /// ## ⚠️ 全 App **只能有这一个实例**
+    ///
+    /// 它是**跨页共享的一份缓存**（一个会话里只查一次 `GET /user/installations`）。
+    /// 两个实例的表现是"同一个仓库在两个页面上一个能点一个不能点"，而两页单看都对
+    /// —— 与 `folders` / `branchMemory` 那两条先例同源。
+    ///
+    /// ⚠️ 它是一份**账号数据** —— 名单是"这个账号装了 GitDuo 的那些账号"，
+    /// 换个人登录就变了 ⇒ `signOut()` 必须 `clear()`（§3.6 第 ③ 步）。
+    ///
+    /// ⚠️ 没有观察价值（各 ViewModel 各持一个 `Bool`，界面不直接绑它），
+    /// 所以标 `@ObservationIgnored` —— 同下面 `responseCache` 那条。
+    @ObservationIgnored let starWriteScope: StarWriteScopeCache
+
     /// 搜索取数（四范围分发 + 累加去重 + 按「范围 · 关键词」LRU 缓存 —— 切片 5.5）。
     ///
     /// ⚠️ 它是 `actor`，`SearchViewModel` 直接持有它。**不要**在这里再包一层"每次新建"：
@@ -308,6 +323,12 @@ final class AppEnvironment {
         self.starToggle = ToggleStar(
             source: GitHubStarEndpoint(client: client)
         )
+        // ⚠️ 「Star 写不写得动」的判据来源（决策 #80）—— 与 `starToggle` 一样，
+        //    组合根只此一份：它是一份跨页共享的缓存，而"两个实例"的表现是
+        //    同一个仓库在两页上一个能点一个不能点，且两边单看都对。
+        self.starWriteScope = StarWriteScopeCache(
+            loader: LoadStarWriteScope(source: GitHubInstallationsEndpoint(client: client))
+        )
         // ⚠️ 搜索的四个端点**共存于一个适配器**（`GitHubSearchDataSource` 内部由
         //    `GitHubSearchEndpoints` 用**同一个** `client` 生成四个端点）——
         //    在这里 new 四个端点再各传一个，会让缓存分成几份、配额各算各的，而且不报错。
@@ -429,10 +450,26 @@ final class AppEnvironment {
         switch await authCoordinator.restore() {
         case let .authenticated(login):
             authState = .authenticated(login: login)
+            warmUpStarWriteScope()
         case .unauthenticated:
             authState = .unauthenticated
         }
         isBootstrapping = false
+    }
+
+    /// 把「Star 可写范围」提前查好（**不 await**）。
+    ///
+    /// ## 为什么值得专门做这一步
+    ///
+    /// 它决定"那颗星标灰不灰"，而它是**异步**的 ⇒ 不预热的话，用户进第一个仓库详情页时
+    /// 会看到按钮**先正常可点、两百毫秒后才变灰**。那一下不是 bug（"还没查到就不拦"是有意的），
+    /// 但它是一次**没有必要的视觉抖动**，而消除它的成本只是冷启动多一个主桶请求
+    /// （而且这一次查完就缓存住，整个会话不再问）。
+    ///
+    /// ⚠️ **不 await**：它是首屏之外的事，让它拖慢进主界面是倒过来的取舍。
+    /// ⚠️ `AppEnvironment` 是 `@MainActor`，`Task { }` 继承它 —— 这里没有别的线程问题。
+    private func warmUpStarWriteScope() {
+        Task { _ = await starWriteScope.current() }
     }
 
     // MARK: - 登录
@@ -472,6 +509,14 @@ final class AppEnvironment {
         case let .authenticated(login):
             authState = .authenticated(login: login)
             notice = nil
+            // ⚠️ 换了个账号 / 刚授权完 ⇒ 可写范围必须重新查（缓存里那份属于**上一个**账号）。
+            //    正常路径下 `signOut()` 已经清过一次，这里是**第二道**：
+            //    "清缓存"与"重新查"放在两处，漏了任何一处都表现为
+            //    "新账号按旧账号的授权范围画按钮"，而屏幕上完全看不出异常。
+            Task {
+                await starWriteScope.clear()
+                _ = await starWriteScope.current()
+            }
 
         case .cancelled, .ignored:
             // 用户取消 / 不是给我们的回调：回登录页，**不报错**（§3.8 出口表）
@@ -501,6 +546,8 @@ final class AppEnvironment {
         //    · 分支记忆（切片 6.4 —— 分支名会暴露私有仓库的结构）
         //    · 评论草稿（切片 7 —— 草稿里可能有还没发布的正文）
         //    · 收藏夹与归属映射（切片 9 —— 夹名是用户自己起的）
+        //    · **Star 可写范围**（切片 11 —— 它是"这个账号把 GitDuo 装在哪几个账号上"，
+        //      换个人登录，能写的仓库也换了）
         //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
         await recentVisits.clear()
         await starSnapshots.clear()
@@ -508,6 +555,7 @@ final class AppEnvironment {
         await branchMemory.clear()
         await commentDrafts.clear()
         await folders.clear()
+        await starWriteScope.clear()
         // ⚠️ `LoadSearch` 与 `LoadMyConversations` 都是 actor，它们缓存的是
         //    **上一个账号搜出来的结果**（含私有仓库名、他提过的 PR）⇒
         //    与接口缓存同一条：不清就会在新账号的界面上露出来。

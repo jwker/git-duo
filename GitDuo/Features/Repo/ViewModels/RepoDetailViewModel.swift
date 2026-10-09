@@ -51,6 +51,17 @@ final class RepoDetailViewModel {
 
     private(set) var isTogglingStar = false
 
+    /// **这个仓库的 Star 点得动吗**（TECH_SPEC §3.5.5、决策 #80）。
+    ///
+    /// ⚠️ 初值 `true` 是**有意**的，不是偷懒：`StarWriteScope` 的规则是
+    /// "**还没查到就不拦**"（不确定时误灰一个能点的按钮，比漏灰一个不能点的糟得多）。
+    /// 所以"范围还没回来"这段时间里界面该表现成"可点"，而这个初值就是那件事。
+    ///
+    /// ⚠️ 本页**大概率永远看不到 `false`** —— §4.4 的入口判据是"自己有写权限"，
+    /// 而自己的仓库必然在安装范围内。**唯一的例外是组织仓库**：你对它有 push、
+    /// 但那个组织没装 GitDuo ⇒ 那时它会变成灰的，而那正是这一档存在的理由。
+    private(set) var starWritable = true
+
     /// 当前分段。初值由路由给（`.repoDetail(fullName:section:path:)` 的 `section`）。
     var section: RepoSection
 
@@ -88,6 +99,7 @@ final class RepoDetailViewModel {
     private let pullsLoader: LoadRepoPulls
 
     private let starToggle: ToggleStar
+    private let starScope: StarWriteScopeCache
     private let visits: any RecentVisitStore
     private let toast: ToastCenter
 
@@ -107,6 +119,7 @@ final class RepoDetailViewModel {
         issues: LoadRepoIssues,
         pulls: LoadRepoPulls,
         starToggle: ToggleStar,
+        starScope: StarWriteScopeCache,
         saver: SaveFile,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
@@ -119,6 +132,7 @@ final class RepoDetailViewModel {
         self.issuesLoader = issues
         self.pullsLoader = pulls
         self.starToggle = starToggle
+        self.starScope = starScope
         self.saver = saver
         self.visits = visits
         self.toast = toast
@@ -168,6 +182,11 @@ final class RepoDetailViewModel {
     func start() async {
         await visits.record(fullName: fullName, canWrite: true, at: Date())
 
+        // ⚠️ 排在取详情**之前**：它决定头部那颗星标灰不灰，而它在稳态下是一次
+        //    **缓存命中**（组合根在冷启动就预热了它，§3.5.5）⇒ 代价可以忽略；
+        //    不这么排的话，头部会先按"可点"画出来、再当场变灰。
+        await resolveStarWritable()
+
         guard !snapshot.hasFinished else { return }
         await loadDetail()
         // ⚠️ 头部到手之后再按当前分段取数：路由可能**直接落在** Issues / PR 段上
@@ -192,6 +211,10 @@ final class RepoDetailViewModel {
     /// 要改的话只需在这里补一句 `await currentIssues.refresh()`（两段各自有 `refresh`），
     /// 改动很小 —— **已登记为有意偏差，不擅自改**。
     func refresh() async {
+        // 顺带重问一次可写范围：稳态下是缓存命中（白做不了什么），
+        // 而**第一次没问到**时（断网进的页）这里是唯一的重试出口
+        // —— `StarWriteScopeCache` 有意不缓存失败。
+        await resolveStarWritable()
         await loadDetail(keepContent: true)
     }
 
@@ -219,8 +242,20 @@ final class RepoDetailViewModel {
             toast.show(StarCopy.toast(for: action))
         } catch {
             // 失败**不改动任何计数**（`ToggleStar.toggle` 保证），按钮恢复可点。
-            toast.show(ActionCopy.failed)
+            // ⚠️ 提示按**成因**分流（决策 #80）：越出安装范围那一种要说那一句，
+            //    因为通用句 `操作失败 · 请重试` 会把用户送向一条**永远不会成功**的重试。
+            toast.show(StarCopy.failureMessage(for: error))
         }
+    }
+
+    /// 问一次「这个仓库写不写得动」。
+    ///
+    /// ⚠️ 它**不抛错也不表态**：查不到就是查不到，界面按"可点"处理
+    /// （`StarWriteScope.unknown` 那一档）—— 不拦，让写请求自己去失败，
+    /// 那时再给一句准确的话。这是"失败不要静默吞掉"的正确落法：
+    /// **不是**把错误藏起来，而是把它推迟到"真正需要它的那一步"。
+    private func resolveStarWritable() async {
+        starWritable = await starScope.current().canWrite(fullName: fullName)
     }
 
     // MARK: - 提交列表

@@ -130,7 +130,12 @@ final class MyStarsViewModel {
             toggled[fullName] = next
             toast.show(StarCopy.toast(for: action))
         } catch {
-            toast.show(ActionCopy.failed)
+            // ⚠️ 这一页**不置灰那颗按钮**，而这是有意的（决策 #80 / PRD §4.18）：
+            //    一行卡片右侧放不下"为什么点不了"的那句说明，而**灰掉却不解释**
+            //    比"点了才知道"更糟（前者看起来像"暂时不可用"）。
+            //    ⇒ 代价是用户会白点一下，换来的是**一句有依据的话**。
+            //    ⚠️ 而这一页里装的**基本全是别人的仓库** ⇒ 这一支是常态、不是异常。
+            toast.show(StarCopy.failureMessage(for: error))
         }
     }
 
