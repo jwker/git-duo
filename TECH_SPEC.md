@@ -121,8 +121,12 @@
 | 70 | 「上传文件 · 文件 App」与「上传图片 · 相册」的落点 | **两个都做，选中后统一走提交弹层；路径 = 文件名（仓库根；⚠️ 相册那支改由 App 生成，见 ②的 2026-10-08 补充）**（用户 2026-10-08 拍板）：§5.8 原先就列了三个出口、且写明后两个"→ 提交更改弹层（标题 `上传文件（文件 App）` / `上传图片（相册）`）"，本决策只是把"选中之后怎么走"补全。① 选择器用 `.fileImporter` 与 `PhotosPicker` —— 两者**都不需要额外的权限声明**（`PhotosPicker` 走进程外选择，不读相册权限；Info.plist 不加 `NSPhotoLibraryUsageDescription`）。② 路径 = **选中文件的文件名**（落在仓库根）—— ⚠️ 原型/PRD 都没有路径输入框，而 `PUT` 的 `path` 是必填；规则取"最小惊讶"，并**在提交弹层里显示一行只读的"将写入 `{path}`"**（把自动决定的那件事**露出来**，否则用户根本不知道东西存哪去了）。⚠️ **2026-10-08 补充（8.4 落地时，外部事实逼出来的）**：上面那条**只对「文件 App」那一支成立**。「相册」那一支**拿不到文件名** —— iOS 27.0 SDK 里 `PhotosPickerItem` 的**全体成员只有三个**：`itemIdentifier`（相册内部的资源标识，形如 `UUID/L0/001`）/ `supportedContentTypes` / `loadTransferable(type:)`，**没有任何文件名**。⇒ 相册那一支的路径改为**由 App 生成**：`UploadFileName.photo(fileExtension:now:)` = **`photo-{yyyyMMdd-HHmmss}.{ext}`**（`jpeg` → `jpg`；扩展名取不到时兜底 `jpg`）。⚠️ 这**不是"换个字段取"那种改法，是规格本身没有落点** ⇒ 按事实优先级（**外部事实 > 全部**）**改规格**，与决策 **#47**（`search/issues` 拆两条）同一处置；`PRD §5.8` 那张表已同步改正并留了更正引用块。③ **相册图片取原始字节、不重编码**（重编码会改内容与体积，而用户上传的是"这张图片"）—— ⚠️ **本条已由决策 #71 收窄为"默认"**（2026-10-09）：≤1MB 仍然原样，**>1MB 的图片改为自适应压缩**；⚠️ **同日再被 #72 收窄一次**：**≤1MB 但格式在网页端显示不出来的**（HEIC / TIFF / BMP / RAW…）**也要转码** ⇒ 本条现在只剩「**≤1MB 且格式本来就在白名单里**」这一档才成立。④ 超过 1MB ⇒ 按 §5.8 底部那句话提示并引导网页端，**不静默失败**（⚠️ **图片那一支同上由 #71 接管**：先压，压不动才提示）。⑤ **重名不静默覆盖**：不带 `sha` 去 PUT 一个已存在的文件，服务端回 **422**（`"sha" wasn't supplied`）⇒ 转成可读文案（"仓库根下已有同名文件，请改名或到网页端处理"），正是决策 #66 里那个 `sha` 的两面 | 【已定】 |
 | 71 | 超过 1MB 的图片怎么办 | **两个上传出口都先自适应压缩，压不动才引导网页端**（用户 2026-10-09 拍板）：决策 #70③ 原先写的是"取原始字节、**不重编码**"（理由是"用户上传的就是这张图片"），代价是**真实照片动辄 >1MB ⇒ 相册这条出口对大多数照片是一条死路**。改为：① **≤1MB 的图片仍然原样上传、不重编码**（那条规格在多数情况下继续成立，只在非要压缩时才让位）—— ⚠️ **本条已由 #72 收窄**（2026-10-09 同日）：**≤1MB 且格式能被网页端显示**才原样（白名单见 #72①）；② **>1MB 且确实是图片** ⇒ 走 `GitDuoCore.ImageCompressor`（ImageIO，**零第三方依赖**不破；⚠️ **#72 落地时更名为 `ImageProcessor`**，见本表 #72）：**PNG 或带 alpha 的图先只缩最长边**（保住截图的锐利与透明通道），穷尽后转 JPEG；其余（HEIC / JPEG / WebP）**先逐档降 JPEG 画质、再缩最长边**；③ **动图（多帧）不压**——压完只剩第一帧，那是"改内容"而不是"压体积"（判据 `CGImageSourceGetCount > 1`）；④ **压不动就仍按 §5.8 那句提示引导网页端**：⚠️ **不承诺"一定压到 1MB 以内"**（超大像素图、以及已经重度压缩过的 JPEG，到画质 / 尺寸下限仍可能超限）；⑤ **"已压缩"必须让用户看见** —— 提交弹层那行只读落点下多一句 caption（`已压缩 3.2MB → 0.8MB`），把 App 自动做的事**露出来**（同 #70② 的做法，「文案是契约」）。⚠️ **代价如实登记**：压缩**有损**、重编码会**剥掉 EXIF（含 GPS 位置）** ⇒ 传上去的不再是相册里那一份，已写进 `PRD §5.8` 与 `REVIEW-CHECKLIST` 有意偏差表。**备选被否**：不压（现状——相册出口对照片形同虚设）；所有图片统一重编码（会改掉用户本来能原样传的原图）；一刀切固定画质（轻度过限的图会被压得比必要更狠，且"同一张图每次压出什么"不可预期） | 【已定】 |
 | 72 | 网页端显示不出来的图片格式怎么办 | **在压缩那一步顺手转成「网页端显示得出来、且体积效率相当」的格式**（用户 2026-10-09 拍板）：#71 只解决了"体积"、没解决"格式" —— iPhone 相机默认拍的 **HEIC**、以及 TIFF / BMP / RAW 这些，浏览器根本渲染不出来，传上去在 GitHub 页面上就是一块破图（`PRD §5.8` 原先对这件事**一个字都没有**）。① **判据 = ImageIO 从字节读出的真实类型**（不认扩展名，同 #71 的 PNG 判据），**不在白名单**里的图片格式一律转码。白名单 = **PNG / JPEG / GIF / WebP / SVG** —— ⚠️ 依据是外部事实（GitHub 的 markdown 渲染器支持这五个），**会变，用前复查**；⚠️ **AVIF 有意留在名单外**：浏览器确实渲染得出来，但 `UTType` 里**没有它的编译期常量**（只能运行时查 `UTType("public.avif")`），而它又不在 GitHub 那份文档里 ⇒ 不留，代价只是"AVIF 会被转成 JPEG"（2026-10-09 实测，已登记）。② **输出格式取"体积效率相当"的那一种**：**带 alpha 通道** ⇒ PNG（JPEG 装不下透明）；**源编码本身无损**（PNG / TIFF / BMP / GIF）⇒ PNG（无损→无损，多数还更小）；**其余**（HEIC / HEIF / RAW…）⇒ JPEG。⚠️ **刻意不"一律转 PNG"**：PNG 是无损编码，一张 2MB 的 HEIC 转 PNG 可能到 15MB ⇒ 多数会被缩到 800px 甚至更小才塞得进 1MB，而画质并不会比转 JPEG 好。③ **≤1MB 也照样转**（用户明确要求）—— 这**推翻了 #71① 的绝对性**：那条收窄为「≤1MB **且格式已经在白名单里**才原样、一个字节不动」。④ **文件名扩展名跟着换**（`IMG_1234.HEIC` → `IMG_1234.jpg`）：不换的话 GitHub 仍按**老扩展名**去渲染，等于白转。落点只有一处：`UploadFileName.replacingExtension(of:with:)`。⑤ **"转换过"必须让用户看见**（同 #71⑤）：那句 caption 按「**压小了没有** × **换没换格式**」分三种说法 —— `已压缩 3.2MB → 0.8MB` / `已压缩并转为 JPEG · 3.2MB → 0.8MB` / `已转为 JPEG · 1.2MB → 1.4MB`（第三种存在的理由：转码**体积可能变大**，那时说"已压缩"就是假话）。⚠️ **代价如实登记**：转码**必然重编码** ⇒ 会剥掉源文件里的元数据（含 EXIF / GPS）、RAW 会丢掉相机原始信息（白平衡 / 镜头校正）；**体积也可能变大**。⚠️ **动图仍然不转**（同 #71③：多帧压完只剩第一帧 = 改内容）。**备选被否**：一律转 PNG（体积暴涨，多数图会被压得比必要更狠）；只转 HEIC（TIFF / BMP / RAW 仍会被拒在网页端，而这个缺口用户看不见原因）；把转码做成单独一步让用户选（多一次决策，而"能不能在网页端显示"这件事用户没有理由需要知道） | 【已定】 |
+| 73 | 我的 PR / 我的 Issue 落在哪个页面 | **新开一个专用列表页，不复用搜索页**（用户 2026-10-09 拍板）：PRD §4.17 的两个菜单项在原型里是**直接跳详情**（`push('prDetail',{n:57,…})`）—— 那是硬编码演示值，"正好有一个 PR"不代表真实用户只有一个；真实数据下**必须先有一张列表**。**不能复用搜索页**的理由是决策 #47：搜索页的「Issue · PR」范围在 App 用户令牌下**强制拆成两条**查询（`is:issue` + `is:pull-request`）再合并 ⇒ 用它承载「我的 Pull Request」会给出一个 Issue / PR 混排的列表，**与菜单项上写的字不符**。落地：新增路由 `.myConversations(kind:)`（`kind ∈ {.pullRequests, .issues}`），两类各发**一条**（`q=author:@me is:pull-request` / `q=author:@me is:issue`）⇒ **每续一页 1 格**搜索配额（是搜索页那个范围的一半）。结果行**复用搜索页已有的会话行组件**（同一个 UI 两处定义必然分叉，先例见 §9.11 的 `RepoTreeSection`）。**备选被否**：① 复用搜索页（混类，见上）；② 走 `GET /issues?filter=created` —— 它是"跟这个账号有关的 issue"的聚合端点，**同样把 PR 混在里面**（要靠 `pull_request` 字段本地滤），且**不返回总数** ⇒ 标题里那个 `{N}` 无从得来，与 §9.2「`{N}` 必须是服务端 `total_count`」的口径直接冲突；③ 不做这一项、把两个菜单项删掉（等于删两个产品需求） | 【已定】 |
+| 74 | 贡献热力图画多少周、怎么分档 | **API 给多少画多少（≈53 周），5 档照 API 的 `contributionLevel`**（用户 2026-10-09 拍板）：PRD §4.17 写「40 周 × 7 天」，而**原型那 40 周是硬编码的**（`12-me.js:35` 的 `for(let w=0;w<40;w++)`）⇒ 给不出规则，属文档缺口（同决策 #42 的处境）。真实数据来自 GraphQL `viewer.contributionsCollection`，**`from` 省略时官方默认「一年前」**（schema 原文：*"Only contributions made at this time or later will be counted. If omitted, defaults to a year ago"*）⇒ 实际覆盖**整整一年（≈53 周）**。用户裁定**画满**：这样一句话都不用改（PRD 与原型那行都写「过去一年」），把 53 周裁成 40 周反而要让「过去一年」变成假话。⚠️ **三条外部事实**（2026-10-09 从官方 schema 原文逐条核对）：① `ContributionCalendar.weeks` 与 `ContributionCalendarWeek.contributionDays` **都是数组、不是连接**（`weeks: [ContributionCalendarWeek!]!`）⇒ **不能**写 `first:` —— §13.2 原写的 `weeks(first:53)` **是错的**，本次一并修正；② 分档用 `ContributionCalendarDay.contributionLevel`（枚举正好 5 档：`NONE` / `FIRST_QUARTILE` / `SECOND_QUARTILE` / `THIRD_QUARTILE` / `FOURTH_QUARTILE`）⇒ **不自己按 `contributionCount` 划档**（四等分是 GitHub 的算法，自己划会与网页端不一致）；③ **不用 API 给的 `color`** —— `ContributionCalendar.colors` 是 GitHub 自己的配色，而且 `isHalloween` 为真时**整套换成南瓜色**（官方字段注释原文：*"Determine if the color set was chosen because it's currently Halloween"*）⇒ 用它等于每年 10 月底 App 配色自己变一次、且与设计令牌脱钩。格子颜色走 `GitDuoDesign` 的语义 token。⚠️ **登记一条不确定**：`ContributionsCollection` 的官方注释写 *"Contributions in private and internal repositories are only included with the optional read:user scope"* ⇒ **热力图的数字可能只含公开贡献**，与登录态的 GitHub 网页端可能对不上；**本项目不为此改口径、也不承诺"与网页端一致"** | 【已定】 |
+| 75 | 设置页「清除缓存」清的是什么 | **清自建接口缓存（内存 + 磁盘），不动凭据、不动账号绑定数据**（用户 2026-10-09 拍板）：§5.4 与 §9.15 原写「清 L2 + L3」，而按 §5.1 那张三层表，L1 是内存 LRU（`CacheStore`）、L3 是独立磁盘快照目录 —— **这两者在工程里都不存在**：实际落地的是**一个自建的 `HTTPResponseCache`（内存 + 磁盘两种介质；决策 #32 起就不碰系统 `URLCache`，真机上 `Cache.db` 恒为 0 条）**。⇒ 「清 L2 + L3」这句话**没有对应物**，本次改口径为「**清接口缓存**」。落点：大小 = `HTTPResponseCache.totalByteCount`（内存 + 磁盘），清空 = `removeAll()` —— ⚠️ **它早就把"释放了多少字节"作为返回值给出来了**（源码注释写着"设置页的'清除缓存'要能报告它，§5.4"），直接用。⚠️ **不动的三样**：① **Keychain 凭据**（登录状态不变 —— PRD §4.20 明写"保留登录状态"）；② **账号绑定数据**（最近访问 / 搜索历史 / 分支记忆 / 评论草稿 / Star 基线 / 收藏夹）—— 它们不是"缓存"，是用户的东西，只有**登出**才清；③ `LoadSearch` 的 actor 内结果缓存（LRU 12 条，量很小，清掉只会让用户切回老关键词时白发一轮请求、白烧最紧的搜索配额）⇒ **登记为有意偏差**：点过「清除缓存」之后，搜索页切回上一个关键词仍然秒出 | 【已定】 |
+| 76 | 「我的」页三个统计项各从哪来 | **Star 与仓库两个数都搭在热力图那次 GraphQL 查询上 —— 三项共用一次往返，点数仍是 1**（用户 2026-10-09 拍板）：PRD §4.17 的资料头部要「仓库 / Star / Follower」三个数，原型那三个（`42` / `318` / `126`）都是硬编码演示值。落地：① **Star** = `viewer.starredRepositories(first: 1) { totalCount }`；② **仓库** = `viewer.repositories(first: 1, affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) { totalCount }` —— ⚠️ **`affiliations` 必须显式写**：它的默认值是**只算自己拥有的**（`[OWNER]`），而仓库列表用的是 `affiliation=owner,collaborator,organization_member`（**决策 #35**）⇒ 不写就会看到"我的页说 42 个、仓库列表里 60 个"——两个数都是真的，摆在一起就是假话（同 §9.2 那条判据：**数字必须是对屏幕上的那个列表的真话**）。schema 里 `RepositoryAffiliation` 的三个取值 `OWNER` / `COLLABORATOR` / `ORGANIZATION_MEMBER` 与 REST 的三个参数值逐字对应。⚠️ 好处不止口径：**令牌可见范围（用户权限 ∩ App 权限 ∩ 安装时勾选的仓库）对这两个数同样适用** ⇒ 受安装范围限制时，两个数一起变小、不会一多一少；③ **Follower** = `GET /user` 的 `followers`（恒定返回）。⚠️ **为什么不把"仓库"也交给 `/user`**：它的 `public_repos` **只数公开仓库**，而 `total_private_repos` 官方只说「OAuth app token / classic PAT 需要 `read:user`」，**对 GitHub App 用户令牌会返回哪一套没有明说** ⇒ 那两个字段**全按可选解码**，拿不到就退化成公开数（与 §9.2「用户范围」同一处置：**拿不到不显示 0**）。⚠️ **两条如实登记**：① `StarredRepositoryConnection.isOverLimit` 的官方注释是 *"Is the list of stars for this user truncated? This is true for users that have many stars"* ⇒ **Star 特别多的人，`totalCount` 可能被截断**，本项**不承诺精确**；② 三统计项的 Star 数与「我的 Star」页（`GET /user/starred` 逐页取回）**是两条不同的取数路径**，极端情况下可能对不上。⚠️ **一次查询里两个连接、都挂在 `viewer` 这个单对象下、互不相乘** ⇒ 潜在请求数 1 + 1（+ 热力图那条不计连接）= 3 ⇒ 点数仍是 **1**（§13.2 纪律 2 允许）；但**失败要隔离**：热力图或计数任一路出错都不得让整个头部变灰（照 §9.4「四路并发分别降级」的先例） | 【已定】 |
 
-> **状态汇总**：**72 项**决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
+> **状态汇总**：**76 项**决策 **全部【已定】**，无【拟定】、无【待定】项。**产品侧与技术侧的开放问题已全部清零**（见 §16），可以进入工程搭建。
 > ⚠️ **#64–#72 是切片 8（编辑器与提交）这一批**，其中 **#65 与 #66①** 是**外部事实逼出来的**（`branch` 的默认值、`PUT` 与 `DELETE` 的串行要求）——
 > 两条都不像"会踩的坑"，抄下来也正是因为**它们错了都不会报错**：一个把提交静默送进默认分支，一个偶发冲突。
 > ⚠️ **#71 与 #72 是这一批里仅有的两条"用户自己推翻自己先前定的规格"**（2026-10-09，切片 8 收尾期间）：#71 把 **#70③** 的"不重编码"
@@ -132,6 +136,15 @@
 > ⚠️ **同一条规格被推翻两次**这件事本身值得记：两次都不是"前一次定错了"，而是**每一层都有它自己看不见的代价** ——
 > 第一层看不见"体积"，第二层看不见"格式"。写规格时**把"这份字节要交给谁"（写通道 1MB 上限 · 浏览端的渲染能力）逐条列出来**，
 > 比逐次发现要便宜得多。
+
+> ⚠️ **#73–#76 是切片 9（收藏 / 设置 / 我的 Star）这一批**（2026-10-09）：#73 与 #74 两条都是**原型给不出规则**造成的缺口
+> （两个菜单项在原型里直接跳详情、热力图的 40 周是硬编码），处理方式沿用 **#42** 的先例 —— **原型是演示值 ⇒ 由用户定规则**；
+> #74 顺带**修掉了一处真错误**（§13.2 把数组 `weeks` 当连接写成了 `weeks(first:53)`），
+> 这一条与 **#47 / #53 / #60 / #65** 同性质：**凡结论依赖"某个端点会给我们什么"，引原文或实测一次**。
+> #75 是把两条旧措辞（"清 L2 + L3"）对齐到**真正落地的那一个缓存对象**上 —— §5.1 的三层表是设计意图，实现是两层介质的一个 actor，
+> 这类"文档描述的是意图、代码里是另一个形状"的偏差，只有在**真要按它做事**时才会露出来（这次是设置页要报一个字节数）。
+> #76 的关键判据是**同源**：三个统计项里最容易出错的是"仓库"那个数（`affiliations` 的默认值会静默换一套口径），
+> 定它的理由不是"哪个更准"，而是**它必须与仓库列表同数**。
 
 > ⚠️ **#53 与 #47 的共性**：两条都是**外部事实把文档里的旧写法推翻**后据实改正的，不是偏好选择。
 > 记在这里是因为它们是同一类事故的两例 —— **写文档时"看起来显然"的写法，可能只在某种令牌类型 / 某个字段上才成立**。
@@ -459,10 +472,12 @@ RootView
 | `GET /user` 校验失败 | 同上 |
 | 会话超时 | 回登录页 + 提示重试 |
 
-**退出登录（PRD §5.12）**
+**退出登录（PRD §5.11）**
 
-- 二次确认 → 清 Keychain 凭据 → 清账号绑定本地数据（最近访问 / 收藏夹与归属映射 / 搜索历史 / 按仓库的分支记忆 / 接口与图片缓存）→ 重置全部 `NavigationStack` 路径与 Tab 选中项 → `authState = .unauthenticated`。
-- ⚠️ **不删除与账号无关的 UI 偏好**。
+- 二次确认 → 清 Keychain 凭据 → 清账号绑定本地数据（最近访问 / **收藏夹与归属映射** / 搜索历史 / 按仓库的分支记忆 / **评论草稿** / **接口缓存**）→ 重置全部 `NavigationStack` 路径与 Tab 选中项 → `authState = .unauthenticated`。
+- ⚠️ **本清单必须与 `AppEnvironment.signOut()` 实际清的东西逐条对齐**（那才是有用的一处；本清单只是说明"哪些属于账号数据"）。
+  现状（2026-10-09）：**收藏夹与归属映射是切片 9 才接上的** —— 在那之前它只以一句注释的形式挂在 `signOut()` 里（"尚未接入（落地时补在这一处）"）。
+- ⚠️ **不删除与账号无关的 UI 偏好**（例如主题 —— 本期只有浅色，但这条规矩对将来补深色后的"用户选过深色"同样成立）。
 - 登出会**程序化撤销 GitHub 侧授权**（§3.6），弹层文案如实说明；**撤销失败时降级文案不得谎称已撤销**。
 
 ### 3.9 授权回调与 URL scheme 安全【已定】
@@ -674,7 +689,7 @@ enum GitHubError: Error {
 |---|---|---|
 | **PR 详情聚合** | 单屏需 PR 基础信息 + 评论 + 评审 + commits + 文件统计，REST 需 4–5 次往返 | `repository.pullRequest(number:) { … comments(first:) reviews(first:) commits(first:) files(first:) }` |
 | **Issue 详情聚合** | 同上（基础信息 + 评论 + 时间线） | `repository.issue(number:) { … comments(first:) }` |
-| **贡献热力图** | REST 无等价端点 | `viewer.contributionsCollection { contributionCalendar { weeks { contributionDays { … } } } }` |
+| **贡献热力图** | REST 无等价端点 | `viewer.contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { … } } } }`（⚠️ **切片 9 起同一次查询里再多两个计数连接** —— `starredRepositories(first:1){totalCount}` 与 `repositories(first:1, affiliations:[…]){totalCount}`，供头部三个统计项，决策 #76） |
 | **首页置顶仓库** | ⚠️ **REST 完全没有置顶端点**，只有 GraphQL 提供 | `viewer.pinnedItems(first: 6, types: REPOSITORY) { nodes { … on Repository { nameWithOwner } } }`（配合 `pinnedItemsRemaining` / `viewerCanChangePinnedItems` 判状态） |
 
 **纪律**：GraphQL 只做聚合，**写操作一律走 REST**（REST 用 URL 直接标识对象；GraphQL 多数要先查 node ID，且错误语义更复杂）。
@@ -692,6 +707,13 @@ enum GitHubError: Error {
 | L3 磁盘持久化 | JSON 快照 + ETag + 时间戳（离线可看） | 7–30 天，按 LRU 淘汰 | 自建目录 `Caches/GitDuoCache/`，key = 规范化 URL 的 SHA256 |
 
 **为什么自建 L3 而不直接用 SwiftData**：缓存是"可丢弃的加速器"，不需要迁移、关系与查询能力；文件 + LRU 更简单、可控、易清理（PRD §4.19 的"清除缓存"要能报告大小并一键清空）。
+
+⚠️ **实现现状（2026-10-09 收口，切片 9 开工时对齐）**：上表三层里**真正落地的只有 L2** —— 一个自建的 `HTTPResponseCache`，
+它自身就带**内存 + 磁盘两种介质**（`Configuration.memoryByteLimit` / `diskByteLimit`，磁盘目录 `Caches/GitDuoCache/`）。
+**L1（`CacheStore` 内存 LRU）与 L3（独立磁盘快照）在工程里都不存在**：前者从未建；后者的职责被 L2 的磁盘层吸收了
+（ETag 条件请求靠它跨启动存活，正是 §5.2 要的效果）。
+⇒ 因此凡提到"清 L2 + L3"的地方（§5.4 与 §9.15）**都没有对应物**，实际口径统一为「**清接口缓存**」，见决策 **#75**。
+📌 这类"**文档描述的是设计意图、代码里是另一个形状**"的偏差不会自己暴露 —— 它要等到有人**真要按那句话做事**（这次是设置页要报一个字节数）才发现。
 
 ### 5.2 ETag 条件请求
 
@@ -717,7 +739,7 @@ enum GitHubError: Error {
 | 任意写操作成功 | 失效该仓库下的相关路径 |
 | 下拉刷新 | 强制跳过 ETag，直接 200 |
 | 令牌变更 / 登出 | 清空全部缓存（含 L3） |
-| 设置页"清除缓存" | 清 L2 + L3，报告释放大小 |
+| 设置页"清除缓存" | **清接口缓存**（`HTTPResponseCache` 的内存 + 磁盘 —— **决策 #75**；⚠️ "清 L2 + L3"是旧措辞，两者在工程里都不存在，见 §5.1），报告释放大小。**不动** Keychain 凭据与账号绑定数据 |
 | 磁盘压力 / 超过 TTL | LRU 淘汰 |
 
 ---
@@ -857,9 +879,17 @@ enum Route: Hashable {
     case explorePRList(fullName: String)
     case stars
     case folders
+    case myConversations(kind: ConversationKind)
     case settings
 }
 ```
+
+⚠️ **2026-10-09 新增 `myConversations(kind:)`**（决策 #73，切片 9）—— 「我的 Pull Request / 我的 Issue」两个菜单项的去向。
+它的关联值**直接复用切片 5 就有的 `GitDuoKit.ConversationKind`**（`.issue` / `.pullRequest`），**不新造类型**：
+搜索页的 `ConversationHit` 已经带着这个 `kind`、`ConversationResultRow` 也已经在按它分派状态族，
+新造一个同义词只会让"哪一份才是真的"变成问题（先例：`EditorMode` 迁入领域层，§8.2 上一条）。
+⚠️ 它是**一个路由、两个标题**：页面标题按 `kind` 取（`我的 Pull Request` / `我的 Issue`），**不是两条路由** ——
+两条路由会让"改标题"要找两个地方，而两者除了标题与查询限定符之外**完全同构**。
 
 ⚠️ **`RepoSection` 的唯一来源是领域层 `GitDuoKit/Repo/RepoSection.swift`**（6.1 建、6.4 收编）。
 它比本节原来记的那份多出 `title`（分段条上的可见文字）与 `initial`（默认落在「代码」），并且有单测。
@@ -889,6 +919,7 @@ enum Route: Hashable {
 | 探索 Issues / PR 列表 | `.exploreIssueList` / `.explorePRList` |
 | 我的 Star | `.stars` |
 | 我的收藏 | `.folders` |
+| 我的 Pull Request / 我的 Issue | `.myConversations(kind:)` —— **一个路由两个标题**（决策 #73） |
 | 设置 | `.settings` |
 
 ### 8.4 弹层与轻提示
@@ -1413,24 +1444,52 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
 
 ### 9.14 我的
 
+**六个模块的落点**（PRD §4.17；决策 #73 / #74 / #76）
+
 | 模块 | 方案 |
 |---|---|
-| 个人资料 | `GET /user` |
-| 贡献热力图 | **GraphQL** `contributionsCollection.contributionCalendar` → 40 周 × 7 天网格，按 level 分 5 档配色；⚠️ 仅 GraphQL 提供 |
-| 菜单 | Star 管理 / 我的收藏 / 我的 PR / 我的 Issue / 设置 |
-| 我的 PR / Issue | `GET /search/issues?q=author:@me type:pr`（注意搜索配额） |
-| 我的 Star | `GET /user/starred`；取消 Star = `DELETE /user/starred/{owner}/{repo}` 并联动计数 |
+| 个人资料头部 | `GET /user`（`avatar_url` / `name` / `login` / `bio`）。⚠️ `name` / `bio` 可能为 `null` ⇒ **整行不渲染，也不占位**（`nil` = 不知道，不是空字符串） |
+| 三统计项（仓库 / Star / Follower） | **与热力图合并成一次 GraphQL 查询**（决策 #76）：`viewer.repositories(first:1, affiliations:[OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) { totalCount }` · `viewer.starredRepositories(first:1) { totalCount }` · 加 `GET /user` 的 `followers`。⚠️ **`affiliations` 不写会默认只算 `OWNER`** ⇒ 与仓库列表（决策 #35）对不上 |
+| 贡献热力图 | **GraphQL** `viewer.contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount contributionLevel } } } }`（决策 #74）：**画满 API 给的一年（≈53 周）** · 5 档**直接用 `contributionLevel`** · 配色走设计令牌（**不用** API 的 `color` / `colors`，理由见 #74③）。⚠️ `weeks` 与 `contributionDays` **是数组不是连接** ⇒ 不能写 `first:`；⚠️ 只有 GraphQL 提供（§4.6.5 的四个场景之一） |
+| 菜单卡片一 | Star 管理 → `.stars`（§4.18）· 我的收藏 → `.folders`（§4.19）· **我的 Pull Request / 我的 Issue → `.myConversations(kind:)`**（决策 #73；关联值直接复用**已有的 `ConversationKind`**，不新造类型） |
+| 菜单卡片二 | 设置 → `.settings`（§4.20） |
+| 我的 Star | `GET /user/starred`（§4.18）；取消 Star = `DELETE /user/starred/{owner}/{repo}`，**基准先查一次**（决策 #41，唯一实现 `ToggleStar`） |
 | 我的收藏 | **纯本地** `FolderStore`（§9.12）；不发请求 |
+
+**两处降级（都不阻塞其余部分）**：
+
+- 贡献数据为空（新账号 / 一年零贡献）⇒ 卡片**保留**（`0 次贡献` + 全空网格），**不给空态** —— "零贡献"是一个有意义的事实，与"没取到"不是一回事。
+- 任一路取数失败 ⇒ **在该卡内给一行灰字 + 重试**，头部三个统计项照常显示（失败隔离，决策 #76 末句）。
+
+**热力图的尺寸纪律**：53 周 × 7 天 = **371 格**，格子边长与间距**必须由可用宽度算出来**（容器尺寸 / size class），**不许写死像素**（铁律：不用 `UIScreen.main`）。一格最小可读宽度决定 53 列在 iPhone 上的实际占比 —— 落地时先量一次再定。
+
+**我的 Star 页（`.stars`，PRD §4.18）**
+
+- 数据源 `GET /user/starred` —— **复用切片 3 就有的 `listStarred`**（§4.6.1），不新写端点。
+- **只列非私有仓库**（原型 `REPOS.filter(r=>!r.priv)`，PRD §4.18 同）：私有 Star 属于"我在关注什么"，且这些仓库对当前令牌可能已不可访问。
+- 分页：**滚到底自动加载**（与仓库列表 / 文件列表同规矩）。⚠️ **与搜索页的「加载更多」按钮有意不同** —— 那个按钮是**配额**考虑（搜索桶 30/min），这里是主桶 5,000/h，充裕。
+- 「已 Star」按钮 → 取消 Star：**先查基准再切**、成功后就地改文案并 ±1（决策 #41）；失败回滚 + toast。
+- 与收藏夹**完全解耦**（§9.12：收藏不改 `starCount`、不进 Starred）。
+
+**我的 Pull Request / 我的 Issue（`.myConversations(kind:)`，PRD §4.21）**
+
+- 数据源：`GET /search/issues?q=author:@me is:pull-request` 与 `… is:issue`（**各一条** —— 决策 #73；这正是它与搜索页「Issue · PR」范围的区别所在）。
+- 标题带服务端 `total_count`：`我的 Pull Request · {N} 个结果`（口径同 §9.2）。
+- 分页走**「加载更多」按钮**（与搜索页一致，不自动加载 —— 同一个 30 次/分钟的桶，决策 #44 的理由在这里同样成立）。
+- 结果行**复用 `ConversationResultRow`** + 领域模型 `ConversationHit`（它已经带 `kind` / `state` / `repoFullName`，与搜索页逐字同形）；点开 → `.prDetail` / `.issueDetail`。
+- ⚠️ **本页不提供「开放 / 已关闭」分段**：加 `is:open` 会把 `total_count` 变成"开放数"，而这一页要回答的是"我提过多少"；要做分段就得**再发一条查询**（配额翻倍）⇒ 本期不做，**登记为有意偏差第 38 条**。
 
 ### 9.15 设置
 
 | 项 | 方案 |
 |---|---|
 | 主题 | 本期仅 **浅色**，**不提供切换器**；颜色走语义 token（§10.7），补深色时只需补一列映射，不改 View |
-| GitHub App · 账号 / 已授权 | 显示登录名 + 授权状态；**「退出登录」即程序化撤销 GitHub 侧授权**（§3.6）；保留"前往 GitHub 手动撤销"的网页跳转，作为撤销失败时的兜底入口 |
-| 退出登录 | 二次确认弹层 → 清 Keychain 凭据 + 清账号绑定本地数据 + 重置导航栈 → 回登录页（详见 §3.8） |
-| 清除缓存 | 统计 L2+L3 占用，一键清空并 Toast 反馈；⚠️ **保留 Keychain 凭据**，登录状态不变 |
-| 版本 | 读 `CFBundleShortVersionString` + `CFBundleVersion` |
+| GitHub App · 账号 / 已授权 | 显示登录名 + 授权状态（登录名取自 `authState`，**不再打一次 `/user`**）；**「退出登录」即程序化撤销 GitHub 侧授权**（§3.6）；保留"前往 GitHub 手动撤销"的网页跳转，作为撤销失败时的兜底入口 |
+| 退出登录 | 二次确认弹层（§5.11）→ 清 Keychain 凭据 + 清账号绑定本地数据 + 重置导航栈 → 回登录页（详见 §3.8） |
+| 清除缓存 | **清自建接口缓存**（`HTTPResponseCache` 的内存 + 磁盘两种介质 —— **决策 #75**）；大小 = `totalByteCount`，清空 = `removeAll()`（**返回值就是释放的字节数**），完成后 toast 报释放量。⚠️ **保留 Keychain 凭据**（登录状态不变）、**保留账号绑定数据**（它们不是缓存）、**不动 `LoadSearch` 的结果缓存**（登出才清） |
+| 版本 | 读 `CFBundleShortVersionString` + `CFBundleVersion`（形如 `2.0 (1)`） |
+
+⚠️ **「清除缓存」的时机**：大小在**进页时取一次**（`totalByteCount` 要遍历磁盘目录，不是热路径）——不要每帧算；清空之后再取一次刷新那一行。缓存是"可丢弃的加速器"（§5.1），**清空失败不报错**（磁盘操作本来就走静默降级）。
 
 ---
 
@@ -1916,10 +1975,17 @@ GlassEffectContainer(spacing: 12) {
 | 场景 | 连接结构（`first` 上限） | 潜在请求数 | 预扣点数 |
 |---|---|---|---|
 | 首页置顶（≤6 个） | `viewer.pinnedItems(first:6)`，仅取标量字段，**不嵌套连接** | 1 | **1** |
-| 贡献热力图 | `viewer.contributionsCollection.contributionCalendar.weeks(first:53)`（`contributionDays` 是数组，**不构成连接**） | 1 | **1** |
+| 贡献热力图 + 三统计项（**切片 9 合并成一次查询**，决策 #76） | `viewer.contributionsCollection.contributionCalendar`（`weeks` / `contributionDays` **都是数组、不是连接** ⇒ **不计请求数**）+ `viewer.starredRepositories(first:1) { totalCount }` + `viewer.repositories(first:1, affiliations:[OWNER,COLLABORATOR,ORGANIZATION_MEMBER]) { totalCount }` | 1 + 1 = 2（数组那部分 0） | **1** |
 | Issue 详情聚合 | `repository.issue`（单对象）+ `comments(first:100)` + `timelineItems(first:100)` | 3 | **1** |
 | PR 详情聚合 | 同上，另加 `reviews(first:100)`——四个连接挂在**同一个单对象下、互不相乘** | 4 | **1** |
 | ⚠️ PR 详情（**误写成乘性嵌套**） | 若在 100 条评论**元素下各再开一个**连接（如 `reactions(first:100)`） | 4 + 100×100 | **100** |
+
+> ⚠️ **2026-10-09 修正（切片 9 开工时）**：上表"贡献热力图"那一行**原写 `weeks(first:53)`，是错的** ——
+> 官方 schema 里 `ContributionCalendar.weeks: [ContributionCalendarWeek!]!`、`ContributionCalendarWeek.contributionDays: [ContributionCalendarDay!]!`
+> **两个都是数组、不是连接**，**数组字段不接受 `first:` 参数**（写了会被服务端拒）。这一处的后果是"照抄进代码编不过"，
+> 属于**代价很低的错**；但同一类错如果长在别处（例如把一个连接当成数组、以为不扣点）就是**静默超支**：
+> 判据 —— **写查询前先看它是 `[X!]!` 还是 `XConnection!`**，前者是数组、后者才是连接（决策 #74①）。
+> 修正后该行的意思也变了：热力图这一路**根本不贡献请求数**，1 点的来源是那**两个计数连接**（各 `first:1`）。
 
 > 上表最后一行是本项目最需要防的反面案例：**同样的"一个查询"，只因多写了一层嵌套，点数从 1 涨到 100**——这就是"按潜在最大节点数预扣"的实际含义。
 
@@ -1932,6 +1998,9 @@ GlassEffectContainer(spacing: 12) {
 5. 单次调用**总节点数 500,000** 是 schema 硬上限（超出直接拒），与点数无关，但它决定绝对天花板。
 
 **结论**：四个 GraphQL 场景在**不嵌套集合**的前提下**全部只需 1 点**（最多 4 个连接也仍是 1 点），5,000 点/小时的理论容量在 5,000 次量级，**远非瓶颈**；真正的风险不是"用得多"，而是**一次错误的乘性嵌套**——同一个查询多写一层，点数就从 1 跳到 100，故纪律 1、2 必须逐条核对。
+⚠️ **2026-10-09 的一个现成例子（决策 #76）**：热力图那次查询后来**同时供三个统计项**（两个 `totalCount` 计数连接挂在同一个 `viewer` 下）
+—— 连接数从 0 变成 2，而**点数仍是 1**。这正是"**加字段不扣点、加嵌套才扣点**"的直接体现：
+省下一次往返靠的是**把它们放进同一个查询的同一层**，而不是省任何东西。
 
 ### 13.3 配额保护
 

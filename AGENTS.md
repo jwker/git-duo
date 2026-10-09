@@ -22,12 +22,19 @@
 `extension GitHubRepoPullsEndpoint: RepoPullCreationDataSource {}` —— 扩展体**仍是空的**，但**不再是"有意不存在"**。
 ⚠️ 空扩展体被整条删掉时**编译与其余测试都不会有反应** ⇒ 新套件 `RepoEndpointsContractTests`（**16 条接缝全清点**，每条当协议用一次）
 把"某天有人顺手删掉一个"从**静默**变成**当场红**；**新增接缝时要在那边也加一行**（已写进 `RepoEndpoints.swift` 抬头当维护规矩）。
-⚠️ **8.4 / 8.5 已落地（2026-10-08）· 8.7 / 8.8 已落地（2026-10-09）· 8.6 只差"逐屏对照 18–21"**（施工图见下）。
+✅ **切片 8 已全部收口（2026-10-09）**：8.0–8.8 全部落地，**8.6 的「逐屏对照 18–21 + 走查单 #83–#120」也于 2026-10-09 由用户走完（零条目）**
+⇒ **切片 8 的 4 条完成定义全部满足**（收口记录见 `REVIEW-CHECKLIST` **6.11**）。
+⚠️ 这一批**没有 AI 侧的证据**（用户自行目视、只回传结论）⇒ 状态记 `✅ ⚠️`，与切片 6 / 7 那两批（逐批回传）在证据强度上不同，如实留痕。
 **8.3 设计系统已落地**（2026-10-08）：施工图原写「预计零新增」⇒ 逐条核实后**结论成立** —— **零新增组件**，
 但**三件既有组件各缺一个参数**（`NoticeBar.tone` 两档色对 · `SheetRow.titleTone` 危险色标题 · `SheetField.minLines` 多行），
 另补 `GitHubIcon.pencil` / `trash` 两个图标常量。⚠️ **三个新参数默认值一律保持原行为**，既有 **12 处生产调用点**（`SheetField` 4 · `SheetRow` 6 · `NoticeBar` 2）一个字都没改。
 `make verify` = **五包单测 1468 项 + 模拟器构建**，一条命令，**零编译警告**。
 （**GitHubAPI 377** · GitDuoAuth 57 · **GitDuoCore 63** · GitDuoDesign 88 · **GitDuoKit 883**）
+
+**切片 9（收藏 / 设置 / 我的 Star）已于 2026-10-09 开工**，承接用户「目视工作我完成了，继续下一步吧」——
+**9.0 文档先行已落地**：决策 **#73–#76** + `PRD` 新增 **§4.21** + `TECH_SPEC §9.14` 重写与 **§13.2 一处真错误的修正**（把数组当成了连接）。
+⚠️ 本片是**「占位清零」的那一片**（做完之后 `SkeletonPlaceholders.registry` 应为空数组）；
+⚠️ 也是**唯一一片含"纯本地"业务逻辑**的（收藏夹，§9.12）—— 它的计数**永远从映射派生、绝不落盘成计数器**。
 
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
@@ -47,7 +54,7 @@
 ⇒ **切片 6 的 4 条完成定义首次全部满足**（此前只有切片 1 走到过"4 条齐全"）。
 ✅ **切片 7 那批（13–17：Issue 详情 / 新建 Issue / PR 详情 / 仓库详情两段 / 两个弹层）2026-10-08 走完**
 （落地当天就走，没有往后拖）⇒ **切片 7 的 4 条完成定义也全部满足** —— 目前达到这个状态的只有切片 1、6、7。
-**清单正本 = `REVIEW-CHECKLIST §6` 末尾**（页级 **21 项** —— 切片 6 那 12 项各带逐项细则、共 82 条；已知有意偏差 **33 条**（现行 **32**，第 3 条已作废）；已完成 6.7 / 6.8 / 6.9 / **6.10**）；
+**清单正本 = `REVIEW-CHECKLIST §6` 末尾**（页级 **26 项** —— 逐项细则共 **149** 条（#1–#149）；已知有意偏差 **39 条**（现行 **38**，第 3 条已作废）；已完成 6.7 / 6.8 / 6.9 / **6.10 / 6.11**）；
 **该表的状态列是唯一记录处**。⚠️ ②④ 两批是**口述未报问题**（没有逐条点名）⇒ 按"看过且未报问题 = 过"记的，
 **若哪一页其实有问题，说一声就改回 ⬜**。⚠️ 第 ④ 批里 **§5.8 添加文件弹层在 App 里打不开**
 （唯一入口「＋ 添加」按决策 #51 不可点）⇒ 那一项只有**代码核对**这一层证据、没有真机目视。
@@ -74,7 +81,7 @@
 
 ⇒ **目视这笔账没有往后拖**：切片 6 的清单当天跑完，**切片 7 那批（13–17）也在落地当天走完**（2026-10-08，用户回"看过了没啥问题"）。
 ⚠️ 走"会改真实仓库"的页面时（删除 / 合并分支 / **合并 PR** / **创建标签**这类）**只看形态、别真删真合真建**；
-看到"不一样"**先翻 `REVIEW-CHECKLIST §6` 末尾那张有意偏差表**（**33** 个编号，其中第 3 条已于 2026-10-08 作废 ⇒ 现行有效 **32** 条）—— 拍过板的不算缺陷。
+看到"不一样"**先翻 `REVIEW-CHECKLIST §6` 末尾那张有意偏差表**（**39** 个编号，其中第 3 条已于 2026-10-08 作废 ⇒ 现行有效 **38** 条）—— 拍过板的不算缺陷。
 ⚠️ 走这一批之前给过的提醒（**别真删真合真建** · "看到不一样先翻偏差表"）与走完的结果，**一并留档在 `REVIEW-CHECKLIST` 6.10**。
 
 > **切片 7 施工图（2026-10-08 起）**：Issues / PR —— Issue 详情 + 新建 Issue + PR 详情，
@@ -115,7 +122,7 @@
 | 8.3 | 设计系统（`GitDuoDesign`）：✅ **已落地**（2026-10-08）—— 施工图原写「**预计零新增**」，逐条核实后**结论成立**：**零新增组件**，但**三件既有组件各缺一个参数**（都是"加参数、不抄第二份"，默认值一律保持原行为 ⇒ 既有调用点一个字都不用改）：① **`NoticeBar.tone`**（`.danger` 默认 / `.add`）—— 它原先把底 / 字色写死成 diff 的**删除**那一对，而 §5.9「新分支 + PR」那条提示在原型里是 `--add-bg` / `--add-tx`（**值已与 `diffAddedSurface` / `diffAddedText` 逐字核对**，`01-base.css` 第 8 行四色并列声明）；② **`SheetRow.titleTone`**（`.normal` 默认 / `.destructive`）—— 它原先标题色写死 `textPrimary`，而 §5.15「删除文件」明写**危险色**、§5.12 原型里就是 `style="color:var(--closed-p)"`（= `Palette.destructive`）⇒ 少了它"这是破坏性操作"在画面上**完全消失**；⚠️ **只改标题**，图标仍走 `textSecondary`（原型 `.sheet-row svg{stroke:var(--text2)}` 写死，查过）；③ **`SheetField.minLines`**（默认 `1`）—— §5.9 提交信息框在原型里是 `<textarea class="sheet-input" id="cmsg" rows="2">` ⇒ 保底 2 行；⚠️ **不能**改用 `CodeTextArea`（那是**另一个类**：等宽 + `--card` 底），且 `minLines == 1` 走的仍是**原来那一行** `TextField(placeholder:text:)` 而不是 `axis: .vertical` + `lineLimit(1...)`（后者会让单行框随长文本长高，是另一种行为）。另补 **`GitHubIcon.pencil` / `trash`** 两个常量（原型 `11-favorites.js:93/94` 就在用，§5.15 明写"形态照 §5.12"）。✅ **施工图点名的四件全部在位**（`CodeTextArea` 的 `minLines: Int = 6`、`SheetField`、`SheetTitle` / `SheetRow` / `SheetHint`、`ActionButton.Style.destructive` = `0xCF222E`）。⚠️ **一处经核实"不是缺口"**：§5.9 那行只读的「将写入 `{path}`」在 App 里**已有先例** —— `MergeSheet.targetSection` 就是手写的只读行（图标 + 值 + 下方一句 caption）⇒ 8.4 照它写即可，设计包不需要新件；若 8.4 发现两处真的逐字相同，按 6.4 的 `SHABadge` 先例收拢。⚠️ 新增 `Slice8ComponentTests`（**+9 项**，Design 79 → 88） | ✅ |
 | 8.4 | 表现层（`GitDuo/Features/Repo/`）：`Views/EditorView` + `ViewModels/EditorViewModel`（§4.6 两模式）· `Views/Sheets/CommitSheet` + VM（§5.9，含两行输入与 409 两出口）· `AddFileSheet` **三行接通**（§5.8，含两个系统选择器）· `Views/Sheets/FileOperationsSheet` / `RenameFileSheet` / `DeleteFileSheet`（§5.15–§5.17，形态照 §5.12 / §5.14 两条先例）· `FileView` 的「编辑」「更多」接通 + **>1MB 时「编辑」不可点**（偏差 32）：✅ **已落地**（2026-10-08）—— 六个新文件 + 四处改造：**`EditorView` + `EditorViewModel`**（§4.6 两模式；编辑模式那一次读**同时**给编辑区初值与 `baseSHA`，决策 #64 同源）· **`CommitSheet`**（§5.9；四相 `editing / conflict / latest / partial`，两行输入 + 409 两个出口 + 两档结果屏）· **`FileOperationsSheet` / `RenameFileSheet` / `DeleteFileSheet`**（§5.15–§5.17）· **`AddFileSheet` 三行接通**（`.fileImporter` + `PhotosPicker`，两个选择器**都不需要权限声明**）· `FileView` 两条接通。⚠️ **施工图 8.4 / 8.5 的边界不可执行** —— 分界写的是"表现层" vs "装配与路由"，而 `AddFileSheet` 的「新建文件」与 `FileView` 的「编辑」都要 `push(.editor)`：**不接通就编不过、也验不了**。所以**8.5 整片并入本片**（`AppEnvironment` 三条写用例 + `RouteView.editor` 换真件 + `SkeletonPlaceholders.registry` 消解），8.5 那一行只在文档里留痕。⚠️ **本片撞到一条被外部事实推翻的规格**：§5.8 写「上传图片 → **选中图片的文件名**」，而 iOS 27.0 SDK 里 `PhotosPickerItem` 的全体成员只有 `itemIdentifier`（相册内部标识，形如 `UUID/L0/001`）/ `supportedContentTypes` / `loadTransferable` —— **没有任何文件名**。⇒ 自拟 `UploadFileName.photo(fileExtension:now:)` = `photo-{yyyyMMdd-HHmmss}.{ext}`（`jpeg`→`jpg`、落空兜底 `jpg`），**PRD §5.8 那张表已同步改正**（同决策 #47 的做法：外部事实优先，改规格不改实现）。⚠️ **另一档规格未给、本片自拟**：**图片上「编辑」也不可点**（`EditorCopy.editImageHint`）—— 编辑器是**文本**编辑器，一张 png 点进去只能得到 `EditorContentIssue.notText` 那个失败态，而用户一路点下来什么都没做错；施工图只点名了 >1MB 那一档。判据收在 **`EditorCopy.editHint(for:)` 一处**（`.text` 可点；`.largeText` / `.image` 各说各的**不同**的一句话 —— 合成一句就会让其中一档说假话）。⚠️ **两处"错了不报错"的坑本片修掉**：① `RenameFileSheet` 的 `.unchanged`（用户没改路径）**不能**让弹层自己 `dismiss()` —— 那样弹层关了而 `sheet` 字段还停在 `.rename`，用户再点一次「重命名」时"要呈现的东西"与"正在呈现的"是同一个值 ⇒ **弹层不再出现**；② 删除办妥之后的 `pop()` 放进 **`.sheet(onDismiss:)`** —— 弹层正挂在**栈顶那一页**身上，先 pop 会把它一起掀掉（无下滑动画 + 导航栏闪一下）。⚠️ 「路径跟着变」**不换路由**：改 `FileViewModel.path` + 重取内容（换路由同样会掀掉挂在这一页上的弹层）。⚠️ **死常量清掉三条**（`FileCopy.editUnavailableHint` / `moreUnavailableHint` / `RepoCopy.addFileUnavailableHint` —— 留着它们，"这三颗按钮还不能点"在代码里就仍然看起来成立）。✅ 单测 **1433 → 1439**（Kit 861 → 867：`EditorCopy.editHint` 1 项 + `UploadFileName` 5 项） | ✅ |
 | 8.5 | 装配与路由：`AppEnvironment` 接新用例 + `RouteView` 的 `.editor` **从骨架屏换真件**（§8.3 那张表里它是最后一条占位）· `SkeletonPlaceholders.registry` 消解（只剩「我的」旗下三页）—— ⚠️ **已并入 8.4 执行**（理由见 8.4 那一行末尾：那两条接线不做完，8.4 连编译都过不去） | ✅（并入 8.4） |
-| 8.6 | 收尾：`make verify` · 文档同步 · **逐屏对照 18–21**（编辑器 / 提交弹层 / 添加文件三出口 / 文件操作三件）—— ⚠️ **别真写**，见上面那条。⚠️ **走查单已备好**（`REVIEW-CHECKLIST §6` 第二张表 **#83–#120**）；⚠️ **18–21 还没走**，而 8.7 / 8.8 **连着**改了其中两个弹层的可见内容（各改一次同一个地方）⇒ **三片一起走**（8.6 / 8.7 / 8.8 合并目视，不跨片攒） | ⬜（等 8.8 落地后一并目视） |
+| 8.6 | 收尾：`make verify` · 文档同步 · **逐屏对照 18–21**（编辑器 / 提交弹层 / 添加文件三出口 / 文件操作三件）—— ⚠️ **别真写**，见上面那条。⚠️ **走查单已备好**（`REVIEW-CHECKLIST §6` 第二张表 **#83–#120**）；⚠️ **18–21 还没走**，而 8.7 / 8.8 **连着**改了其中两个弹层的可见内容（各改一次同一个地方）⇒ **三片一起走**（8.6 / 8.7 / 8.8 合并目视，不跨片攒） | ✅（2026-10-09 由用户自行走完 18–21 + **#83–#120**，**零条目** ⇒ 8.6 / 8.7 / 8.8 三片一并收口；⚠️ 这一批**没有 AI 侧证据**，只有用户口述结论，已如实登记） |
 | 8.7 | **追加（原施工图里没有）：>1MB 的图片先自适应压缩** —— 用户 2026-10-09 提出的**规格变更**（**决策 #71**）：决策 #70③ 的"取原始字节、不重编码"从**绝对**收窄成**默认**（≤1MB 仍然原样）。⚠️ **它推翻的是一条已登记的规格**，所以先改文档再动代码（同 #47 的处置）。落点：`GitDuoCore.Images.ImageCompressor`（ImageIO，跨平台 / 零第三方依赖；⚠️ **8.8 落地时改名为 `ImageProcessor`**，接缝协议也从 `ImageCompressing` 改成 `ImageProcessing` —— 它现在**也管转码**，名字里留着 "Compress" 会让下一个人找错地方）· `GitDuoKit.ImageCompressing` 接缝 + `UploadIntake` 编排 + `CommitSheetCopy.compressedNotice` · `AddFileSheet` 两个出口都过它 · `CommitSheet` 那行只读落点下补一句 caption。⚠️ **三条不许忘**：① **不承诺"一定压得下来"**（压不动仍走"引导网页端"那句）；② **动图不压**（压完只剩第一帧 = 改内容）；③ **压缩有损、剥掉 EXIF（含 GPS）** ⇒ 传上去的不再是相册里那一份，**必须让用户看见**（那行 caption）：✅ **已落地**（2026-10-09）—— 四个新文件 + 十三处改动：**`ImageCompressor`**（⚠️ 8.8 起叫 `ImageProcessor`；档位表 = 无损族 4 档只缩边 → 有损族 9 档先降质再缩边，共 13 次编码；`kCGImageSourceCreateThumbnailWithTransform` **把 EXIF 方向烘焙进像素**，漏了会"竖着拍的照片传上去躺倒"；JPEG 那几档先摊到**白底**，不摊则透明白截图变黑底）· **`ImageCompressing` 接缝**（协议在 Kit、被扩展的类型在 Core，扩展体空 ⇒ 有 `imageSeam` 测试把它当协议用一次）· **`UploadIntake`**（"≤1MB 就**不编码**"这条判据**写在这里、且先判** —— 交给压缩器等于把这句承诺挂在另一个类型上；压缩器回天真值时**再判一次**，否则用户在弹层里填完按下提交才收到 422）· `AddFileSheet`（`isPreparing` 转圈 + 三行暂时不可点；「文件 App」那条先看大小、只在**扩展名不像图片**时当场拒绝 ⇒ 100MB 的 zip 不进内存）· `CommitSheet`（落点行下补 caption `已压缩 3.2MB → 0.8MB`）。⚠️ **两处"静默"被钉成断言**：① `CGImagePropertyHasAlpha` 走 `NSNumber` 而不是 `as? Bool`（后者对 `NSNumber(0/1)` 会**静默**得 nil ⇒ 无损族永远不走，无任何信号）；② 有损阶梯**尺寸与画质都单调不增**、且同一档不同时放宽两个维度。⚠️ **本片不改**「编辑器那条文本通道」的大小判据（两条路）。✅ 单测 **1439 → 1456**（Core 50 → 58：`ImageCompressorTests` 8 项，含两条**真编码再回读**的 —— ⚠️ 8.8 起文件叫 `ImageProcessorTests`、涨到 13 项；Kit 867 → 876：`UploadIntakeTests` 9 项，桩件断言"≤1MB 时压缩器**一次都没被调用**" —— ⚠️ **这条断言 8.8 起被反过来钉住**，见 8.8 行）· `make verify` 全绿 · 强制全量重编零警告 | ✅ |
 | 8.8 | **追加（原施工图里没有）：网页端显示不出来的图片格式一律转码（≤1MB 也转）** —— 用户 2026-10-09 提出的**第二笔规格变更**（**决策 #72**）：#71 只解决了"体积"、没解决"格式"，而 iPhone 相机默认拍的 **HEIC** 浏览器根本渲染不出来 ⇒ 传上去在 GitHub 上是一块破图。⚠️ **它把同一条规格又收窄一次**（#70③ → #71 → **#72**），所以同样**先改文档再动代码**。⚠️ **三条不许忘**：① **白名单 = PNG / JPEG / GIF / WebP / SVG**（外部事实，会变；**AVIF 有意在外** —— `UTType` 没有它的编译期常量）；② **不一律转 PNG**（照片转 PNG 体积翻几倍，按源选：带 alpha / 源无损 → PNG，其余 → JPEG）；③ **文件名扩展名必须跟着换**（不换 ⇒ GitHub 仍按老扩展名渲染 ⇒ 白转）：✅ **已落地**（2026-10-09）—— 三个新文件 + 两个删除 + **一处改名**（`ImageCompressor` → **`ImageProcessor`**、`ImageCompressing` → **`ImageProcessing`**、`ImageCompressionStep.Format` → 顶层的 **`ImageOutputFormat`**，新增 `identifier` / `fileExtension` / `displayName` 三个派生属性 —— 最后一个就是 caption 里那句"JPEG"的**唯一来源**）。⚠️ **一处判据被搬家**（本片最容易漏的一处）：`UploadIntake` 里原先有一句"`data.count <= targetBytes` 就原样放行"的**短路** —— #72 一来它就成了 bug（**≤1MB 的 HEIC 会绕过转码**）⇒ 判据下沉到 `ImageProcessing` 的实现里（**只有它看得见字节的真实类型**），并新写一条 `processorIsAlwaysConsulted` 把"≤1MB 也必须问一次"钉住。⚠️ 记一条判据：**短路条件要写在"信息最全"的那一层**，否则每加一层治理（体积 / 格式）都会漏一次。⚠️ **摘要分三种说法**（`CommitSheetCopy.compressedNotice` → **`adjustmentNotice`**，靠 `UploadAdjustment.didShrink` 挑）：`已压缩 3.2MB → 0.8MB` / `已压缩并转为 JPEG · 3.2MB → 0.8MB` / `已转为 JPEG · 1.2MB → 1.4MB` —— **不许把第三种说成"已压缩"**（转码体积可能变大，说反话比不说更糟）。⚠️ **两条外部事实**（2026-10-09 实测，已写进代码注释 + 测试 + 四份文档）：① `UTType.avif` / `UTType.jpeg2000` **不存在**（只有运行时 `UTType("public.avif")` 查得到）⇒ 白名单收成**五个编译期常量**、AVIF 有意在外；② `UTType.svg.identifier == "public.svg-image"`（反直觉，有测试钉住）。⚠️ **`UploadFileName.replacingExtension` 对"没有扩展名"走"接上去"而不是"删再拼"**（`deletingPathExtension` 对 `.gitignore` 会原样返回），有单测钉住。✅ 单测 **1456 → 1468**（Core 58 → 63：`ImageCompressorTests` → **`ImageProcessorTests`**，含 `smallTranscodableIsStillTranscoded` / `smallBMPIsTranscodedToPNG` 两条 #72 核心；Kit 876 → 883：`UploadIntakeTests` 加 `processorIsAlwaysConsulted` · `transcodeRewritesTheExtension` · `transcodeThatGrowsStillCarriesReceipt` · `sizeCheckRunsBeforeTheUntouchedShortcut`；`UploadFileNameTests` 加三条）· `make verify` 全绿 · 强制全量重编零警告 | ✅ |
 
@@ -127,6 +134,30 @@
 > `DeleteFile` **现取**。两者在类型上无法区分（同一个 `String?`）⇒ 已写进协议文档。
 > ③ 施工图那一行的 `CommitCopy` 实际落成 **`CommitSheetCopy`**（§5.9 提交弹层）+ **`EditorCopy`**（§4.6 编辑器）两个命名空间，名字与 PRD 章节对齐。
 > ⚠️ 三条都是**措辞没跟上实现**那一类，不是漏做；但下一片（8.2）若照原文找 `SaveFile` 里的 `Data` 参数会找不到。
+
+> **切片 9 施工图（2026-10-09 起）**：收藏 / 设置 / 我的 Star —— **把「我的」那条线上剩下的占位全部换真件**。
+> 对应 PRD **§4.17 我的（Tab 根页）· §4.18 我的 Star · §4.19 我的收藏 · §4.20 设置 · §4.21 我的 Pull Request / 我的 Issue（本片新增）**
+> （+ §5.5 选择收藏列表 / §5.6 新建收藏夹 / §5.11 退出登录 / §5.12 菜单 / §5.13 重命名 / §5.14 删除确认 六类弹层）。
+> ⚠️ **本片是「占位清零」的那一片** —— 一共 **5 处**：`RouteView` 的三条推入页（`.stars` / `.folders` / `.settings`）· 「我的」Tab 根页
+> （`ProfileView` 至今仍是 `SkeletonScreen`，只有一条真实现的 `signOutRow`）· `SkeletonPlaceholders.registry` 自己 ·
+> 他人仓库详情里的 `myFoldersSection`（"我的收藏（私人整理 · 仅自己可见）"，现挂在 `ExploreRepoViewModel` 上）。
+> ⇒ **做完本片，`SkeletonPlaceholders.registry` 应当是空数组**；若不是，说明还有一处没消。
+> ⚠️ **两处与原型必然不同**（都在 9.0 文档先行时定了，见决策 **#73 / #74**）：① **新增了一个原型没有的页面**（`.myConversations`）——
+> 原型那两个菜单项是"直接跳详情"（演示数据里正好各有一条）；② **热力图口径与原型不同** —— 原型画死 **40 周**（硬编码），
+> 真实数据是 **API 给的一年（≈53 周）**。两条都已登记为**有意偏差第 37、38 条**（`REVIEW-CHECKLIST §6`）。
+> ⚠️ **收藏夹是本片唯一"纯本地"的一块**（§9.12：GitHub 没有对应资源，连读接口都没有），
+> 而它的**计数必须永远从映射派生**（`favMap` 单一数据源）—— 这条已经踩过一次坑（原型第一版用独立计数器 ⇒ 删夹后默认夹不动），
+> 见 §9.12 与 `REVIEW-CHECKLIST` 有意偏差表。
+
+| # | 内容 | 状态 |
+|---|---|---|
+| 9.0 | 文档先行：决策 **#73–#76**（我的 PR/Issue 落点 = **新增专用列表页**，不复用搜索页 / 热力图 = **画满 API 给的一年、5 档照 `contributionLevel`** / 清除缓存 = **清自建接口缓存** / 三统计项来源 + **"仓库"数与仓库列表同源**）+ `TECH_SPEC §9.14` **重写** · `§9.15` 清除缓存改口径 · `§8.2` 新增 `.myConversations(kind:)` · `§8.3` 补一行 · `§4.6.5` 补一句 · **`§13.2` 修正一处真错误**（`weeks` 是**数组不是连接**，原写的 `weeks(first:53)` 会被服务端拒）+ `§5.1` / `§5.4` 补"三层里实际**只落地了 L2**"· `PRD §4.17–§4.20` 补口径 + **新增 `§4.21`** + §7 补三条空态 + 修 `§4.19` 里**引错的弹层编号**（原写 §5.14，应为 §5.6）· 本文件切片 9 图 · `REVIEW-CHECKLIST` 走查单 **#121+** 与有意偏差 **37 / 38** | ✅ |
+| 9.1 | 领域层（`GitDuoKit`）：**从零建**（`FolderStore` / 收藏夹相关类型在工程里**一个都不存在**——切片 4 的收藏入口当时只做到了"弹层画出来"）—— `Folder { name, isDefault }` + 收藏映射 `favMap: [repoFullName: folderName]`，**计数纯派生**（§9.12 那张归属表逐行落地：首次收藏 / 换夹 / 取消 / 新建并收藏 / 重命名 / 删除回落）· 收藏夹校验与全部文案（空名 / 重名 / 默认夹保护 / 删除回落提示；⚠️ **两个入口的重名处置有意不同**：仓库详情入口"提示并自动选中"、管理页入口"只提示不创建"）· **我的会话查询**（`author:@me` + **单条 part**，按 kind 选限定符 —— 与搜索页的双 part 有意不同，决策 #73）· 我的页资料模型与三统计项口径 · 热力图分档与网格模型（**53 列 × 7 行的坐标**，分档由 `contributionLevel` 翻译，**不自己按次数划**）· Star 列表分页编排（复用既有 `listStarred`） | ⬜ |
+| 9.2 | 数据层（`GitHubAPI`）：**一次 GraphQL 查询出两个字段**（`viewer.contributionsCollection.contributionCalendar` + `viewer.starredRepositories(first:1){totalCount}` + `viewer.repositories(first:1, affiliations:[…]){totalCount}`，决策 #76）· **我的会话列表端点**（`search/issues` 单条 part + **配额桶声明**：搜索桶，与搜索页共用）· 我的 Star **复用既有 `listStarred`**（不新写端点）。⚠️ `weeks` / `contributionDays` **是数组**，解码时不要按连接处理 | ⬜ |
+| 9.3 | 设计系统（`GitDuoDesign`）：热力图网格（**5 档配色走语义 token**，⚠️ **不用** API 返回的 `color` / `colors` —— `isHalloween` 为真时 GitHub 会换成南瓜色）· 资料头部 · 统计项三连 · 菜单卡片 · 设置页分区与条目行。⚠️ **逐条核实"预计新增"估对没估对**（切片 8.3 的「预计零新增」经核实成立，但三件既有组件各缺一个参数；本片照同一条流程走） | ⬜ |
+| 9.4 | 表现层（`GitDuo/Features/Profile/`）：`ProfileView` **重写**（§4.17，摘掉 `SkeletonScreen`）· `MyStarsView`（§4.18）· `FoldersView`（§4.19）· `SettingsView`（§4.20）· `MyConversationsView`（§4.21，**结果行复用搜索页的 `ConversationResultRow` + `ConversationHit`**）· 弹层 §5.11 / §5.12 / §5.13 / §5.14 / §5.5 / §5.6。⚠️ `signOutRow` 从 `ProfileView` **迁进设置页**（它现在是一条"临时挂在我的页"的真实现，抬头注释已写明切片 9 的处置） | ⬜ |
+| 9.5 | 装配与路由 + **占位清零**：`AppEnvironment` 接新用例（收藏夹存储 / 我的页取数 / 我的会话 / 缓存清理）；`RouteView` 三个 case 换真件 + 新增 `.myConversations`；**`SkeletonPlaceholders.registry` 消解（应清零）**；他人仓库详情 `myFoldersSection` 换真件；**`signOut()` ③ 步补收藏夹清空**（它现在只在注释里挂着"尚未接入（落地时补在这一处）"）。⚠️ 收藏夹存储**必须与仓库详情页共用同一个实例**，否则"在两个地方各建一份"表现为收藏时有时无（同 `branchMemory` 那条先例） | ⬜ |
+| 9.6 | 测试 + 收尾：把 harness **465–556 段**的原型断言转成 Swift 测试（收藏夹增删改 + **计数派生** + 默认夹保护 + 删除回落 + 退出登录往返）· `make verify` 全绿 · **强制全量重编零警告** · 四份文档收口 · 记忆 · 一个提交 | ⬜ |
 
 > **切片 6 施工图（2026-10-07 起）**：文件查看 + 提交详情 + 分支管理 **+ 仓库详情外壳（PRD §4.4）**。
 > 对应 PRD **§4.4 / §4.5 / §4.7 / §4.8**（+ §5.7 切换分支弹层 / §5.8 添加文件弹层 / §3.10 分支）。
