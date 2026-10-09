@@ -34,6 +34,12 @@ struct RepoDetailView: View {
 
     let fullName: String
 
+    /// §5.8 两个上传出口的取件与预处理（切片 8.7 / 决策 #71）—— 交给 `AddFileSheet`。
+    ///
+    /// ⚠️ 本页自己**不用它**，只是**过一手**：弹层是这一页呈现的，而依赖一律由
+    /// `RouteView` 从组合根带下来（页面不 new 用例 —— `AGENTS.md §3` 的铁律）。
+    let intake: UploadIntake
+
     @Environment(AppEnvironment.self) private var env
 
     @State private var model: RepoDetailViewModel
@@ -83,11 +89,13 @@ struct RepoDetailView: View {
         pulls: LoadRepoPulls,
         starToggle: ToggleStar,
         saver: SaveFile,
+        intake: UploadIntake,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
+        self.intake = intake
         _model = State(initialValue: RepoDetailViewModel(
             fullName: fullName,
             section: section,
@@ -195,6 +203,7 @@ struct RepoDetailView: View {
                 //    直接 `dismiss()` 会先关掉这张、再开下一张，中间那一帧是空屏。
                 AddFileSheet(
                     branch: model.tree.branch ?? "",
+                    intake: intake,
                     onNewFile: {
                         sheet = nil
                         // 新建模式的路径由**编辑器里的输入框**定（§4.6），
@@ -246,6 +255,9 @@ struct RepoDetailView: View {
             // ⚠️ 上传出口**必须露出落点**：路径是 App 定的（§5.8 / 决策 #70②），
             //    不露出来用户就只能靠猜 —— 而"东西存到哪"是这一步唯一可能搞错的事。
             destinationPath: RepoPath(path: draft.fileName),
+            // ⚠️ 压过了才非 nil（切片 8.7）—— 那一句 `已压缩 3.2MB → 0.8MB` 就是
+            //    "App 改了你选中的字节"这件事的唯一出口（决策 #71⑤）。
+            compression: draft.compression,
             defaultBranchName: FileWriteTarget.defaultNewBranchName(now: Date()),
             onSubmit: { commit, _ in
                 // ⚠️ 那个 `sha` 参数在这里**有意丢掉**：上传恒为新建

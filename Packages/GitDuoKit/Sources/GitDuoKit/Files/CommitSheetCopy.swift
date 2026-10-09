@@ -14,6 +14,7 @@ import Foundation
 /// - 弹层标题、占位、分段、提示条、按钮、页脚、两条成功提示 → 原型
 ///   `scripts/15-sheets.js` 的 `openCommitSheet` / `doCommit`（逐字）；
 /// - 两行输入与 409 两个出口、以及多步操作的两句 → PRD §5.9 ①–④（2026-10-08 补入）；
+/// - `compressedNotice`（`已压缩 3.2MB → 0.8MB`）→ `PRD §5.8` / **决策 #71⑤**（2026-10-09 补入）；
 /// - 标了「**规格未给**」的几条是本片自拟的，已在 `REVIEW-CHECKLIST` 登记。
 public enum CommitSheetCopy {
 
@@ -77,6 +78,40 @@ public enum CommitSheetCopy {
     /// ⚠️ 它**不是输入框**：改路径请改用「新建文件」（§5.8 明写）。
     public static func destinationNotice(path: RepoPath) -> String {
         "将写入 \(path.raw)"
+    }
+
+    // MARK: - 「已压缩」那一句（决策 #71⑤）
+
+    /// 提交弹层里那行只读落点下的一句：`已压缩 3.2MB → 0.8MB`。
+    ///
+    /// ## ⚠️ 这一句为什么必须有
+    ///
+    /// 决策 #71 让 App 在上传前**改掉了用户选中的那份字节**（重编码、有损、还会剥掉
+    /// EXIF 含 GPS）。不写这一句，用户拿到的是一张**他自己没同意改过**的图 ——
+    /// 而"App 替你决定了什么"这条在 #70② 那行「将写入 `{path}`」上已经立过一次
+    /// （路径是 App 定的 ⇒ 露出来）。这里同一个理由，只是被决定的东西从"存到哪"变成了"存的是什么"。
+    ///
+    /// ## ⚠️ 两个数都是**真的**
+    ///
+    /// 前一个是选中那一刻的字节数、后一个是**真正要写上去的**字节数（`UploadCompression`
+    /// 的两个字段都由 `UploadIntake` 实测填进去，没有一处是估的）。
+    /// 印一个编出来的"省了多少"很容易，但那句话会在某次改动之后安静地变成假话。
+    ///
+    /// ⚠️ 没压过（≤1MB 的图 / 非图片）时**这一句不出现** —— 调用方传 `nil` 即可（`CommitSheet`）。
+    public static func compressedNotice(_ compression: UploadCompression) -> String {
+        "已压缩 \(sizeLabel(compression.originalBytes)) → \(sizeLabel(compression.finalBytes))"
+    }
+
+    /// 一位小数的 MB（`3.2MB`）。
+    ///
+    /// ⚠️ 与上面 `megabytes(_:)`（**向上取整的整数**）**是两个量**：那个说的是"上限是几 MB"
+    /// （说 `4.7MB` 没有意义），这个说的是"这个文件多大"（说 `5MB` 会让 0.8 与 1.4 看起来一样大）。
+    /// 合成一个必然有一处说错。
+    ///
+    /// ⚠️ 下限 `0.1MB`：一位小数下印 `0.0MB` 是句废话（它没告诉用户"其实很小"）。
+    /// 这不是谎报 —— 它仍然落在"≤1MB"这一侧，而这一句的用途是让用户看到"小了"，不是精确报数。
+    private static func sizeLabel(_ bytes: Int) -> String {
+        String(format: "%.1fMB", max(0.1, Double(bytes) / 1_000_000))
     }
 
     // MARK: - 「新分支 + PR」多出的两行输入（决策 #67）

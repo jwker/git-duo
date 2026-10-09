@@ -61,9 +61,11 @@ public enum RepoCopy {
 
     // MARK: - §5.8 添加文件弹层
     //
-    // ⚠️ 这一节**整节都是「规格未给，待评审」**：PRD §5.8 只写"三个出口"，
+    // ⚠️ 这一节**当初整节都是「规格未给，待评审」**：PRD §5.8 只写"三个出口"，
     //    原型 `openAddSheet` 给了标题与三行文案，而三行各自的去向**两边都没写全**。
-    //    本片按原型逐字拟，并在 `REVIEW-CHECKLIST` 登记。
+    //    那批按原型逐字拟，并在 `REVIEW-CHECKLIST` 登记。
+    //    ⚠️ **2026-10-08 起不再是"规格未给"**：切片 8 把三行去向与两个上传出口的落点
+    //    都补进了 `PRD §5.8`（决策 #70）⇒ 剩下与原型不同的地方按**有意偏差**登记（第 7 条）。
 
     /// 弹层标题：`添加文件 · {当前分支}`（原型逐字）。
     public static func addFileSheetTitle(branch: String) -> String {
@@ -86,7 +88,14 @@ public enum RepoCopy {
     /// 而这条正是本项目明令禁止的（`AGENTS.md §3`："文案 / 权限 / 产品承诺要提为可测领域数据"，
     /// 起因就是曾出过"文案承诺撤销授权、实现却做不到"）。
     /// 这里取 §9.6 的事实，并把偏差登记待评审。
-    public static let addFileSheetHint = "≤1MB 走 Contents API · 更大的文件本期不支持，请到 GitHub 网页端处理"
+    ///
+    /// ⚠️ **2026-10-09 后半句改了**（**决策 #71**）：原先写的是"更大的文件本期不支持"，
+    /// 而 >1MB 的**图片**从此不再"不支持" —— 它先走自适应压缩（`UploadIntake` +
+    /// `GitDuoCore.ImageCompressor`），压不动才轮到这个出口。
+    /// 这句话因此必须跟着改：它是**唯一**在选图之前就告诉用户"大图会被压一道"的地方
+    ///（另一处是提交弹层里那句 `已压缩 3.2MB → 0.8MB`）。不改的后果是用户在**不知情**的情况下
+    /// 被 App 换掉了他要传的字节。
+    public static let addFileSheetHint = "≤1MB 走 Contents API · 超过 1MB 的图片会自动压缩，其他大文件请到 GitHub 网页端处理"
 
     // MARK: - 目录里进不去的条目（`symlink` / `submodule`）
 

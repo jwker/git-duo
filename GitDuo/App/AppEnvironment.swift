@@ -145,6 +145,14 @@ final class AppEnvironment {
     /// 删除文件 —— §9.6.5。`sha` **现取**（用户手上没有"那一版"这回事，见 `DeleteFile` 的类型说明）。
     let deleteFile: DeleteFile
 
+    /// §5.8 两个上传出口的**取件与预处理**：>1MB 的图片先自适应压缩（**决策 #71**）。
+    ///
+    /// ⚠️ 它**不依赖任何端点**（压缩是纯本地的事），之所以仍然收在这里：
+    /// 它要**选一个具体实现**（`GitDuoCore.ImageCompressor` 对 `ImageCompressing` 这层接缝），
+    /// 而"哪一个实现"正是组合根该管的事 —— 否则 `AddFileSheet` 里就多出一处
+    /// "App 层知道 GitDuoCore 有什么"，而那正是这条接缝存在的理由。
+    let uploadIntake: UploadIntake
+
     // MARK: - 本地存储
 
     /// 最近访问（落盘实现见 `UserDefaultsRecentVisitStore`）。
@@ -330,6 +338,14 @@ final class AppEnvironment {
         )
         self.renameFile = RenameFile(contents: contentEndpoint, files: contentEndpoint)
         self.deleteFile = DeleteFile(contents: contentEndpoint, files: contentEndpoint)
+
+        // ── 切片 8.7：上传前的图片压缩（决策 #71）。
+        //
+        // ⚠️ 与上面那三条**没有依赖关系**（它不发网络）—— 放在这里只是因为它属同一片，
+        //    而且它同样是一条"选实现"的装配（见 `uploadIntake` 的说明）。
+        //    `targetBytes` 走默认值 = `SaveFile.maxContentBytes`：压缩的目标与写通道的上限
+        //    必须是**同一个数**，分开写的那天会出现"压到 1.2MB 再被 1MB 的判据拒掉"。
+        self.uploadIntake = UploadIntake(compressor: ImageCompressor())
     }
 
     /// 接口缓存（§5.1 的 L2：内存 + 磁盘，**自建**，绝不启用系统 `URLCache` —— 决策 #32）。

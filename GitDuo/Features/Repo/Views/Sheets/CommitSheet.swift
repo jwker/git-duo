@@ -38,6 +38,7 @@ struct RemoteLatest: Sendable, Equatable {
 /// | 补的是什么 | 依据 |
 /// |---|---|
 /// | 上传来源顶部那行只读的 `将写入 {路径}` | §5.9① / 决策 #70② |
+/// | 图片被压过时、那行下面的一句 `已压缩 3.2MB → 0.8MB` | §5.8 / 决策 #71⑤ |
 /// | 「新分支 + PR」的两行输入（分支名 / PR 标题） | §5.9② / 决策 #67 |
 /// | 409 的两个出口（查看最新版 / 强制覆盖） | §5.9③ / 决策 #69 |
 /// | 两档"做到一半"的结果屏 | §5.9④ / 决策 #68① |
@@ -70,6 +71,12 @@ struct CommitSheet: View {
 
     /// 上传来源的落点；`nil` = 不显示那一行（编辑器与"新建文件"都没有这一行）。
     let destinationPath: RepoPath?
+
+    /// 上传的图片**被压过**时的两个字节数；`nil` = 没压过（不显示那一句）。
+    ///
+    /// ⚠️ 它只对上传那两个出口有意义 ⇒ 与 `destinationPath` 同时为 `nil` 或同时有值。
+    /// 编辑器的两条路（新建 / 编辑）传的恒是 `nil`。
+    let compression: UploadCompression?
 
     /// 「新分支 + PR」的**预填分支名**。
     ///
@@ -150,7 +157,7 @@ struct CommitSheet: View {
             // 上传来源多一行只读的落点（§5.9①）——"东西存到哪"是这一步里
             // 用户唯一可能搞错的事，而它是 App 决定的（决策 #70②）。
             if let destinationPath {
-                destinationRow(destinationPath)
+                destinationRow(destinationPath, compression: compression)
             }
 
             SheetField(
@@ -204,13 +211,18 @@ struct CommitSheet: View {
         }
     }
 
-    /// 上传来源那行**只读**的落点。
+    /// 上传来源那行**只读**的落点（+ 压过时的一句 caption）。
     ///
     /// ⚠️ 形态照 `MergeSheet.targetSection` 的先例（图标 + 值 + 下方一句 caption），
     /// **不是**输入框 —— 改路径请改用「新建文件」（§5.8 明写）。
     /// 这一行刻意不做成第三件设计包组件：两处逐字相同的东西只有"图标 + 一行字"，
     /// 收拢它要么给设计包加一件只服务两个调用点的组件，要么动已验收的切片 7。
-    private func destinationRow(_ path: RepoPath) -> some View {
+    ///
+    /// ⚠️ 那句 caption 是**同一条理由的第二个落点**（决策 #71⑤）：
+    /// 落点行说的是"存到哪"、它说的是"存的是什么"—— 两者都是 App 替用户决定、
+    /// 而用户在此刻**必须知道**的事（他选的那张图已经被重编码过）。
+    /// ⚠️ 没压过时**整句不出现**（不是印一句"未压缩"）：没发生的事不需要占一行。
+    private func destinationRow(_ path: RepoPath, compression: UploadCompression?) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: GitHubIcon.file)
@@ -223,6 +235,15 @@ struct CommitSheet: View {
             }
             .padding(.vertical, Theme.Spacing.m)
             .padding(.horizontal, Theme.Spacing.s)
+
+            if let compression {
+                Text(CommitSheetCopy.compressedNotice(compression))
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Theme.Spacing.s)
+                    .padding(.bottom, Theme.Spacing.s)
+            }
         }
     }
 
@@ -500,6 +521,7 @@ struct CommitSheet: View {
         fullName: "my-git/gitduo",
         branch: "main",
         destinationPath: nil,
+        compression: nil,
         defaultBranchName: "gitduo/20261008-120000"
     ) { _, _ in
         .rejected("预览用：提交不接后端")

@@ -1,3 +1,4 @@
+import GitDuoCore
 import GitDuoDesign
 import GitDuoKit
 import PhotosUI
@@ -18,8 +19,18 @@ struct UploadDraft: Equatable, Sendable {
     /// 落在**仓库根**的文件名（§5.8：上传出口的路径是 App 定的）。
     let fileName: String
 
-    /// 原始字节（§5.8：**不重编码** —— 图片取的是相册里那一份）。
+    /// 要写上去的字节。
+    ///
+    /// ⚠️ **多数情况下它就是相册 / 文件 App 给的那一份原文**（§5.8：不重编码）；
+    /// **只有 >1MB 的图片例外** —— 那时它已经被 `UploadIntake` 压过（决策 #71），
+    /// 而"压过"这件事由下面那个字段如实带出来。
     let data: Data
+
+    /// 压过的摘要（原字节 → 现在字节）；**`nil` = 没压过**（≤1MB 的图 / 非图片）。
+    ///
+    /// ⚠️ 它一路带到提交弹层（`CommitSheet.compression`）—— **不能只在这里用掉**：
+    /// 用户需要在他按下确认的那一刻看到"要写上去的不是我选的那张原图"。
+    let compression: UploadCompression?
 }
 
 /// 添加文件弹层（PRD §5.8、原型 `scripts/15-sheets.js` 的 `openAddSheet`）。
@@ -52,15 +63,31 @@ struct UploadDraft: Equatable, Sendable {
 /// `itemIdentifier` / `supportedContentTypes` / `loadTransferable` —— **没有文件名**。
 /// 规则落在 `UploadFileName.photo(fileExtension:now:)`（有单测）。
 ///
-/// ## ⚠️ 超过 1MB **在选中那一刻就拦**
+/// ## ⚠️ 超过 1MB：**图片先压、其余当场拦**（决策 #71）
 ///
-/// §5.8 要求"提示并引导网页端，**不静默失败**"。拦在这里（而不是等用户在提交弹层里
-/// 写完信息、按下提交）有两个理由：用户不必白填一次；而一个 100MB 的文件
-/// **根本不会被读进内存**（下面先看 `fileSize` 再读）。
+/// 这一档原本只有一句"提示并引导网页端"，而那让**相册这条出口对真实照片形同虚设**
+/// （照片动辄好几 MB）。现在两条路：
+///
+/// | 选中的东西 | 走哪条 |
+/// |---|---|
+/// | >1MB 的**图片** | 交给 `intake.prepare` → 自适应压缩（`GitDuoImageCompressor`）→ 压下来就进提交弹层 |
+/// | >1MB 的**其他文件** | 当场拦下（`tooLargeHint`）—— 大 PDF / zip 没有"压一道"这回事 |
+/// | **压不下来的图片** | 同上：`intake` 回 `.tooLarge` ⇒ 同一句提示 |
+///
+/// ⚠️ 拦截点放在**选中那一刻**（而不是等用户在提交弹层里写完信息、按下提交）有两个理由：
+/// 用户不必白填一次；而一个 100MB 的文件**根本不会被读进内存**（下面先看 `fileSize` 再读）。
+/// ⚠️ 压缩要时间（最多 13 次编码）⇒ 有 `isPreparing` 那一档转圈 + 三行暂时不可点。
+/// 这一条**不是装饰**：没有它，用户按下去之后会以为弹层死了，然后再点一次。
 struct AddFileSheet: View {
 
     /// 当前分支 —— 标题里那一句要它（原型 `添加文件 · ${curBranch()}`）。
     let branch: String
+
+    /// 取件与预处理（压缩）—— 由组合根装配（`AppEnvironment.uploadIntake`）。
+    ///
+    /// ⚠️ 从外面传进来而不是在这里 `UploadIntake(compressor: ImageCompressor())`：
+    /// 那会多出一处"App 层知道 `GitDuoCore` 有什么"的装配点（`AGENTS.md §3`）。
+    let intake: UploadIntake
 
     /// 第一行：去编辑器（新建模式）。
     ///
@@ -73,6 +100,10 @@ struct AddFileSheet: View {
     @State private var isImportingFile = false
     @State private var isPickingPhoto = false
     @State private var pickedPhoto: PhotosPickerItem?
+
+    /// 正在压缩（切片 8.7）。见类型说明：这一档必须有动静，且三行要暂时不可点。
+    @State private var isPreparing = false
+
     @State private var failure: String?
 
     var body: some View {
@@ -84,13 +115,28 @@ struct AddFileSheet: View {
             SheetRow(systemImage: GitHubIcon.file, title: RepoCopy.newFileAction) {
                 onNewFile()
             }
+            .disabled(isPreparing)
 
             SheetRow(systemImage: GitHubIcon.file, title: RepoCopy.uploadFileAction) {
-                isImportingFile = true
+                startPick { isImportingFile = true }
             }
+            .disabled(isPreparing)
 
             SheetRow(systemImage: GitHubIcon.file, title: RepoCopy.uploadImageAction) {
-                isPickingPhoto = true
+                startPick { isPickingPhoto = true }
+            }
+            .disabled(isPreparing)
+
+            // 压缩要几百毫秒到一两秒（最多 13 次编码）⇒ 必须有个动静，
+            // 否则用户按下去之后会以为弹层死了、然后再点一次。
+            //
+            // ⚠️ 刻**不加文字**：底部那句已经写着"超过 1MB 的图片会自动压缩"，
+            //    在这里再编一句就是第二处说同一件事（而那一句要跟着 `maxContentBytes` 走）。
+            if isPreparing {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, Theme.Spacing.s)
             }
 
             if let failure {
@@ -128,12 +174,26 @@ struct AddFileSheet: View {
             matching: .images,
             // ⚠️ `.current`（不改编码）而不是默认的 `.automatic`：§5.8 明写
             //    "相册图片取**原始字节、不重编码** —— 重编码会改内容与体积"。
+            //    ⚠️ 切片 8.7 之后这条仍然成立（**≤1MB 的图原样上传**），
+            //    只在"超过 1MB 且非压不可"时才由**我们自己**压一道（决策 #71）——
+            //    让系统先替我们转一次码，只会让那一档多损失一次、而我们连类型都不知道。
             preferredItemEncoding: .current
         )
         .onChange(of: pickedPhoto) { _, item in
             guard let item else { return }
             Task { await handlePhoto(item) }
         }
+    }
+
+    // MARK: - 三行的动作
+
+    /// 开始一次选择：**先把上一轮的结果清掉**。
+    ///
+    /// ⚠️ 不清的话，上一轮那句失败提示会一直挂在那儿，而用户此刻正在选下一件东西 ——
+    /// 他看到的那句话说的已经不是他手上这件事了（`failure` 必须与"这一次选择"同步）。
+    private func startPick(_ begin: () -> Void) {
+        failure = nil
+        begin()
     }
 
     // MARK: - 文件 App
@@ -162,9 +222,14 @@ struct AddFileSheet: View {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         // 先看大小、再决定读不读 —— 一个 100MB 的文件不该为了"待会儿会被拒绝"
-        // 而先进内存一趟。拿不到大小时按"读"处理（下面还有一次按字节数的判据兜底）。
+        // 而先进内存一趟。拿不到大小时按"读"处理（"交出结果"那一步还有一次判据兜底）。
+        //
+        // ⚠️ 但**图片不能在这里就拒**（切片 8.7 / 决策 #71）：它还有"先压一道"那条路。
+        //    而"像不像图片"在这一步只能按**扩展名**猜 —— 那是**预检**不是判据
+        //   （`UploadIntake.mightBeImage` 的说明：两种猜错里取"宁可多读"那一边）。
         let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
-        if let size, size > SaveFile.maxContentBytes {
+        if let size, size > intake.targetBytes,
+           !UploadIntake.mightBeImage(pathExtension: url.pathExtension) {
             failure = CommitSheetCopy.tooLargeHint
             return
         }
@@ -172,11 +237,10 @@ struct AddFileSheet: View {
         // ⚠️ `url.lastPathComponent` 就是 §5.8 那个"选中文件的文件名"——
         //    文件 App 这条通道**拿得到**它（相册那条拿不到，见类型说明）。
         do {
-            finish(
-                source: .uploadFile,
-                fileName: url.lastPathComponent,
-                data: try Data(contentsOf: url)
-            )
+            let data = try Data(contentsOf: url)
+            // ⚠️ 读**必须在 `defer` 收掉 security scope 之前完成**（就在上一行），
+            //    所以这里只把已经到手的字节丢进 `Task` 去做压缩那一步。
+            Task { await finish(source: .uploadFile, fileName: url.lastPathComponent, data: data) }
         } catch {
             failure = ActionCopy.failed
         }
@@ -198,7 +262,7 @@ struct AddFileSheet: View {
         //    给出多种表示，而 `supportedContentTypes` 反映的是**这一次加载**的类型。
         let fileExtension = item.supportedContentTypes.first?.preferredFilenameExtension
 
-        finish(
+        await finish(
             source: .uploadImage,
             fileName: UploadFileName.photo(fileExtension: fileExtension, now: Date()),
             data: data
@@ -208,27 +272,50 @@ struct AddFileSheet: View {
 
     // MARK: - 交出结果
 
-    /// 两个出口共同的最后一步（判大小 → 交给宿主）。
+    /// 两个出口共同的最后一步（**取件预处理** → 交给宿主）。
     ///
     /// ⚠️ `source` 由**入口各自传进来**，不从 `isImportingFile` 反推：
     /// 那个 `Bool` 由系统在选择器关掉时写回 `false`，而回调与它谁先谁后**没有保证**
     /// （反推出来的值会在"两个出口只差一次时序"时错成另一个）。
-    private func finish(source: CommitSource, fileName: String, data: Data) {
-        // 与上面那次 `fileSize` 判据是**两条**：相册那条没有 URL 可查大小，
-        // 而文件那条的 `fileSize` 也可能取不到。按**真实字节数**再判一次。
-        guard data.count <= SaveFile.maxContentBytes else {
-            failure = CommitSheetCopy.tooLargeHint
-            return
-        }
+    private func finish(source: CommitSource, fileName: String, data: Data) async {
+        // 压缩期间三行已经不可点了，但还有一档能走到这里：系统选择器的回调与那个
+        // `Bool` 写回 `false` 的先后没有保证 ⇒ 用户理论上能连点两下。
+        // 放行第二次的后果是"同一张图进两次提交弹层"，而进的是**后到的那一次**。
+        guard !isPreparing else { return }
         guard !fileName.isEmpty else {
             failure = ActionCopy.failed
             return
         }
-        onPicked(UploadDraft(source: source, fileName: fileName, data: data))
+
+        isPreparing = true
+        // ⚠️ **「≤1MB 就不编码」那条判据在 `UploadIntake` 里，不在这一层** ——
+        //    见那里的说明：它要能在单测里被断言"压缩器**一次都没被调用**"。
+        let outcome = await intake.prepare(data, fileName: fileName)
+        isPreparing = false
+
+        switch outcome {
+        case let .accepted(prepared, compression):
+            onPicked(UploadDraft(
+                source: source,
+                fileName: fileName,
+                data: prepared,
+                compression: compression
+            ))
+
+        case .tooLarge:
+            // ⚠️ 三档原因（根本不是图片 / 动图 / 压不动）给的是**同一句话** ——
+            //    用户能做的动作是同一个（去网页端），而"为什么没压成"对他没有第二个用处。
+            failure = CommitSheetCopy.tooLargeHint
+        }
     }
 }
 
 #Preview {
-    AddFileSheet(branch: "feature/auth-refresh", onNewFile: {}, onPicked: { _ in })
-        .background(Theme.Palette.background)
+    AddFileSheet(
+        branch: "feature/auth-refresh",
+        intake: UploadIntake(compressor: ImageCompressor()),
+        onNewFile: {},
+        onPicked: { _ in }
+    )
+    .background(Theme.Palette.background)
 }

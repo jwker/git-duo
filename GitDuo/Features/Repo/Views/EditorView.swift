@@ -158,6 +158,8 @@ struct EditorView: View {
             // ⚠️ 编辑器这条路**不显示**「将写入 `{path}`」那一行 ——
             //    它只在 §5.8 的两个上传出口上出现（那时路径是 App 定的、用户看不见）。
             destinationPath: nil,
+            // 编辑器的两条路都不经过上传 ⇒ 没有"已压缩"那一句（决策 #71⑤）。
+            compression: nil,
             // 预填分支名：调用方算（`now` 必传，理由见 `defaultNewBranchName`）。
             defaultBranchName: FileWriteTarget.defaultNewBranchName(now: Date()),
             // ⚠️ `sha` 一路透传：它是 409 之后两个出口用的**新基准**（`nil` = 用进页面读到的那个）。
