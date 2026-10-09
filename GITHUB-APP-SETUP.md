@@ -186,6 +186,23 @@ gitduo://oauth/callback
 > ⚠️ **`Starring` / `Followers` 是最容易漏的两项**（它们在 Account permissions 组，不在仓库组）。
 > 漏了不会报错，只会在 Star / 关注时收到 **403**——这是 `REVIEW-CHECKLIST.md` P2 专门标注过的坑。
 
+> 🔴 **而这两项还有一个独有的坑（2026-10-09 查得）：勾上了也不一定生效 —— 已授权的旧令牌不会自动获得。**
+> 官方《Approving updated permissions for a GitHub App》原文：
+>
+> > **If the app is authorized but not installed or if the GitHub App only requested additional account permissions,
+> > GitHub will not notify you. Instead, the GitHub App will prompt you to reauthorize the app in order to enable the new account permissions.**
+>
+> 拆开看，这句话对**账号级**权限说了三件事，每一件都会让人查错方向：
+> ① **GitHub 不会通知你**（仓库级权限才有通知）⇒ 你**收不到任何提示**说"权限升级了"；
+> ② 旧令牌**继续有效**（官方另一句：*If you do not approve the additional permissions, the GitHub App will still retain its current permissions*）
+> —— 所以**登录、看仓库全都正常**，只有 Star 这一处 403，表现得像"这一颗按钮坏了"；
+> ③ 唯一的修法是**重新走一遍授权流程**拿到**新令牌**（官方 user-level 权限那段：*you will, however, need to send existing users
+> through the user authorization flow to authorize the new permission and get a new user-to-server token for these requests*）。
+>
+> ⇒ **"授权页列出 6 条"（P2 过了）与"手里这张令牌带 Starring"是两件事**：
+> 前者看的是 App **当前的声明**，后者是**授权那一刻**的快照。**两者不一致时，屏幕上只看得见后者。**
+> （这正是走查 #3 那条 403 最可能的成因，处置步骤见 `REVIEW-CHECKLIST.md` 清单 C 的 P2 段。）
+
 > **为什么不需要 Email addresses / Profile**：本期界面不展示邮箱，资料页只用登录名与头像。
 > 若将来要显示邮箱，需补 `Email addresses`(Read-only) 并让已安装用户重新批准。
 
@@ -328,6 +345,11 @@ make gen && make build
 
 > 第 1 项能对上，说明**权限**配对了；第 3–5 项能对上，说明**令牌**配对了。
 
+> ⚠️ **第 3–5 项都要一个 `<令牌>`，而 App 里那张令牌在 Keychain 里、你拿不出来** ⇒ 配完想复核时容易卡在这一步。
+> 不必卡：**重新走一遍授权**就是这三项的最强证据 —— 新令牌是按 App **当前**声明签发的，
+> 所以"重新登录后 Star 通了"这件事，同时证明了第 1 / 3 / 5 项（`REVIEW-CHECKLIST.md` 清单 C 的 P2 段有完整步骤）。
+> 想真的跑 curl，就得自己走一次 §6 的授权流程手工把 `code` 换成令牌（`code` **10 分钟过期、一次性**）。
+
 ### 6.1 ⚠️ 两个"看起来能验、其实验不了"的坑（2026-10-06 实测证伪）
 
 配完凭据后，很容易想用命令行"先验一下 `client_id` 对不对"——**这两条路都是死路**，实测数据如下：
@@ -352,6 +374,8 @@ make gen && make build
 | `incorrect_client_credentials` | `client_id` / `client_secret` 写错（如误用了 App ID） | 用设置页上的 **Client ID**，两者不同 |
 | `bad_verification_code` | `code` 过期（**10 分钟**）或已用过 | 重新发起授权；`code` 一次性 |
 | Star / 关注 **403** | 漏勾 `Starring` / `Followers` | §2.10 勾上；**改权限后已安装用户需重新批准** |
+| Star **勾了 `Starring` 还是 403** | 手里那张令牌是**授权早于权限变更**那一刻签发的。⚠️ **账号级**权限（`Starring` / `Followers`）变更时 GitHub **既不通知、旧令牌也不会自动获得**（§2.10 那条 🔴）⇒ 登录 / 浏览全正常，只有 Star 这一处 403，看着像"按钮坏了" | **在 GitDuo 里退出登录 → 重新登录**（重走授权 ⇒ 拿到含 `Starring` 的新令牌）。**这一步零成本，先做它** |
+| 重新授权后 Star **仍然** 403 | 说明不在"令牌旧"这一层了 | 往下查三处：① §6 第 1 项的授权页是不是真列出 6 条（列不出 = 声明错了）；② curl 看**响应体**而不只是状态码，403 的 `message` 会区分"权限不足"与"被限制"；③ 若**只有私有仓库**失败 ⇒ 是 §4 的安装范围（但那时更该是 404、不是 403） |
 | 仓库相关 **404**（而非 403） | GitHub 对**无权限**的资源返回 404 以隐藏存在性；也可能是没安装 / 没勾该仓库 | 查 §4 的安装范围；`/user/installations` 可看当前可访问仓库 |
 | 换令牌返回的是 `access_token=ghu_...` 这种**表单串**而不是 JSON | 没带 `Accept: application/json` | 请求头加上 `Accept: application/json` |
 | 刷新报 `unsupported_grant_type` | `grant_type` 没写 `refresh_token` | 官方要求 `grant_type=refresh_token` |
