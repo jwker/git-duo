@@ -41,6 +41,20 @@
 ⚠️ 本片是**「占位清零」的那一片**（做完之后 `SkeletonPlaceholders.registry` 应为空数组）；
 ⚠️ 也是**唯一一片含"纯本地"业务逻辑**的（收藏夹，§9.12）—— 它的计数**永远从映射派生、绝不落盘成计数器**。
 
+✅ **切片 9 已全部落地并提交（`8f7fd1e`，2026-10-09）**：**9.4 表现层 + 9.5 装配与路由（占位清零）+ 9.6 文案测试与收尾**
+**三片合并为一次提交** —— `ProfileView` 要 `push(.myConversations)`、`MainTabView` 要给 `ProfileView` 传 `overview`，
+路由与装配不接上，9.4 **连编译都过不去**（同 8.4/8.5 先例，边界不可执行就合并）。
+⚠️ **本片独缺完成定义第 3 条**（与原型逐屏对照）—— 走查单 **22–26 五项**（5 页 + 6 弹层**全要登录才可达**）仍待目视。
+
+**切片 10（收尾：骨架屏统一 · 无障碍 · 性能预算核对）已于 2026-10-09 落地 —— 十个切片全部完成。**
+⚠️ **它是最后一片**，且用户同日拍板：**完成定义第 3 条攒到最后一起走**（切片 9 的 22–26 + 本片新增项），不再随片目视。
+⚠️ **它不新增任何页面、也不改视觉** —— 全部工作是"**逐条核实 + 收口**"，所以**核实结论本身就是交付物**（同 8.3 那条「预计零新增」的流程：
+先去代码里把每一条判据查一遍，再决定改不改）。
+⚠️ **本片落地两条新增口径**（此前文档**没写过**，都是"核对并登记"而不是"顺手改"）：
+无障碍判据「**文字**的动态字体」与「**图标**不随字号缩放」**要给两个答案**（后者登记为偏差 41）·
+「**触控目标 44pt**」是**核对登记**（偏差 42）—— SwiftUI 里扩大命中区就得先改 frame ⇒ 会动行高。
+⇒ **下一步不是再开一片，而是那次"攒到最后"的逐屏对照**（走查单 22–26 + 本片改过的三处首屏骨架）。
+
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
 （仓库列表 / 首页置顶 / 最近访问 / 搜索）都点得进去。
@@ -182,6 +196,27 @@
 | 9.5a | **实际落地（2026-10-09）**：<br>① **`Route` 新增 `.myConversations(kind:)`**（`TECH_SPEC §8.2` 是正本，**先改文档再加 case**）；`RouteView` 三条骨架换真件（`.stars` / `.folders` / `.settings`）+ 新增那一条；`MainTabView` 的 `ProfileView()` 补两个参数。<br>② **`AppEnvironment` 新增四条**：`profileOverview`（`LoadProfileOverview` + `GitHubProfileDataSource`：**REST 与 GraphQL 两个客户端**）· `conversations`（`LoadMyConversations` + `GitHubMyConversationsDataSource`）· `folders`（`UserDefaultsFolderStore`，**全 App 唯一实例** —— 「我的收藏」管理页与仓库详情 ② 分区读同一份）· `signOut()` ③ 步补 `await folders.clear()` 与 `await conversations.invalidateAll()`，并把降级 / 成功两句提示**改引 `ProfileCopy.signedOutNotice` / `signOutDegradedNotice`**（后者带「可在设置中手动撤销」—— 落地前那是"文案承诺了、代码里没有"的一处）。<br>③ **一处既有件放宽可见性**：`responseCache` 由 `private let` 改 `let` —— 设置页由 `RouteView` 装配，`private` 时连它的 `#Preview` 都编不过；⚠️ 若在设置页里另建一个 `HTTPResponseCache`，「清除缓存」清掉的是一个空目录，**而界面上照旧显示已释放多少**（决策 #75 那条测试就是为它写的）。<br>④ **占位清零**：`SkeletonPlaceholders.registry` → **空数组**；`PendingSection.swift`（页内占位块）**删除** —— 完成定义第 149 条点名的就是它，而它的 `#Preview` 里逐字写着"切片 9 落地"。⚠️ **`SkeletonScreen` 保留**（第 149 条只点名"它的调用点"）：`AGENTS.md §0` 那条纪律指向的就是它，下一个切片真要再加页面时还是那个落点；顺带把它 `#Preview` 里的"切片 5 落地"改成中性字样（同一条第 149 条的口径）。<br>⑤ **领域层补一个出口**：`InMemoryFolderStore.payload()`（供落盘实现取整份 `FolderCoding.Payload`，与 `InMemoryCommentDraftStore.allDrafts()` 同一条先例）+ 1 条往返测试（改名之后两段数据必须一起出去）。<br>⑥ **一处实测出来的语言事实**：`FolderStore.defaultFolderName` **不能在 `any FolderStore` 上用**（`static member … cannot be used on protocol metatype`）—— 而本项目所有消费点持有的都是 `any FolderStore` ⇒ 那几处一律写 `FolderDefaults.name`。已写进协议的注释里。<br>测试数见 9.6a。 | ✅ |
 | 9.6 | 测试 + 收尾：把 harness **465–556 段**的原型断言转成 Swift 测试（收藏夹增删改 + **计数派生** + 默认夹保护 + 删除回落 + 退出登录往返）· `make verify` 全绿 · **强制全量重编零警告** · 四份文档收口 · 记忆 · 一个提交 | ✅（**并入 9.4/9.5 那一次提交**） |
 | 9.6a | **实际落地（2026-10-09）**：<br>⚠️ **harness 已不在仓库里**（`redesign/prototype/` 只有 `index.html` + `styles/` + `scripts/`）⇒ 无法逐条比照 465–556 段，只能按**文档 + 原型脚本**两条来源补。<br>① **行为那半**在 9.1 就落地了（`FolderStoreTests` 的归属表逐行 / 计数派生 / 默认夹两重保护 / 两入口重名处置有意相反 / 落盘往返与排序），本片只补了一条 `payload()` 往返。<br>② **本片补上的是缺的那一环 = 文案断言**：`FolderCopy` 与 `ProfileCopy` 到这一天为止**一条断言都没有**（同族的 `ConversationCopy` / `CommitCopy` / `ActionCopy` / `RefreshCopy` / `FileOperationCopy` 都有专门文件）—— 而 `AGENTS.md §5` 的纪律是"文案是契约、一律提为可测领域数据"。新增 **`FolderCopyTests`**（三张页 + 四张弹层 + 三句成功提示，含两条"有意不同"的成对断言：两个入口的重名句、首次收藏那句必须带「再点可选择列表」）与 **`ProfileCopyTests`**（我的页 / 我的 Star / 设置页 / §5.11，含两条最贵的：**菜单文字与那两页标题必须是同一个字符串**、**降级提示与设置页手动撤销入口必须成对存在**）。<br>③ 数字：`GitDuoKit` 987 → **1011 / 85 套件**（+24 项 / +2 套件）；**五包 1616 → 1640 项 / 144 套件**；`make verify` 全绿；**强制全量重编（`touch` 全部 `.swift`）零编译警告**。<br>⚠️ **完成定义第 3 条（与原型逐屏对照）本片未做** —— 5 页 + 6 弹层全部要登录才可达，见上方那条提醒。 | ✅ |
+
+> **切片 10 施工图（2026-10-09 起）**：**收尾片** —— 骨架屏统一 · 无障碍 · 性能预算核对。
+> 对应 `TECH_SPEC` **§8.5**（骨架屏统一四条判据）· **§10.5**（无障碍五条核对清单）·
+> **§10.7**（三个玻璃封装组件从未落地的原因）· **§13.1**（首屏预算怎么核对：两条半只能人工）。
+> ⚠️ **它不新增任何页面、也不改任何视觉** —— 全部工作是逐条核实与收口，**核实结论本身是交付物**。
+> ⚠️ **它是最后一片**，**完成定义第 3 条攒到最后一起走**（用户 2026-10-09 拍板）：
+> 彼时要走的是**两张表** —— 走查单 22–26（切片 9）+ 本片新增项。
+> ⚠️ **三条判据只在"系统设置动过之后"才现形**（降低动态效果 / 动态字体 / VoiceOver）⇒
+> 本片的核实**不能靠肉眼看默认状态**，要逐一去代码里查（`SkeletonBar.animates(reduceMotion:)` 那条先例）。
+
+| # | 内容 | 状态 |
+|---|---|---|
+| 10.0 | 文档先行：`TECH_SPEC §8.5` 补「骨架屏统一」四条判据 · `§10.5` 补无障碍五条核对清单 · `§10.7` 记下三个玻璃封装组件**从未落地**（因为一次都没被需要）· `§13.1` 补「首屏预算怎么核对」+ 本文件 §0 与施工图 | ✅ |
+| 10.0a | **实际落地（2026-10-09）**：`§8.5` **+四条判据**（单一原子 / 形状留 Feature / 尺寸对齐 / 三档不互换）· `§10.5` **+五条核对清单**并写清**两条边界**（判据①"文字"与"图标"要分开说、判据⑤ 是"核对登记"而不是"全改成 44pt"）· `§10.7` 补一段"那三个封装为什么不存在"· `§13.1` 补「两条半只能人工」并说明玻璃数量为何是结构性优势。⚠️ **判据 ⑤ 与"图标固定字号"两条是本次新增口径**，都先写进文档再动代码（同 #47 的处置） | ✅ |
+| 10.1 | 骨架屏统一：按四条判据逐处核实（**单一原子** / **形状留 Feature** / **尺寸对齐** / **三档不互换**）并收口。⚠️ 需要用户裁定的一处：`SkeletonScreen` 现在**已无调用点**，收尾后留还是删 | ✅ |
+| 10.1a | **实际落地（2026-10-09）**：<br>**判据 ① 单一原子 ✅**：全项目"骨架色（`surfaceSunken`）+ 圆角矩形"这个组合**只有 `SkeletonBar` 内部那一处**（其余 `surfaceSunken` 的用法逐个看过，都是真组件：`.ghost` 按钮底 / 分段槽 / 分支胶囊 / 卡片内的小槽）。生产调用点 90 处。<br>**判据 ② 形状留 Feature ✅**：设计包里除 `SkeletonBar` 外**没有任何骨架视图**；**6 个命名组合件**（`RepoCardSkeleton` · `PinGridSkeleton` · `ExploreBoardSkeleton` · `ExploreSubListSkeleton` · `SearchResultsSkeleton` · `StarRowSkeleton`）+ **18 处内联**，全部在自己的 Feature 里，且**每一个都挨着它对应的真实组件**（多数就写在同一个文件）。<br>**判据 ③ 尺寸对齐 ⚠️ 发现 4 处真缺陷并修掉**：<br>① `RepoTreeSection.skeleton` 用 `CardBox(vertical: Theme.Spacing.m)`（12），而同文件真实的那个是 `Theme.Spacing.xs`（4）⇒ 数据到达时整块上移 8pt；<br>② `RepoDetailView.commitsSkeleton` 同样 m vs 真实的 xs，且**没有行内边距**（真实 `RepoCommitRow` 有 `padding:11px 4px`）⇒ 雪上加霜；<br>③ `RepoDetailView.codeSkeleton` 与 `RepoTreeSection` 的骨架**逐字重复**（两份）⇒ 收成一个新件 **`RepoTreeSkeleton`**；<br>④ `BranchesView.skeleton` 用 `CardBox(vertical: m, horizontal: 14)`，而真实是 `(vertical: 0, horizontal: 0)`（`BranchRow` 自带 `padding:13px 14px`）⇒ 卡片上下多 12pt、左右多缩进 14pt，5 行还挤成一条。<br>⚠️ **③ 的过程中撞到一条语言事实**：`RepoTreeSection` 是**泛型视图**（`RepoTreeSection<Trailing: View>`，那个 `Trailing` 是面包屑右侧的动作位）⇒ 写 `RepoTreeSection.skeleton` **编译不过**（`generic parameter 'Trailing' could not be inferred`）。**修法不是加泛型参数，而是把共享骨架落成一个独立的非泛型件**（`RepoTreeSkeleton`）—— 两边都写 `RepoTreeSkeleton()`，仍然只有一处定义。<br>⚠️ **另有一处"逐字相同但有意不收"**：`LabelPickerSheet.skeleton` 与 `BranchSheet.skeleton` 代码完全一样，但它们**各对着不同的真实行**（标签行 vs 分支行）⇒ **保持独立**。收成一份之后，改"标签行"的人会以为自己把"分支行"也改了 —— 而它们本来是两条对齐链。<br>**判据 ④ 三档不互换 ✅**：首屏用骨架、续页用 `ProgressView`（`RepoDetailView.commitsFooter` / `SearchView` / `MyStarsView` / `ReposView` 逐处核对）、操作类走 `ActionButton(isWorking:)` + 禁用。 | ✅ |
+| 10.2 | 无障碍：按五条清单逐条核实并补齐（**动态字体** / **可点控件能念出** / **装饰件不念** / **降低动态效果** / **触控目标 ≥44pt**） | ✅ |
+| 10.2a | **实际落地（2026-10-09）**：<br>① **动态字体**：**文字 100% 合格** —— `Theme.Font` 的每一个令牌都是**相对样式**（`.caption2` / `.body` / `.headline` / `.system(.footnote, design: .monospaced)`），没有一个写死点数。⚠️ **但"全项目零 `.system(size:)`"是错的**（我在 §10.5 初稿里就这么写的，实测推翻）：全项目有 **50 处** `.font(.system(size:))`，逐处看过 —— **全部是 SF Symbol 图标或头像里的首字母，没有一处是正文文字**。⇒ 拆成两句写进 `§10.5`：文字 ✅、**图标写死尺寸**（不随动态字体缩放）**登记为有意取舍**（原型是唯一可点验收依据，改 50 处等于重定全部图标视觉）。<br>② **可点控件能念出**：3 处工具栏图标按钮（首页 / 仓库 / 探索的右上角放大镜）**都有** `accessibilityLabel("搜索")`；容器级收口的做法已成型（`RepoCard` 用 `accessibilityElement(children: .ignore)` + 一句拼好的 label；`RepoHeroCard` 头部 `.combine`；`StarRow` 的星形图标 `accessibilityHidden`；`RepoHeroCard` 的 Watch / Fork 两颗**不可点**按钮用 `removeTraits(.isButton)` + `accessibilityHint` 说明原因，同决策 #51）。<br>③ **装饰件不念**：设计包逐件核对 —— `SkeletonBar` / `RepoAvatar` / `LabelDot` / `LanguageBar` / `StatusPill` / `ContributionHeatmap` / `Toast` 都带 `accessibilityHidden(true)`；6 处骨架视图里 3 处（`SearchResultsSkeleton` / `ExploreSubListSkeleton` / `RepoDetailView.skeleton` 等）在**容器级**又加了一次（重复但无害，且更稳）。<br>④ **降低动态效果**：`SkeletonBar.animates(reduceMotion:)` 是**纯函数 + 有断言**（先例）；`Toast` / `UserAvatar` / `StatButton` 同一模式。<br>⑤ **触控目标**：**按文档判据做"核对并登记、不追改"** —— 行内的 `ActionButton(verticalPadding: 7)`（如「已 Star」那颗，约 31pt 高）与搜索框的清除按钮**小于 44pt**，但把它们撑到 44 会**改行高**（SwiftUI 里扩大命中区必须先扩大 frame）⇒ 动的是原型定下的视觉。**逐条判断的结论：不动**，理由与"图标固定字号"同一条。 | ✅ |
+| 10.3 | 性能预算核对：代码级核对 §13.1 三条（**无自定义玻璃** / 列表 `Lazy*` / `onAppear` 无同步重活 / 装配点不联网）；**只能人工的那两条半登记为用户目视项** | ✅ |
+| 10.3a | **实际落地（2026-10-09）**：<br>① **玻璃数量受控 —— 本项目是"结构性"达标**：全 App **没有任何自定义玻璃控件**，`.glassEffect` 全项目**只在注释里出现**；导航栏 / Tab / 工具栏 / Sheet 外框的玻璃全部由系统提供 ⇒ 这一项不需要逐页数（也正是 §10.7 那三个封装组件从未存在的原因）。<br>② **列表 `Lazy*` ✅**：`ReposView` / `HomeView`（`LazyVGrid`，且与骨架**共用同一组 `columns` 定义**）/ `ExploreView` / `RepoDetailView`（代码与 Commits 两段）/ `SearchView` / `MyStarsView` 逐个核对。⚠️ `RepoDetailView` 那处的注释把理由写清了：用 `VStack` 会把所有行一次建出来，「滚到底自动加载」于是变成"一进页面就把后面每一页都请求一遍"。<br>③ **`onAppear` 无同步重活 ✅**：Markdown 块级解析（§11.1）**在取数层做完**（`MarkdownDocument` 构造时解析，`LoadRepoTree` / `IssueComment` 两处注释都写明了"视图拿到的是已解析的块"）；unified diff 解析（§11.2）**在卡片展开时才做**（`DiffCard` 注释 + `LoadRepoCommits` 的那句"按需只能由调用方保证"）。<br>④ **装配点不联网 ✅**：`AppEnvironment.init` 里**没有任何网络调用**，取数一律在页面 `.task` 里触发。<br>⑤ ⚠️ **冷启动 ≤1.5s 与稳定 60fps 只能真机**（秒表 / Instruments）⇒ 按 `§13.1` 的规定**登记为用户目视项**，与完成定义第 3 条那一批一起走。**AI 侧不报"性能达标"**。 | ✅ |
+| 10.4 | 收尾：`make verify` 全绿 · **强制全量重编零警告** · 四份文档 · 记忆 · 一个提交 | ✅ |
 
 > **切片 6 施工图（2026-10-07 起）**：文件查看 + 提交详情 + 分支管理 **+ 仓库详情外壳（PRD §4.4）**。
 > 对应 PRD **§4.4 / §4.5 / §4.7 / §4.8**（+ §5.7 切换分支弹层 / §5.8 添加文件弹层 / §3.10 分支）。

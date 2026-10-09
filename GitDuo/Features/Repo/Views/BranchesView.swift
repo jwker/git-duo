@@ -172,15 +172,24 @@ struct BranchesView: View {
         }
     }
 
+    /// ⚠️ **容器参数与行内边距必须与上面那个真实的 `loaded(_:)` 对齐**：
+    /// 真实卡是 `CardBox(vertical: 0, horizontal: 0)` —— 因为 `BranchRow` **自带**
+    /// `padding:13px 14px`（原型 `.menu-item`）。
+    /// 2026-10-09 切片 10 修：骨架此前写的是 `CardBox(vertical: Theme.Spacing.m, horizontal: 14)`
+    /// 且行内没有任何内边距 ⇒ 卡片上下多 12pt、左右多缩进 14pt，且 5 行挤成一条。
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 0) {
             SkeletonBar(height: 12, width: 200)
                 .padding(.top, Theme.Spacing.l)
                 .padding(.horizontal, Theme.Spacing.xxs)
 
-            CardBox(vertical: Theme.Spacing.m, horizontal: 14) {
+            CardBox(vertical: 0, horizontal: 0) {
                 ForEach(0..<5, id: \.self) { _ in
                     SkeletonBar(height: 18, width: 170)
+                        // 与 `BranchRow` 的 `padding:13px 14px` 同值。
+                        .padding(.vertical, 13)
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 

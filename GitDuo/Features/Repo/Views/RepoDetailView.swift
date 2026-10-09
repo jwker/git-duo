@@ -576,30 +576,30 @@ struct RepoDetailView: View {
             SkeletonBar(height: 34)
                 .padding(.top, Theme.Spacing.m)
 
-            codeSkeleton
+            // ⚠️ 代码分区那一块**复用共享件的骨架**（`RepoTreeSkeleton`）——
+            //    本文件此前自己抄了一份逐字相同的（`codeSkeleton`），随切片 10 收口删除。
+            //    理由同 6.4 建 `RepoTreeSection` 时那条：**同一个 UI 元素有两处定义 ⇒ 必然分叉**。
+            RepoTreeSkeleton()
         }
         .accessibilityHidden(true)
     }
 
-    /// 文件树的骨架：一条面包屑 + 若干行。
-    private var codeSkeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            SkeletonBar(height: 32)
-            CardBox(vertical: Theme.Spacing.m, horizontal: 14) {
-                ForEach(0..<6, id: \.self) { _ in
-                    SkeletonBar(height: 15, width: 190)
-                }
-            }
-        }
-    }
-
+    /// 提交段的骨架。
+    ///
+    /// ⚠️ **容器参数与行内边距必须与上面那个真实的 `commitsList` 对齐**
+    /// （`CardBox(vertical: Theme.Spacing.xs)` + `RepoCommitRow` 的 `padding:11px 4px`）。
+    /// 2026-10-09 切片 10 修：此前写的是 `Theme.Spacing.m`（12）且没有行内边距 ⇒
+    /// 数据到达时**整块上移 8pt**，随后每一行再各挪一次。
     private var commitsSkeleton: some View {
-        CardBox(vertical: Theme.Spacing.m, horizontal: 14) {
+        CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
             ForEach(0..<6, id: \.self) { _ in
                 HStack(spacing: 10) {
                     SkeletonBar(height: 28, width: 28, cornerRadius: 14)
                     SkeletonBar(height: 13, width: 200)
+                    Spacer(minLength: 0)
                 }
+                .padding(.vertical, 11)
+                .padding(.horizontal, Theme.Spacing.xs)
             }
         }
     }

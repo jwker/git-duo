@@ -221,16 +221,14 @@ struct RepoTreeSection<Trailing: View>: View {
 
     // MARK: - 骨架 / 失败
 
+    /// 本分区首屏的骨架。
+    ///
+    /// ⚠️ **形状与尺寸纪律都在 `RepoTreeSkeleton` 里**（2026-10-09 切片 10 收口）：
+    /// §4.4 的代码分区用的就是本视图，而 `RepoDetailView` 此前**自己又抄了一份
+    /// 逐字相同的骨架** ⇒ 两边现在共用 `RepoTreeSkeleton`。
+    /// 本件只是把它接在这里（写法与原先一致）。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            SkeletonBar(height: 32)
-            CardBox(vertical: Theme.Spacing.m, horizontal: 14) {
-                ForEach(0..<6, id: \.self) { _ in
-                    SkeletonBar(height: 15, width: 190)
-                }
-            }
-        }
-        .accessibilityHidden(true)
+        RepoTreeSkeleton()
     }
 
     /// 分区内的失败 —— 内容区里的一小块，**不掀翻整页**（§8.5）。
