@@ -157,13 +157,21 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 | 仓库详情页那颗按钮"我 Star 过没有"（`GET /user/starred/{o}/{r}`）+「我的 Star」列表 | **read** | ✅ **通过**（那颗按钮显示的是「**已 Star**」而不是「Star」，列表也有内容） |
 | 点下去那一下（`PUT` / `DELETE /user/starred/{o}/{r}`） | **write** | ❌ 403 ⇒ `操作失败 · 请重试` |
 
-⇒ **读得到、写不了** ⇒ 令牌带着 `Starring` 的**读**，缺的是**写**。
-⚠️ **而"设置页上写着 Read and write"与它并不矛盾 —— 两者是两件事**：
+⇒ **写路径确认是缺的**：两个写请求都回 **403 + `{"message":"Resource not accessible by integration"}`**
+—— 这是 GitHub 对"**App 令牌权限不足**"的标准措辞（不是"这个人/这个仓库没权限"），
+且两个 403 的响应头都写着该端点**要求的**权限集 `starring=write,metadata=read`。
+⚠️ **"设置页上写着 Read and write"与它并不矛盾 —— 两者是两件事**：
 设置页看的是 App **当前的声明**，令牌带的是**授权那一刻的快照**；
 升级账号级权限**不会**让已发出去的令牌自动获得
 （`GITHUB-APP-SETUP.md §2.10` 那条 🔴，官方原文逐字在那一节）。
 依据是官方对本端点那句话：*"The fine-grained token must have the following permission set:
 **`Starring` user permissions (write)** …"*。
+
+> ⚠️ **判据别记岔（2026-10-09 我自己在这上面连错三次）**：**"读得到"不等于"令牌有读权限"。**
+> `GET /user/starred`（列表）官方明写 *"can be used without authentication or the aforementioned permissions
+> if only public resources are requested"* ⇒ 拿它去反推"令牌有 `Starring` 读"**本身不成立**。
+> 真正定死结论的是**写请求那两条 403 的响应体**，不是读请求那两条 200/204。
+> 一般化的教训：**一个"看起来很像证据"的现象，要先问它"换一种成因还会不会这样"。**
 
 > ⚠️ **注意官方原文里那一项叫 "user permissions"（用户级），而 App 设置页上它在 "Account permissions" 分组里**
 > —— 同一个东西的两个叫法。别在设置页上找 "user permissions" 找不到就以为没有这一项。
@@ -176,13 +184,15 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 | 2 | **把 GitHub 侧那条授权真正撤掉**：`https://github.com/settings/connections/applications/Iv23liKmpmDl65pKlS1p` → **Revoke access** | ⚠️ **只在 App 里退出登录可能不算数**（见下那条缺陷）——旧授权活着，下次登录就可能复用它的权限快照 |
 | 3 | 回 GitDuo **退出登录 → 重新登录**，**并留意浏览器有没有出现授权页** | 出现 ⇒ 点同意 ⇒ 新令牌才带上 `write`；**不出现就说明又在复用旧授权** ⇒ 回到第 2 步 |
 
-> ⚠️ **为什么"退出登录 → 重新登录"可能白做**（2026-10-09 查得的 **App 侧缺陷，待修**）
+> ✅ **为什么"退出登录 → 重新登录"可能白做**（2026-10-09 查得并**当场修掉的 App 侧缺陷**）
 > 登出撤销若没真的成功，GitHub 侧的授权（grant）会活着；下次登录就可能复用那条旧授权
-> ⇒ **新令牌仍带着旧的权限快照**。而 `AuthCoordinator.signOut` 有两处让"没成功"看不出来：
-> ① 撤销用的是 Keychain 里那张**可能已过期**的令牌（官方要求必须提供 **valid** `access_token`）
->    —— 过期即失败，而失败只是降级成 `revokedLocallyOnly`；
+> ⇒ **新令牌仍带着旧的权限快照**。而 `AuthCoordinator.signOut` 原来有两处让"没成功"看不出来：
+> ① 撤销用的是 Keychain 里那张**可能已过期**的令牌（官方要求必须提供 **valid** `access_token`，
+>    而 `ghu_` 只活 8 小时）—— 过期即失败，而失败只是降级成 `revokedLocallyOnly`；
 > ② `store.load()` 抛错时**根本没发撤销请求**，`outcome` 却仍是 `.revoked`（**谎报"已撤销"**）。
-> 在修好之前，用第 2 步那条**网页撤销**绕过去。
+> **两处都已修**（先改 `TECH_SPEC §3.6` 补两条 🔴，再改代码 + 两条测试）：
+> ① 改成"**先用手里那张试；失败才刷新一次、拿新令牌再试一次**"（成功路径不多花请求，失败路径不吃闷亏）；
+> ② 读不出凭据时如实降级为 `.revokedLocallyOnly`。
 
 > ✅ **已排除（2026-10-09，实测）**：**不是**请求组装的问题。官方对 `PUT /user/starred/{o}/{r}` 写着
 > *"you'll need to set `Content-Length` to zero when calling out to this endpoint"*，所以我们那条
@@ -194,8 +204,10 @@ Revert 客户端实现 · 置顶增删 · 交流语言筛选 · 深链 · 大文
 > 令牌类型（实测 `ghu_` = user-to-server，正是这类端点要的那种）、URL 形状（实测打印出的 URL 正确）、
 > 配额（`x-ratelimit-remaining` 四千多）。
 
-> ⏳ **待你回报**：第 2、3 步做完之后那一下是否成功。若**仍然 403** ⇒ 说明 App 声明的级别其实不是 `write`
-> （那就回到第 1 步逐字核对），届时我会把临时诊断再跑一次确认。P1 / P4 / P5 / P6 按现状，P3 已结。
+> ⏳ **待你回报**：第 2、3 步做完之后那一下是否成功（写请求是否从 403 变 204）。
+> 若**仍然 403** ⇒ 说明 App 声明的级别其实不是 `write`（那就回到第 1 步逐字核对）。
+> 工程侧已经把能验的都验完了：**端点 / 传输层 / 令牌注入 / 错误归一化 / API 版本 / 授权 URL / URL 形状 / `Content-Length` 全部排除**
+> ⇒ 剩下的变量只在 GitHub 侧的授权状态上。P1 / P4 / P5 / P6 按现状，P3 已结。
 
 ---
 
@@ -1315,8 +1327,8 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 ⚠️ **本次这一批没有 AI 侧的记录**（用户自行走完、只回传"零条目"）⇒ 结论已收下，但**它不构成"某一行被真验过"的证据**，
 与切片 6 / 7 那两批（逐条回传）在证据强度上不同，如实留痕。
 
-**验证闭环已就绪**：`make verify` = **五包单测（当前 1675 项全过 / 148 套件）** + 模拟器构建，一条命令，**零编译警告**。
-（**GitHubAPI 409** · GitDuoAuth 57 · **GitDuoCore 63** · GitDuoDesign **106** · **GitDuoKit 1040 / 88 套件**）
+**验证闭环已就绪**：`make verify` = **五包单测（当前 1677 项全过 / 148 套件）** + 模拟器构建，一条命令，**零编译警告**。
+（**GitHubAPI 409** · **GitDuoAuth 59** · **GitDuoCore 63** · GitDuoDesign **106** · **GitDuoKit 1040 / 88 套件**）
 ⚠️ **2026-10-09 走查修复第 4 条那一次**：GitDuoDesign **103 → 106 / 11 → 12 套件**（新增 `SheetFailureHintTests` 三条），
 其余四包不变 ⇒ 总数 1657 → **1660**。
 ⚠️ **2026-10-09 走查修复第 5、6 条那一次**：GitDuoKit **1027 → 1028**（`ProfileCopyTests` 新增一条钉住登出在途文案），
@@ -1325,6 +1337,13 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 两条：`PATCH` 的路径 / 请求体 / 服务端回的那份详情，以及 403 照常抛）· **GitDuoKit 1028 → 1040 / 87 → 88 套件**
 （新套件 `IssueActionTests` 九条 + 三条文案契约；`RepoEndpointsContractTests` 的接缝清点 **16 → 17 条**不吃测试项数）
 ⇒ 总数 1661 → **1675**。数字变了就顺手改这里，别让它漂（这条本身就是本文件在修的那类毛病）。
+⚠️ **2026-10-09 走查 #3（Star 写 403）结案那一次**：**GitDuoAuth 57 → 59 / 4 套件不变**
+（`AuthCoordinatorTests` 两条：`signOutRetriesRevokeWithRefreshedToken` 钉住"撤销失败 ⇒ 刷新一次、**拿新令牌再试一次**"
+且第二次必须送刷新后那张；`signOutDoesNotClaimRevocationWhenCredentialsUnreadable` 钉住"读不出凭据 ⇒ 不许报 `.revoked`"；
+外加 `signOutRevokesThenClears` 补一条"一次就成 ⇒ 刷新 0 次"）⇒ 总数 1675 → **1677**。
+配套：新增替身 `UnreadableTokenStore`；`TECH_SPEC §3.6` 先加两条 🔴 才改代码（§5.1 先文档后代码）。
+⚠️ **`#expect(_:_:)` 的注释位是 `Comment?`，只认字面量** —— 用 `"…" + "…"` 拼接会编译失败
+（2026-10-09 实录：`AuthCoordinatorTests` 第一次编译不过就是这个），拼长句就写成**一整条字面量**。
 ⚠️ **日志里唯一一条 `warning:` 来自 `appintentsmetadataprocessor`**（"Metadata extraction skipped, no AppIntents.framework dependency found"）——
 那是 Xcode 的 AppIntents 元数据处理器在**没有 AppIntents 依赖**时的例行提示，**不是编译器警告**；
 判据是 `grep -cE "warning: .*\.swift"` 必须为 **0**（否则数出来的"零警告"是假的）。

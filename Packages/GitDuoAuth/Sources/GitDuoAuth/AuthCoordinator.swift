@@ -307,19 +307,40 @@ public actor AuthCoordinator {
     /// ⚠️ **撤销失败不阻塞登出**：本地凭据照清（§3.6）。这不是"尽力而为"的敷衍——
     ///    用户按下"退出登录"的意思就是"这台机器上别再能用了"，撤销只是顺手把
     ///    GitHub 侧那条记录也收掉；为了收不掉的那条记录把用户留在登录态，是颠倒主次。
+    ///
+    /// 🔴 **但"撤销"这一下必须尽力做到底、且不许谎报**（2026-10-09 补，§3.6 那条 🔴）：
+    ///
+    /// ① **撤销要用一张"当下有效"的令牌** —— 官方要求提供 *"a **valid** OAuth `access_token`"*，
+    ///    而 `ghu_` 只活 8 小时。所以：**先用手里那张试**（成功路径因此不多花一个请求），
+    ///    **失败才刷新一次、拿新令牌再试一次**。少了后半步，"退出登录"就可能**悄悄地没撤销**，
+    ///    于是下次登录复用旧授权、新令牌仍带着旧的权限快照 —— 而**账号级权限升级后
+    ///    "重新走一遍授权"是官方指定的唯一修法**（2026-10-09 实测走查 #3 那条 Star 写 403）。
+    /// ② **连凭据都读不出来时，结局不得报 `.revoked`** —— 那一格**根本没发出撤销请求**，
+    ///    说"已撤销 GitHub 侧授权"是一句没有依据的陈述。
     public func signOut() async -> SignOutOutcome {
+        var credentialUnreadable = false
         let loaded: StoredToken?
         do {
             loaded = try store.load()
         } catch {
             loaded = nil
+            credentialUnreadable = true
         }
 
         var outcome = SignOutOutcome.revoked
-        if let stored = loaded {
-            do {
-                try await oauthClient.revokeAuthorization(accessToken: stored.accessToken)
-            } catch {
+        if credentialUnreadable {
+            // 见上面 ②：没有可用的凭据 ⇒ 一次撤销都没做过 ⇒ 不许说"已撤销"。
+            outcome = .revokedLocallyOnly
+        } else if let stored = loaded {
+            if await didRevoke(accessToken: stored.accessToken) {
+                outcome = .revoked
+            } else if let refreshed = try? await singleFlightRefresh(at: clock()) {
+                // 见上面 ①：手里那张多半是过期了（8 小时）⇒ 换一张有效的再试一次。
+                outcome = await didRevoke(accessToken: refreshed.accessToken)
+                    ? .revoked
+                    : .revokedLocallyOnly
+            } else {
+                // 刷新也失败（离线 / refresh_token 已失效）⇒ 如实降级。
                 outcome = .revokedLocallyOnly
             }
         }
@@ -336,6 +357,20 @@ public actor AuthCoordinator {
     }
 
     // MARK: - 内部
+
+    /// 撤销一次授权，**成功与否用返回值说**（而不是抛出去）。
+    ///
+    /// 拆出它是为了让 `signOut` 里"试一次 → 换令牌再试一次"那两步读起来是两句话，
+    /// 而不是两层 `do/catch`。⚠️ 失败**不外传**是有意的：登出的语义是"无论如何都要登出"，
+    /// 撤销的成败只影响**提示档位**，不影响本地清理。
+    private func didRevoke(accessToken: String) async -> Bool {
+        do {
+            try await oauthClient.revokeAuthorization(accessToken: accessToken)
+            return true
+        } catch {
+            return false
+        }
+    }
 
     /// **single-flight 刷新**：并发调用共享同一个 `Task`，令牌端点只会收到一次请求。
     private func singleFlightRefresh(at moment: Date) async throws -> StoredToken {

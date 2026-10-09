@@ -698,6 +698,69 @@ struct AuthCoordinatorTests {
         let body = try #require(StubURLProtocol.bodyData(of: revoke))
         let fields = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
         #expect(fields["access_token"] == "ghu_old")
+        #expect(
+            harness.count(method: "POST", path: Self.tokenEndpointPath) == 0,
+            "一次就成 ⇒ 不该多花一个刷新请求（新增的重试只挂在失败路径上）"
+        )
+    }
+
+    @Test("撤销失败 ⇒ 刷新一次、**拿新令牌再试一次**（少了这一下，登出可能悄悄地没撤销）")
+    func signOutRetriesRevokeWithRefreshedToken() async throws {
+        try store.save(storedToken())
+        harness.setStubs([
+            // 手里那张（`ghu_old`）已过期 ⇒ 服务端拒（422）
+            .response("DELETE", Self.revokePath, status: 422),
+            // 而 `refresh_token` 还在 6 个月内 ⇒ 刷新能拿到 `ghu_new`
+            .response("POST", Self.tokenEndpointPath, Self.refreshedJSON, status: 200),
+        ])
+        defer { harness.reset() }
+
+        let outcome = await makeCoordinator().signOut()
+
+        #expect(outcome == .revokedLocallyOnly, "两次都没成 ⇒ 如实降级，不谎报")
+        #expect(try loadStored() == nil)
+
+        let revokes = harness.requests.filter { $0.httpMethod == "DELETE" }
+        #expect(
+            revokes.count == 2,
+            "失败后必须再试一次 —— 少了这一下 GitHub 侧那条旧授权会活下来，下次登录会复用它的权限快照（账号级权限升级后这是唯一的修法）"
+        )
+        #expect(harness.count(method: "POST", path: Self.tokenEndpointPath) == 1)
+
+        func accessToken(of request: URLRequest) throws -> String? {
+            let body = try #require(StubURLProtocol.bodyData(of: request))
+            let fields = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+            return fields["access_token"]
+        }
+
+        #expect(try accessToken(of: revokes[0]) == "ghu_old")
+        #expect(
+            try accessToken(of: revokes[1]) == "ghu_new",
+            "⚠️ 第二次必须送**刷新后**的那张 —— 仍送旧的话，这一次重试只是白打一遍"
+        )
+    }
+
+    @Test("连凭据都读不出来 ⇒ **不许报「已撤销」**（那一格根本没发出撤销请求）")
+    func signOutDoesNotClaimRevocationWhenCredentialsUnreadable() async throws {
+        harness.setStubs([])
+        defer { harness.reset() }
+
+        let coordinator = AuthCoordinator(
+            credentials: Self.credentials,
+            tokenStore: UnreadableTokenStore(),
+            session: harness.makeSession(),
+            cachePurger: purger,
+            clock: { Self.fixedNow }
+        )
+
+        let outcome = await coordinator.signOut()
+
+        #expect(
+            outcome == .revokedLocallyOnly,
+            "没发出过撤销请求就不能说'已撤销 GitHub 侧授权'—— 那是一句没有依据的陈述"
+        )
+        #expect(harness.requests.isEmpty, "读不出凭据 ⇒ 一次请求都不该发")
+        #expect(purger.purgeCount == 1, "本地照样清干净（§3.6：失败不阻塞登出）")
     }
 
     @Test("撤销失败（422）：**仍清空本地凭据**，只把结局降级")
@@ -826,4 +889,20 @@ struct AuthCoordinatorTests {
         #expect(!AuthError.notConfigured.invalidatesCredentials)
         #expect(!AuthError.notAuthenticated.invalidatesCredentials)
     }
+}
+
+/// 读凭据**直接抛错**的替身 —— 只有它能造出"登出时连撤销请求都没发出去"那一格
+/// （`InMemoryTokenStore.load()` 不抛，所以那一格在它身上测不出来）。
+///
+/// 依据：`TECH_SPEC §3.6` 那条 🔴 的 ② —— 没发过撤销请求就不能报"已撤销"。
+private final class UnreadableTokenStore: TokenStore, @unchecked Sendable {
+
+    func save(_ token: StoredToken) throws {}
+
+    func load() throws -> StoredToken? {
+        // 形状对齐生产：Keychain 读失败会带着一个 `OSStatus` 出来。
+        throw TokenStoreError.unexpectedStatus(-25300)
+    }
+
+    func clear() throws {}
 }
