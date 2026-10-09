@@ -154,6 +154,20 @@ final class AppEnvironment {
     /// "App 层知道 GitDuoCore 有什么"，而那正是这条接缝存在的理由。
     let uploadIntake: UploadIntake
 
+    // MARK: - 领域用例（切片 9）
+
+    /// 「我的」页的两路取数（昵称 / 简介 + 贡献日历与两个计数 —— 决策 #76）。
+    ///
+    /// ⚠️ 它**不抛错**：两条路各自降级成 `ProfileSection`，页面据此分块处理
+    /// （`LoadProfileOverview` 的类型说明里记着"为什么不打捞部分成功"）。
+    let profileOverview: LoadProfileOverview
+
+    /// 「我的 PR / 我的 Issue」两页的取数（单条 part + 排序，决策 #73 / #44）。
+    ///
+    /// ⚠️ 与 `search` 一样是 **actor**（缓存活在它里面）⇒ 组合根只此一份。
+    /// 两页共用它：`kind` 就是它缓存里的键（只有两个可能的键，不需要 LRU）。
+    let conversations: LoadMyConversations
+
     // MARK: - 本地存储
 
     /// 最近访问（落盘实现见 `UserDefaultsRecentVisitStore`）。
@@ -185,6 +199,19 @@ final class AppEnvironment {
     /// ⇒ `signOut()` 必须清掉（§3.6 第 ③ 步）。
     let commentDrafts: any CommentDraftStore
 
+    /// 收藏夹与收藏归属（落盘实现见 `UserDefaultsFolderStore`，§9.12）。
+    ///
+    /// ## ⚠️⚠️ 全 App **只能有这一个实例**
+    ///
+    /// 「我的收藏」管理页（`FoldersView`）与仓库详情页的「选择收藏列表」弹层
+    /// （`ExploreRepoDetailView` 的 ② 分区）读的是**同一份数据**（§9.12 末段）。
+    /// 两个实例的表现是"在一边建了夹、另一边看不见"，而两边看起来都正常
+    /// —— 与 `branchMemory` 那条先例一模一样（那条的后果是"记忆时有时无"）。
+    /// ⇒ **任何地方都不要再 new 一个**，一律从组合根取这一个。
+    ///
+    /// ⚠️ 它是**账号数据**：夹名是用户自己起的 ⇒ `signOut()` 必须清掉（§3.6 第 ③ 步）。
+    let folders: any FolderStore
+
     // MARK: - 全局 UI 通道
 
     /// 轻提示的唯一通道（TECH_SPEC §8.4）—— 挂在 `MainTabView` 上，四个 Tab 共用。
@@ -195,9 +222,13 @@ final class AppEnvironment {
 
     /// 接口缓存（`HTTPResponseCache`，两个客户端共用同一份）。
     ///
-    /// 留着这个引用**只为一件事**：登出时整盘清空（§3.6 第 ③ 步）。
-    /// 它没有观察价值（不驱动任何界面），所以标 `@ObservationIgnored`。
-    @ObservationIgnored private let responseCache: HTTPResponseCache
+    /// **两个用处**：① 登出时整盘清空（§3.6 第 ③ 步）；
+    /// ② 设置页的「清除缓存」要**量一次**再**清一次**（决策 #75）。
+    /// 它没有观察价值（不驱动任何界面），所以标 `@ObservationIgnored`；
+    /// 但**不能是 `private`** —— 设置页由 `RouteView` 装配，它得能拿到这一份
+    /// （在设置页里另建一个 `HTTPResponseCache` 只会让"清缓存"清掉一个空目录，
+    /// 而界面上照旧显示已释放多少）。
+    @ObservationIgnored let responseCache: HTTPResponseCache
 
     /// 系统浏览器胶水（无逻辑，因此不注入、不可替身）
     @ObservationIgnored private let webAuth = WebAuthenticationSession()
@@ -236,11 +267,15 @@ final class AppEnvironment {
         let searchHistory = UserDefaultsSearchHistoryStore()
         let branchMemory = UserDefaultsBranchMemoryStore()
         let commentDrafts = UserDefaultsCommentDraftStore()
+        // ⚠️ 切片 9：收藏夹。它**没有网络那一半**（GitHub 连读接口都没有，§9.12），
+        //    所以在"本地存储"这一段里造，与另外五个落盘 store 并列。
+        let folders = UserDefaultsFolderStore()
         self.recentVisits = visits
         self.starSnapshots = snapshots
         self.searchHistory = searchHistory
         self.branchMemory = branchMemory
         self.commentDrafts = commentDrafts
+        self.folders = folders
 
         self.repositories = LoadRepositoriesPage(
             source: GitHubRepositoryEndpoint(client: client)
@@ -347,6 +382,22 @@ final class AppEnvironment {
         //    `targetBytes` 走默认值 = `SaveFile.maxContentBytes`：压缩的目标与写通道的上限
         //    必须是**同一个数**，分开写的那天会出现"压到 1.2MB 再被 1MB 的判据拒掉"。
         self.uploadIntake = UploadIntake(processor: ImageProcessor())
+
+        // ── 切片 9：「我的」那条线上的取数（收藏夹见上面"本地存储"那一段）。
+        //
+        // ⚠️ `GitHubProfileDataSource` 要**两个客户端**（REST 取 `/user`、
+        //    GraphQL 取日历与两个计数）—— 它们是两个端点、两个配额桶、
+        //    两条会各自失败的路径（那个类型的说明里记着这条）。
+        //    传的是上面造好的那**同一个** `client` / `graphQL`，
+        //    分开 new 会让缓存与配额各算各的，而且不报错。
+        self.profileOverview = LoadProfileOverview(
+            source: GitHubProfileDataSource(restClient: client, graphQLClient: graphQL)
+        )
+        // ⚠️ 与搜索页**共用搜索桶**（30 次/分钟）⇒ 这一页用「加载更多」按钮而不是
+        //    滚到底自动加载（决策 #44）。端点由适配器按 `kind` 选限定符（决策 #73）。
+        self.conversations = LoadMyConversations(
+            source: GitHubMyConversationsDataSource(client: client)
+        )
     }
 
     /// 接口缓存（§5.1 的 L2：内存 + 磁盘，**自建**，绝不启用系统 `URLCache` —— 决策 #32）。
@@ -441,16 +492,19 @@ final class AppEnvironment {
         //    · 最近搜索（切片的 5 —— 它记的是"这个人在搜什么"）
         //    · 分支记忆（切片 6.4 —— 分支名会暴露私有仓库的结构）
         //    · 评论草稿（切片 7 —— 草稿里可能有还没发布的正文）
+        //    · 收藏夹与归属映射（切片 9 —— 夹名是用户自己起的）
         //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
-        //    尚未接入（落地时补在这一处）：收藏夹与归属映射（切片 9）。
         await recentVisits.clear()
         await starSnapshots.clear()
         await searchHistory.clear()
         await branchMemory.clear()
         await commentDrafts.clear()
-        // ⚠️ `LoadSearch` 也是 actor，它缓存的是**上一个账号搜出来的结果**（含私有仓库名）
-        //    ⇒ 与接口缓存同一条：不清就会在新账号的界面上露出来。
+        await folders.clear()
+        // ⚠️ `LoadSearch` 与 `LoadMyConversations` 都是 actor，它们缓存的是
+        //    **上一个账号搜出来的结果**（含私有仓库名、他提过的 PR）⇒
+        //    与接口缓存同一条：不清就会在新账号的界面上露出来。
         await search.invalidateAll()
+        await conversations.invalidateAll()
         // ⚠️ `HTTPResponseCache` 是 actor（它的内存 LRU 要被多个请求并发读写）⇒ 必须 await。
         _ = await responseCache.removeAll()
 
@@ -458,9 +512,12 @@ final class AppEnvironment {
         router.resetAll()
 
         authState = .unauthenticated
+        // ⚠️ 两句都取自领域层（`ProfileCopy`），**不在这里写字符串**：
+        //    降级那句带着「可在设置中手动撤销」—— 少了它，设置页那个兜底入口
+        //    就等于不存在（用户只知道"没撤销成功"，不知道还能去哪补救）。
         notice = outcome == .revoked
-            ? .info("已退出登录 · 已同时撤销 GitHub 侧授权")
-            : .info("已退出登录 · 本机令牌已清除（未能撤销 GitHub 侧授权）")
+            ? .info(ProfileCopy.signedOutNotice)
+            : .info(ProfileCopy.signOutDegradedNotice)
     }
 }
 
@@ -500,9 +557,14 @@ enum AuthNotice: Equatable {
 ///        `pullDetail` / `pullAction` 五条用例与 `commentDrafts` 的装配）。
 /// 已消解：`RouteView` 的 `.editor`（切片 8.4 → `EditorView` + `saveFile` / `renameFile` /
 ///        `deleteFile` 三条写用例的装配）。
+/// 已消解：`RouteView` 的 `.stars` / `.folders` / `.settings`（切片 9.4+9.5 →
+///        `MyStarsView` / `FoldersView` / `SettingsView` + `profileOverview` /
+///        `folders` / `conversations` 三条用例与 `conversations` 的登出清缓存）。
+/// 已消解：「我的」Tab 根页（切片 9.4 → `ProfileView` 重写，摘掉 `SkeletonScreen`；
+///        登出那一行已迁进 `SettingsView`）。
 enum SkeletonPlaceholders {
-    static let registry: [String] = [
-        "「我的」Tab 根页（`ProfileView` 仍是骨架屏，切片 9）",
-        "`RouteView` 里仍走 `SkeletonScreen` 的推入页：我的 Star / 我的收藏 / 设置（9）"
-    ]
+    /// ⚠️ **空数组 = 全 App 没有占位块了**（切片 9 是"占位清零"的那一片）。
+    /// 它自己就是完成定义里的那条闸门：再出现任何一个占位，都得在这里加一行
+    /// （`AGENTS.md §5.2`）—— 留着不删，登记册就退化成了装饰。
+    static let registry: [String] = []
 }

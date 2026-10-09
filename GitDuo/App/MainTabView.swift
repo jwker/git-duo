@@ -46,7 +46,10 @@ struct MainTabView: View {
             }
             Tab(AppTab.profile.title, systemImage: AppTab.profile.systemImage, value: AppTab.profile) {
                 NavigationStack(path: $router.profile) {
-                    ProfileView()
+                    // ⚠️ `login` 这个参数是切片 9.4 补上的：本页要画大头像与 `@登录名`，
+                    //    而它们**不从网络来**（本机由登录名画出来）⇒ 拿的就是这里这个值。
+                    //    它同时是 `ProfileView` 里"昵称 / 简介"之外的**唯一不可失败项**。
+                    ProfileView(login: login, overview: env.profileOverview)
                         .navigationDestination(for: Route.self) { RouteView(route: $0) }
                 }
             }

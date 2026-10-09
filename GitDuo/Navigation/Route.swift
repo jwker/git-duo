@@ -46,4 +46,20 @@ enum Route: Hashable, Sendable {
     case stars
     case folders
     case settings
+
+    /// 「我的 Pull Request」/「我的 Issue」（切片 9 新增，`TECH_SPEC §8.2`、决策 #73）。
+    ///
+    /// ## ⚠️ 为什么带一个 `kind` 参数，而不是两个 case
+    ///
+    /// 两页**同构**，只有三处不同（标题 · 空态两行 · 查询口径），三者全部由
+    /// `ConversationKind` 决定、全在领域层（`MyConversationsCopy` / `MyConversationsQuery`）。
+    /// 做成两个 case 就要在 `RouteView` 里把同一个视图写两遍，而那两遍
+    /// **必然**在某次改动里分叉（"改了 PR 那页的标题、忘了 Issue 那页"）。
+    ///
+    /// ## ⚠️ 它**不复用搜索页**
+    ///
+    /// 原型这两个菜单项是"直接跳详情"（演示数据里正好各有一条）—— 真实数据下
+    /// 必须先有一张列表。而搜索页那个范围在 App 用户令牌下是 Issue / PR **混排**的
+    /// （决策 #47），与菜单项上写的字不符 ⇒ 只能新增这两屏（决策 #73、PRD §4.21）。
+    case myConversations(kind: ConversationKind)
 }

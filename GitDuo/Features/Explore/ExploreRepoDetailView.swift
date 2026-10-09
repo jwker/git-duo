@@ -5,15 +5,15 @@ import GitDuoKit
 
 /// 探索仓库详情 · 他人仓库（推入页）（PRD §4.13、TECH_SPEC §9.11）。
 ///
-/// ## 8 个分区分属两个切片（PRD §4.13 的分片表）
+/// ## 8 个分区**全部落地**（PRD §4.13 的分片表）
 ///
-/// | 分区 | 本切片 |
+/// | 分区 | 落地 |
 /// |---|---|
-/// | ① 仓库头部 · ③ 语言构成 · ④ Latest Release · ⑤ 文件浏览 · ⑥ README.md · ⑦ 参与协作 · ⑧ 贡献者 | ✅ 本切片 |
-/// | ② 我的收藏（私人整理） | 切片 9 |
+/// | ① 仓库头部 · ③ 语言构成 · ④ Latest Release · ⑤ 文件浏览 · ⑥ README.md · ⑦ 参与协作 · ⑧ 贡献者 | 切片 4 / 6.4 |
+/// | ② 我的收藏（私人整理） | **切片 9**（本件） |
 ///
-/// 未落地的那个用 `PendingSection` 显式标注 —— 整块不渲染会让评审看不出还差什么
-/// （`AGENTS.md §0` 的"一眼可辨、不冒充成品"）。
+/// ⚠️ ② 落地之后本页**再没有占位块**，`PendingSection` 随之全 App 消失
+/// （切片 9 是"占位清零"的那一片，`REVIEW-CHECKLIST` 第 149 条）。
 ///
 /// ## ⚠️ ⑤ / ⑥ 两分区是**共享件**渲染的
 ///
@@ -28,12 +28,17 @@ import GitDuoKit
 /// 而弹层是 `BranchSheet(isReadOnly: true)`：**不给**「管理分支…」入口
 /// （在他人仓库上给一个管理入口，点进去每一行都必然失败，而失败原因从那一屏看不出来）。
 ///
-/// ## ⚠️ 本页**不含任何写操作**（Star 除外）
+/// ## ⚠️ 本页**不含任何写操作**（Star 与收藏除外）
 ///
 /// 没有 添加 / 编辑 / 提交 / Revert —— 那些只在「我的仓库」详情页。
 /// 归属由**路由**在进入前定下（铁律 #7），所以这里**不要**读 `detail.canWrite`
 /// 去长出编辑入口：那会让"两种入口能做的事不一致"。
+///
+/// ⚠️ **收藏不在此列**：它是**本机数据**，与仓库归属无关 ——
+/// 谁都能把别人的仓库收进自己的私人列表（PRD §6.2 的"私人整理 · 仅你自己可见"）。
+/// 所以它不受"他人仓库只读"这条约束，也不需要 `canWrite`。
 struct ExploreRepoDetailView: View {
+
 
     let fullName: String
 
@@ -48,14 +53,22 @@ struct ExploreRepoDetailView: View {
 
     /// 本页的弹层路由。
     ///
-    /// ⚠️ 用 `Identifiable` 枚举驱动 `.sheet(item:)`，**不用 `isPresented` 布尔量**
-    /// （同 `RepoDetailView`）：切片 9 的「收藏夹选择」落地后会多出第二张弹层，
+    /// ⚠️ 用 `Identifiable` 枚举驱动 `.sheet(item:)`，**不用 `isPresented` 布尔量**：
+    /// 三张弹层里有两条**互相切换**的路径（② 的「新建收藏夹…」→ §5.6），
     /// 两个布尔量同时为真时"哪一张盖在上面"就变成了呈现顺序问题，
     /// 而那种 bug 只在特定点击序列下出现。一个枚举天然只有一张。
+    ///
+    /// ⚠️ 收藏那两张之间**只换值、不经过 `nil`**（关一次再开一次会空一帧，
+    /// 与 `FoldersViewModel.SheetRoute` 同一条）。
     @State private var sheet: ExploreSheet?
 
     private enum ExploreSheet: String, Identifiable {
         case branch
+        /// §5.5 选择收藏列表（PRD §4.13 的 ② 分区那颗按钮）。
+        case favorites
+        /// §5.6 前半 —— 从上面那张弹层底部的「新建收藏夹…」进来，按钮是「创建并收藏」。
+        case newFolder
+
         var id: String { rawValue }
     }
 
@@ -74,6 +87,7 @@ struct ExploreRepoDetailView: View {
         starToggle: ToggleStar,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
+        folders: any FolderStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
@@ -87,6 +101,8 @@ struct ExploreRepoDetailView: View {
             starToggle: starToggle,
             memory: memory,
             visits: visits,
+            // ⚠️ 组合根那**唯一一个** `FolderStore`（与「我的收藏」管理页共用）。
+            folders: folders,
             toast: toast
         ))
     }
@@ -127,6 +143,39 @@ struct ExploreRepoDetailView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .task { await model.loadBranches() }
+
+            case .favorites:
+                // §5.5。⚠️ 清单与"当前在哪个夹"都是 `model` 上的那一份快照
+                //    —— 弹层自己不读存储（读第二遍就可能与 ② 分区那一行对不上）。
+                FavoriteListSheet(
+                    summaries: model.folderSummaries,
+                    current: model.favoriteFolder,
+                    onPick: { name in
+                        // ⚠️ **先关再做事**：`pickFolder` 会 toast，
+                        //    而 toast 挂在 `MainTabView` 上、弹层盖不住它的话人看不见。
+                        //    这里沿用原型 `pickFav` 的顺序（先 `closeSheet()` 再吐提示）。
+                        sheet = nil
+                        Task { await model.pickFolder(name) }
+                    },
+                    onNewFolder: {
+                        // ⚠️ **只换值、不经过 `nil`**（见 `ExploreSheet` 的说明）。
+                        sheet = .newFolder
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+
+            case .newFolder:
+                // §5.6 前半 —— 仓库详情入口，按钮是「创建并收藏」。
+                NewFolderSheet(entry: .repository) { name in
+                    // 空名 ⇒ 留在弹层里（模型回 `false`），只给一条提示；
+                    // 建成 / 重名复用 ⇒ 关掉（与原型的 `closeSheet()` 一致）。
+                    Task {
+                        if await model.createFolderAndFavorite(name: name) { sheet = nil }
+                    }
+                }
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -153,7 +202,7 @@ struct ExploreRepoDetailView: View {
         }
     }
 
-    /// 分区顺序 = PRD §4.13 的 1…8（跳过的两个用占位块顶住位置，让评审能逐条对照）。
+    /// 分区顺序 = PRD §4.13 的 1…8（**8 个全部落地**，切片 9 之后没有占位块）。
     @ViewBuilder
     private func sections(_ insights: RepoInsights) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -166,10 +215,7 @@ struct ExploreRepoDetailView: View {
                 Task { await model.toggleStar() }
             }
 
-            PendingSection(
-                title: ExploreRepoCopy.myFoldersSection,
-                note: "切片 9 落地 · 收藏是纯本地能力（PRD §6.2）"
-            )
+            favoriteSection
 
             languageSection(insights)
 
@@ -181,6 +227,68 @@ struct ExploreRepoDetailView: View {
 
             contributorSection(insights)
         }
+    }
+
+    // MARK: - ② 我的收藏（私人整理 · 仅自己可见）
+
+    /// 两颗按钮互斥，由 `favoriteFolder` 决定（原型 `10-explore-repo.js` 逐字）。
+    ///
+    /// ## ⚠️ 这一块**与 Star 那一套完全不同**
+    ///
+    /// 它是**纯本地**的（GitHub 没有收藏夹这个资源，§9.12）⇒ 没有"在途"、
+    /// 没有失败态、不需要先确认基准。唯一需要注意的是**首帧**：
+    /// `favoriteFolder` 在读到之前是 `nil`，而"没读过"与"没收藏过"在画面上长得一样
+    /// （都是那颗「收藏到我的列表」）。差别只在一瞬（本地读），所以这里不另造一档骨架
+    /// —— 但 `ExploreRepoViewModel.start()` 里那次读**必须排在网络取数之前**
+    /// （那里的注释写着为什么）。
+    ///
+    /// ## ⚠️ 两颗按钮都走 `ActionButton(.ghost)`，**这一步与原型有三处不同**
+    ///
+    /// 原型那颗「已收藏 · {夹名}」用的是 `.btn.ghost` + 行内覆盖（链接色前景 + 链接色描边），
+    /// 而且两颗按钮**都带图标**（书签；已收藏那颗还带一个尾部尖角）。
+    /// `ActionButton` 没有图标槽位（`REVIEW-CHECKLIST` 有意偏差第 24 条），
+    /// 也没有"链接色"这一档 —— 新造一档要同时定它的前景 / 描边两个值，
+    /// 而原型只在一处用过它。取舍是**用既有那一档、把差别记进第 24 条**：
+    /// 三处差别（图标 / 链接色 / 尖角）都是"少了一小截"，不是行为差别。
+    @ViewBuilder
+    private var favoriteSection: some View {
+        SectionHeader(title: ExploreRepoCopy.myFoldersSection)
+
+        if let folder = model.favoriteFolder {
+            ActionButton(
+                // 原型 `${svg(I.bm)} 已收藏 · ${favFolderOf(p.repo)} ${svg(I.chevD)}`
+                // —— 前缀（含 ` · ` 分隔）在 `FolderCopy` 里，夹名由这里拼。
+                title: FolderCopy.favoritedActionPrefix + folder,
+                style: .ghost,
+                // 原型 `style="width:100%;padding:11px"`。
+                verticalPadding: 11
+            ) {
+                sheet = .favorites
+            }
+            hint(FolderCopy.favoriteHintFavorited)
+        } else {
+            ActionButton(
+                title: FolderCopy.favoriteAction,
+                style: .ghost,
+                verticalPadding: 11
+            ) {
+                // ⚠️ 首次收藏是**一发本地写**（原型 `favNow`）—— 不进弹层。
+                //    弹层留给"已经收藏过、想换夹"那一步（§9.12 的两段式交互）。
+                Task { await model.favoriteToDefault() }
+            }
+            hint(FolderCopy.favoriteHintIdle)
+        }
+    }
+
+    /// 按钮下面那行灰字（原型 `.t3{text-align:center;margin-top:6px}`）。
+    ///
+    /// ⚠️ `margin-top:6px` 不在 4pt 阶里 ⇒ 写原值（同 `SheetHint` 的处置）。
+    private func hint(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.Font.caption)
+            .foregroundStyle(Theme.Palette.textTertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
     }
 
     // MARK: - ③ 语言构成
@@ -495,6 +603,7 @@ struct ExploreRepoDetailView: View {
             starToggle: environment.starToggle,
             memory: environment.branchMemory,
             visits: environment.recentVisits,
+            folders: environment.folders,
             toast: environment.toast
         )
     }

@@ -347,3 +347,138 @@ actor UserDefaultsStarSnapshotStore: StarSnapshotStore {
         return StarSnapshot.decodeList(from: data)
     }
 }
+
+/// 收藏夹与收藏归属的**落盘实现**（TECH_SPEC §7.1 存储表：`UserDefaults` + JSON、§9.12）。
+///
+/// 与「最近访问」「最近搜索」「草稿」三条同一分工：语义在领域包
+/// （`InMemoryFolderStore` —— §9.12 归属表逐行、计数纯派生、默认夹两重保护），
+/// 编解码走 `FolderCoding`（有往返测试）。本类型只做"读出来 → 交给它 → 存回去"。
+///
+/// ## ⚠️ 它带的是**两段**数据，不是一列
+///
+/// 前面几个 store 都只有一列（访问记录 / 搜索词 / 快照 / 草稿），这里有两样：
+/// 收藏夹列表（**有序**，顺序就是展示顺序）与归属映射。
+/// 两样都收在 `FolderCoding.Payload` 里 ⇒ 整份存、整份取 ——
+/// 分两个键存的话，"建了夹但归属还没写"会成为一个**真实可达**的中间态，
+/// 而它出现在磁盘上的样子是"默认夹之外多一个空夹"或"一条指向不存在夹的归属"，
+/// 两者都只能靠加载时归一化去猜（`FolderCoding` 的说明里记着这条）。
+///
+/// ## ⚠️ 为什么不直接自己维护一个字典（与 `UserDefaultsBranchMemoryStore` 相反）
+///
+/// 因为 `move` / `rename` / `delete` 三处都藏着"漏一个字节就错"的规则
+/// （改名要把映射的**值**一起改、删夹要**先回落再删**）。在这里再实现一遍
+/// 就成了第二份实现，而落盘这一份**没有测试**（App target 没有测试 target）——
+/// 它会成为那个没人看守、却每次冷启动都要走的分支。
+/// 所以这里持有 `InMemoryFolderStore` 作为唯一实现，改完取一次 `payload()` 整份落盘
+/// —— 与 `UserDefaultsCommentDraftStore` 借 `allDrafts()` 是同一条先例。
+///
+/// ## ⚠️ 整个 App 只能有**一个实例**
+///
+/// 「我的收藏」管理页与仓库详情页的「选择收藏列表」弹层读的是同一份数据
+/// （`TECH_SPEC §9.12` 末段）。两个实例的表现是"在一边建了夹、另一边看不见"，
+/// 而两边看起来都正常 —— 同 `branchMemory` 那条先例。
+///
+/// ⚠️ 它是**账号绑定数据**：收藏夹名是用户自己起的（"以后再看"、"给老板看的"），
+/// 留着它换个账号登进来还能读到 ⇒ `signOut()` 的 ③ 步必须 `clear()`（§3.6）。
+actor UserDefaultsFolderStore: FolderStore {
+
+    static let keyPrefix = "GitDuo.folders"
+
+    private let defaults: UserDefaults
+    private let key: String
+    private let backing: InMemoryFolderStore
+
+    /// - Parameter namespace: 账号命名空间（多账号预留，同 `UserDefaultsRecentVisitStore`）。
+    init(defaults: UserDefaults = .standard, namespace: String = "default") {
+        self.defaults = defaults
+        let storageKey = "\(Self.keyPrefix).\(namespace)"
+        self.key = storageKey
+
+        // ⚠️ 解不出 ⇒ **回落成"只有默认夹"**，而不是"零个收藏夹"：
+        //    零个收藏夹是一个**不合法**的状态（新收藏没有落点）。
+        //    `FolderCoding.decode` 用 `nil` 把"解不出"与"合法但空"分开，
+        //    正是为了让这条加载路径不可能漏掉补齐默认夹这一步。
+        let payload = Self.load(from: defaults, key: storageKey)
+        self.backing = InMemoryFolderStore(
+            seed: payload?.folders ?? [],
+            favorites: payload?.mapping ?? [:]
+        )
+    }
+
+    // MARK: 读（纯转发，不落盘）
+
+    func summaries() async -> [FolderSummary] { await backing.summaries() }
+
+    func folderNames() async -> [String] { await backing.folderNames() }
+
+    func folder(ofRepo fullName: String) async -> String? {
+        await backing.folder(ofRepo: fullName)
+    }
+
+    func count(in folderName: String) async -> Int {
+        await backing.count(in: folderName)
+    }
+
+    // MARK: 写（转发 + 整份落盘）
+
+    func move(repo fullName: String, to folderName: String) async -> FolderMoveOutcome {
+        let outcome = await backing.move(repo: fullName, to: folderName)
+        // 即使结果是 `.unchanged` / `.unknownFolder` 也存一次：内容一模一样，
+        // 写回的是**对方归一化之后的状态**（同 `UserDefaultsRecentVisitStore.record`）。
+        // 为省这一次写而多一个"哪些返回值不必落盘"的判断，是本末倒置。
+        await persistCurrent()
+        return outcome
+    }
+
+    @discardableResult
+    func remove(repo fullName: String) async -> Bool {
+        let removed = await backing.remove(repo: fullName)
+        await persistCurrent()
+        return removed
+    }
+
+    func create(name rawName: String) async -> FolderCreationOutcome {
+        let outcome = await backing.create(name: rawName)
+        await persistCurrent()
+        return outcome
+    }
+
+    func rename(from oldName: String, to rawName: String) async -> FolderRenameOutcome {
+        let outcome = await backing.rename(from: oldName, to: rawName)
+        await persistCurrent()
+        return outcome
+    }
+
+    func delete(name rawName: String) async -> FolderDeletionOutcome {
+        let outcome = await backing.delete(name: rawName)
+        await persistCurrent()
+        return outcome
+    }
+
+    func clear() async {
+        await backing.clear()
+        // 与另外几个 store 一样删键而不是留一份"只有默认夹"的负载：
+        // 读取端分辨不出这两者（加载时本来就会补齐默认夹），能不落痕就不落痕
+        // —— 而这一份留痕的代价是用户自己起的那些夹名。
+        defaults.removeObject(forKey: key)
+    }
+
+    // MARK: - 落盘
+
+    /// 整份覆盖，不做增量（同 `UserDefaultsRecentVisitStore.persist` 的取舍：
+    /// 增量更新要自己维护"删哪条、插到哪"，而那是把领域层的规则重写一遍）。
+    ///
+    /// ⚠️ **不放进 `Task {}` 里异步写**：那样"方法返回了"与"内容真的落盘了"之间
+    /// 会有一个窗口，而用户完全可能在这之后立刻杀进程 ——
+    /// 丢掉的正是他刚建好的那个收藏夹（而界面上它刚才明明在）。
+    private func persistCurrent() async {
+        let payload = await backing.payload()
+        guard let data = FolderCoding.encode(payload) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    private static func load(from defaults: UserDefaults, key: String) -> FolderCoding.Payload? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return FolderCoding.decode(from: data)
+    }
+}

@@ -444,4 +444,50 @@ struct FolderCodingTests {
         #expect(await store.count(in: "x") == 1)
         #expect(await store.folderNames() == [FolderDefaults.name, "x"])
     }
+
+    @Test("⚠️ `payload()` 取出的是**变更之后**的内容，且能原样还原（落盘实现唯一的取数口）")
+    func payloadRoundTripsAfterMutations() async {
+        // 这一条守的是落盘实现（App 组合根那个 `UserDefaultsFolderStore`）赖以工作的前提：
+        // 它自己不重写任何语义，每次改完只是"把 `payload()` 整份存回去" ⇒
+        // 只要这个出口漏掉了某一半（比如改名后映射的值没跟上），
+        // 磁盘上就会留下一个**默认夹之外的空夹**或一条指向不存在夹的归属。
+        // 而那种数据在屏幕上看起来只是"收藏少了几条"，不会报错。
+        let oldFolder = "旧的"
+        let newFolder = "新的"
+        let inOld = "owner/in-old"
+        let inDefault = "owner/in-default"
+
+        let store = InMemoryFolderStore(seed: [Folder(name: oldFolder)], favorites: [:])
+        _ = await store.move(repo: inOld, to: oldFolder)
+        _ = await store.move(repo: inDefault, to: FolderDefaults.name)
+        // 改名 ⇒ 映射的"值"必须跟着改（§9.12 归属表第 5 行）。落盘取数口
+        // 若在这一步之后仍能还原出 `新的`，说明两段数据是一起出去的。
+        _ = await store.rename(from: oldFolder, to: newFolder)
+
+        let payload = await store.payload()
+        let restored = InMemoryFolderStore(
+            seed: payload.folders,
+            favorites: payload.mapping
+        )
+
+        // ⚠️ `await` 一律先落到局部量里再进 `#expect` —— 宏里直接写 `await`
+        //    会静默地断言错东西（`AGENTS.md §5` 那条高频坑）。
+        let restoredNames = await restored.folderNames()
+        let originalNames = await store.folderNames()
+        let restoredInOld = await restored.folder(ofRepo: inOld)
+        let restoredInDefault = await restored.folder(ofRepo: inDefault)
+        let restoredNewCount = await restored.count(in: newFolder)
+        let restoredDefaultCount = await restored.count(in: FolderDefaults.name)
+
+        #expect(restoredNames == originalNames)
+        #expect(restoredInOld == newFolder)
+        #expect(restoredInDefault == FolderDefaults.name)
+        #expect(restoredNewCount == 1)
+        #expect(restoredDefaultCount == 1)
+
+        // ⚠️ 顺带钉住"归属表是排过序的"：不排序的话 `Dictionary` 的迭代顺序
+        //    每次运行都可能不同 ⇒ 同一份收藏两次落盘会得到两个不同字节序列。
+        let repos = payload.favorites.map { $0.repo }
+        #expect(repos == repos.sorted())
+    }
 }

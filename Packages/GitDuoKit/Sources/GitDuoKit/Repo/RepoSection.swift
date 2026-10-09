@@ -11,11 +11,12 @@ import Foundation
 ///
 /// ## ⚠️ 「本片交付了哪几段」**不在这里**
 ///
-/// 决策 #50 定下切片 6 只交「代码」与「Commits」，Issues / Pull Requests 归切片 7，
-/// 落地方式是"分段条照画满四项、未交付的两段用 `PendingSection` 显式标注"。
+/// 决策 #50 曾定下切片 6 只交「代码」与「Commits」，Issues / Pull Requests 归切片 7，
+/// 落地方式是"分段条照画满四项、未交付的两段用占位块显式标注"。
 /// 那条信息属于**施工进度**，不属于产品语义 —— 把它做成 `RepoSection.isDelivered`
 /// 会让这个枚举在切片 7 之后还需要再改一次（去掉那个属性），
 /// 而"哪几段还没做"的判断本来就该在路由/视图那一层（那里才看得见当前进度）。
+/// **四段现已全部交付**（7.4 换真件），那个占位块类型也随切片 9 一起删掉了。
 public enum RepoSection: String, CaseIterable, Sendable {
 
     case code

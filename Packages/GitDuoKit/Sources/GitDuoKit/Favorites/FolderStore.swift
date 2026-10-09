@@ -137,6 +137,15 @@ public enum FavoriteCreationOutcome: Sendable, Equatable {
 public protocol FolderStore: Sendable {
 
     /// 内置默认收藏夹的名字（`FolderDefaults.name` 的转发，免得调用方多 import 一层概念）。
+    ///
+    /// ⚠️ **2026-10-09（切片 9.5 接线时实测）**：它**不能**通过 `any FolderStore` 用。
+    /// Swift 不允许在存在类型的元类型上取静态成员 —— 写
+    /// `FolderStore.defaultFolderName` 会报
+    /// `static member 'defaultFolderName' cannot be used on protocol metatype '(any FolderStore).Type'`。
+    /// 而本项目所有的消费点持有的都是 `any FolderStore`（组合根里就存这个类型）
+    /// ⇒ 那几处一律直接写 `FolderDefaults.name`（`FolderCopy.deleted` 本来就这么写）。
+    /// 这个静态成员目前只在**具体类型**上（`InMemoryFolderStore.defaultFolderName`）可达，
+    /// 保留它是为了协议自身表达的完整（"默认夹叫什么"是存储语义的一部分）。
     static var defaultFolderName: String { get }
 
     /// 全部收藏夹 + 各自的项目数，**顺序即展示顺序**（默认夹恒在第一位）。
@@ -299,6 +308,25 @@ public actor InMemoryFolderStore: FolderStore {
 
     public func count(in folderName: String) async -> Int {
         favorites.values.count { $0 == folderName }
+    }
+
+    /// 供**落盘实现**取整份快照（`FolderCoding.Payload` 的两段数据）。
+    ///
+    /// ## ⚠️ 为什么协议里没有它、而这里必须有
+    ///
+    /// 协议那九个方法都是"按一个问题问一件事"，界面从不需要整份数据 ——
+    /// 把 `payload()` 提进协议会让每个实现都被迫多一个没人调用的出口。
+    ///
+    /// 但落盘实现（`UserDefaults` + JSON，在 App 组合根）**必须**能拿到两段数据的当前值：
+    /// 它自己不重写任何语义（"重命名要把映射的值一起改"这类规则留在本 actor 里），
+    /// 每次变更后只是"把对方归一化之后的内容整份存回去"。
+    /// 与 `InMemoryCommentDraftStore.allDrafts()` 是同一条先例（那边收的是草稿整份）。
+    ///
+    /// ⚠️ 返回的是 `Payload`（`favorites` 已按仓库全名排序）而不是两个裸集合：
+    /// `Dictionary` 的迭代顺序每次运行都可能不同，直接拿字典去编码会让
+    /// "同一份收藏两次落盘得到两个不同字节序列"（`FolderCoding.Payload` 的说明）。
+    public func payload() async -> FolderCoding.Payload {
+        FolderCoding.Payload(folders: folders, mapping: favorites)
     }
 
     // MARK: 收藏 / 取消

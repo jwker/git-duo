@@ -70,6 +70,9 @@ struct RouteView: View {
                 starToggle: env.starToggle,
                 memory: env.branchMemory,
                 visits: env.recentVisits,
+                // 切片 9：② 「我的收藏」分区（§5.5 / §5.6）。
+                // ⚠️ 与「我的收藏」管理页共用组合根那一个 `FolderStore`（§9.12 末段）。
+                folders: env.folders,
                 toast: env.toast
             )
         case let .fileView(fullName, path, readOnly):
@@ -175,11 +178,42 @@ struct RouteView: View {
         case let .explorePRList(fullName):
             ExplorePRListView(fullName: fullName, pulls: env.repoPulls)
         case .stars:
-            SkeletonScreen(title: "我的 Star", slice: "切片 9 落地", reference: "PRD §4.18")
+            // PRD §4.18。切片 9.4 起是真页面（此前是骨架屏）。
+            // ⚠️ `starToggle` 传组合根里那**同一个** `ToggleStar` ——
+            //    Star 的「先确认基准、再幂等切换」只有一处实现（决策 #41）。
+            //
+            // ⚠️ 这一页复用 `LoadRepositoriesPage` + `.starred` 这个来源（切片 3 就有），
+            //    **没有**新写一个 Star 列表用例（7.1a 的说明里记着这条核实结论）。
+            MyStarsView(
+                loader: env.repositories,
+                starToggle: env.starToggle,
+                toast: env.toast
+            )
         case .folders:
-            SkeletonScreen(title: "我的收藏", slice: "切片 9 落地", reference: "PRD §4.19 · 纯本地，零请求")
+            // PRD §4.19。⚠️ 传的是组合根那**唯一一个** `FolderStore` ——
+            //    仓库详情页的「选择收藏列表」弹层读的是同一份数据；
+            //    这里若 new 一个，表现是"在一边建了夹、另一边看不见"（§9.12 末段）。
+            FoldersView(store: env.folders, toast: env.toast)
+        case let .myConversations(kind):
+            // PRD §4.21 / 决策 #73。⚠️ 两页共用**同一个** `LoadMyConversations`
+            //    （它缓存里按 `kind` 分键）⇒ 切到「我的 Issue」再切回来不重发一轮
+            //    —— 那个桶只有 30 次/分钟。
+            MyConversationsView(kind: kind, loader: env.conversations)
         case .settings:
-            SkeletonScreen(title: "设置", slice: "切片 9 落地", reference: "PRD §4.20")
+            // PRD §4.20。⚠️ `login` 取自 `authState`（本机就有），**不再打一次 `/user`**
+            //    （§9.15 逐字）。它在这里**一定非空** —— `RouteView` 只活在 `MainTabView` 里，
+            //    而后者由 `RootView` 在 `.authenticated` 那支才构建
+            //    （铁律：未认证时不构建 `TabView`，§3.8）。
+            //    写成 `?? ""` 只为少一层 `if let`：真出现空串（理论上不可达）时，
+            //    那一行会显示成 `GitHub App · `，是个显眼的瑕疵而不是静默的错误。
+            //
+            //    `cache` 必须是组合根里那一份接口缓存 —— 在设置页里另建一个，
+            //    「清除缓存」清掉的是一个空目录，而界面上照旧显示已释放多少（决策 #75）。
+            SettingsView(
+                login: env.authState.login ?? "",
+                cache: env.responseCache,
+                toast: env.toast
+            )
         }
     }
 }
