@@ -7,12 +7,25 @@ import SwiftUI
 ///         justify-content:center;font-weight:700;color:#fff;font-size:13px}
 /// ```
 ///
-/// ## 两处消费场景，两个尺寸档
+/// ## 三处消费场景，三个尺寸档
 ///
 /// | 档 | 直径 | 出处 |
 /// |---|---|---|
 /// | `.rowDiameter` | 34 | `.sr-item .avatar`（搜索结果行 / 贡献者） |
 /// | `.sheetDiameter` | 52 | §5.10 用户资料弹层（原型 `openUserSheet` 的 52×52） |
+/// | `.profileDiameter` | 86 | §4.17「我的」页头部（原型 `.profile-head .big-avatar`，切片 9 加） |
+///
+/// ## ⚠️ 首字母字号**不跟直径联动**，是三个各写各的值
+///
+/// 原型三处的字号是 13 / 19 / 30px（对直径 34 / 52 / 86）——
+/// 比值分别是 0.382 / 0.365 / 0.349，**不是一个比例**，
+/// 所以"按直径乘一个系数"复现不出这三处（写 0.36 会让 34 那一档从 13 变成 12.2）。
+/// 于是这里**不推导**：由调用方用 `initialFont` 传。
+///
+/// ⚠️ `initialFont` 默认 `nil` = 用 `Theme.Font.label`（`.caption` 11pt semibold）
+/// ⇒ **34 / 52 两档的既有观感一个像素都不变**。这两档与原型（13 / 19）本来就差着，
+/// 那是切片 4 / 5 已验收的样子，本片**不去动它**。
+/// 要一次性收口就改这一个默认值 —— 但那是另一次决定，别在加第三档的时候顺手做。
 ///
 /// ## ⚠️ 兜底色**不能用 `hashValue`**
 ///
@@ -38,6 +51,15 @@ public struct UserAvatar: View {
     /// §5.10 用户资料弹层的直径（原型 `openUserSheet` 的 52×52）。
     public static let sheetDiameter: CGFloat = 52
 
+    /// §4.17「我的」页头部的直径（原型 `.profile-head .big-avatar{width:86px}`，切片 9 加）。
+    public static let profileDiameter: CGFloat = 86
+
+    /// `.profileDiameter` 那一档的首字母字号（原型 `.big-avatar{font-size:30px;font-weight:800}`）。
+    ///
+    /// ⚠️ 权重是 **`.heavy`（800）**，不是另外两档的 `.bold` —— 原型那里写的就是 800，
+    /// 而它挂在 86pt 的圆上（比 `sheetDiameter` 大一倍多），字重差一档是看得出来的。
+    public static let profileInitialFont: Font = .system(size: 30, weight: .heavy)
+
     /// 登录名。**可空** —— 匿名贡献者没有。
     public let login: String?
 
@@ -52,16 +74,21 @@ public struct UserAvatar: View {
 
     public let diameter: CGFloat
 
+    /// 首字母的字号。`nil` = `Theme.Font.label`（既有两档的行为，见类型说明）。
+    public let initialFont: Font?
+
     public init(
         login: String?,
         avatarURL: URL? = nil,
         diameter: CGFloat = UserAvatar.rowDiameter,
-        fallbackSeed: String? = nil
+        fallbackSeed: String? = nil,
+        initialFont: Font? = nil
     ) {
         self.login = login
         self.avatarURL = avatarURL
         self.diameter = diameter
         self.fallbackSeed = fallbackSeed
+        self.initialFont = initialFont
     }
 
     public var body: some View {
@@ -90,7 +117,7 @@ public struct UserAvatar: View {
         ZStack {
             Circle().fill(Theme.Palette.avatarFallback[Self.colorIndex(for: fallbackSeed ?? login)])
             Text(Self.initial(for: login))
-                .font(Theme.Font.label)
+                .font(initialFont ?? Theme.Font.label)
                 .foregroundStyle(Theme.Palette.surface)
         }
     }
@@ -131,6 +158,12 @@ public struct UserAvatar: View {
         UserAvatar(login: "dev-k")
         UserAvatar(login: "yyx990803")
         UserAvatar(login: "jiangjiang", diameter: UserAvatar.sheetDiameter)
+        // 切片 9 那一档：86pt 圆 + 30pt/800 的首字母（不传 `initialFont` 会是 11pt —— 一个空圆）。
+        UserAvatar(
+            login: "jiangjiang",
+            diameter: UserAvatar.profileDiameter,
+            initialFont: UserAvatar.profileInitialFont
+        )
         UserAvatar(login: nil)
     }
     .padding(Theme.Spacing.page)

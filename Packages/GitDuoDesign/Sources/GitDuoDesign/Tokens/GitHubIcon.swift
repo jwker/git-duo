@@ -85,4 +85,31 @@ public enum GitHubIcon {
     //    ⚠️ 反过来说，`pencil` / `trash` 两个是**查过原型的**才加的：
     //    `11-favorites.js` 那两行 `.sheet-row` 里明明白白写着 `svg(I.pencil)` / `svg(I.trash)`。
     //    "切片 8 的弹层会不会也用图标"这件事不靠猜 —— §5.15 明写形态照 §5.12。
+
+    // MARK: - 「我的」页菜单与设置（切片 9）
+
+    /// 「Star 管理」菜单行 —— 原型 `I.star`（`12-me.js:23`）。
+    ///
+    /// ⚠️ 与 `StatButton` 那颗**星形按钮**用的是同一个字形，但颜色完全不同：
+    /// 那一颗在"已 Star"时取 `Theme.Palette.starActive`（金色），
+    /// 而菜单行恒是 `--text2`（`MenuRow` 给前导图标的那个）。
+    /// 两者共用的是**图标名**，不是颜色 —— 别因为"都是星"就把颜色也并过来
+    /// （金色在白底上对比度不足 2:1，见 `starActive` 的抬头）。
+    public static let star = "star"
+
+    /// 「我的收藏」菜单行 / 收藏夹行 —— 原型 `I.bm`（`12-me.js:24` 与 `11-favorites.js:71`）。
+    public static let bookmark = "bookmark"
+
+    /// 「设置」菜单行 —— 原型 `I.gear`（`12-me.js:29`）。
+    ///
+    /// ⚠️ 取的是小写 `gearshape`（齿轮形状那一个），**不是** `Gear` / `gearshape.fill`
+    /// —— 本文件抬头那条"名字写错不会报错、只会在界面上消失"在这里同样适用，
+    /// 而这个字面量是本片唯一没法靠单测钉住的东西。改它请务必跑一次模拟器。
+    public static let settings = "gearshape"
+
+    // ⚠️ 「我的 Pull Request」与「我的 Issue」两个菜单行**不在这里**：
+    //    它们取的是 `StateIcon.pullRequestOpen` / `StateIcon.issueOpen`
+    //    —— 原型的 `I.pr` / `I.issueO` 正是 `StateIcon` 那两个常量的出处，
+    //    再抄一份到这里就是"同一个字形两个名字"（本文件抬头点名的正是这件事）。
+    //    仓库详情页那两行 `LinkRow` 也是这么取用的（`ExploreRepoDetailView`）。
 }

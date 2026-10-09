@@ -226,6 +226,48 @@ public enum Theme {
         /// ⚠️ 别拿 `textSecondary`（`#656D76`）顶替 —— 那是个**文字**令牌，
         /// 让"按用途命名"这条规矩当场失效（下次有人想改正文次级色就会动到标签的底）。
         public static let labelFallbackSurface = Color(hex: 0x6A737D)
+
+        // MARK: 切片 9 新增（出处与理由见 TECH_SPEC §9.14 / 决策 #74③）
+
+        /// **贡献热力图**的 5 档配色 —— 原型 `styles/04-screens.css` 第 71–72 行的
+        /// `.hm-cell` / `.hm-cell.l1…l4`。
+        ///
+        /// ```css
+        /// .hm-cell{background:#ebedf0}
+        /// .hm-cell.l1{background:#9be9a8}.hm-cell.l2{background:#40c463}
+        /// .hm-cell.l3{background:#30a14e}.hm-cell.l4{background:#216e39}
+        /// ```
+        ///
+        /// **下标 = 档位**（`0` = 无贡献，`4` = 最深），与 `ContributionLevel.scale` 同一顺序。
+        ///
+        /// ## ⚠️⚠️ 它**不是**从接口返回值里读来的
+        ///
+        /// GraphQL 的 `contributionCalendar.colors` 会返回 GitHub 自己那套色值
+        /// （`contributionLevel` 就是拿去索引它的）。**不能用**，理由有二：
+        ///
+        /// 1. **万圣节期间那套色值会被整体换成南瓜色**（官方对 `isHalloween` 的注释
+        ///    写着 *"if true, the colors will be forced to Halloween colors"*）——
+        ///    照抄就会让这个 App 的界面在十月底跟着变，而**那是服务端的一个彩蛋，不是产品决定**；
+        /// 2. 那套色值**只保证是一串能用的颜色**，不保证对比度 / 与浅色主题相配。
+        ///
+        /// 决策 **#74③** 明写「配色走设计令牌」。这也正好与"颜色一律走语义 token、
+        /// 补深色时只改这一处"的既有口径一致（`TECH_SPEC §10.7`）。
+        ///
+        /// ## ⚠️ 档位数与服务端是**两处独立声明**，编译期连不起来
+        ///
+        /// `GitDuoKit` 有 `ContributionLevel.scaleCount = 5`，这里是 5 个元素 ——
+        /// 而**设计包不依赖领域包**（依赖铁律），所以"两边都是 5"这件事
+        /// **没有任何一行代码能断言**。哪天服务端多一档：
+        /// 领域层那边 `translate` 会按"有没有贡献"兜底（不会崩），
+        /// 这里 `ContributionHeatmap` 会把越界的档位夹到最后一个颜色（也不会崩）——
+        /// 两处都不报错，只是图变得不准。**改档位数时请两边一起改**。
+        public static let heatmapLevels: [Color] = [
+            Color(hex: 0xEBEDF0),   // 无贡献（`.hm-cell` 的底色）
+            Color(hex: 0x9BE9A8),   // `.l1`
+            Color(hex: 0x40C463),   // `.l2`
+            Color(hex: 0x30A14E),   // `.l3`
+            Color(hex: 0x216E39),   // `.l4`
+        ]
     }
 
     // MARK: - 间距（4pt 基准）
