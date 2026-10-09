@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 菜单卡片 —— 「我的」页那两张卡片、设置页三个分区的卡片、我的收藏页的收藏夹卡片
-/// （PRD §4.17 第 4/5 条、§4.19、§4.20）。
+/// 菜单卡片 —— 「我的」页那两张卡片、设置页各分区的卡片（含末尾那张**无标题**的）、
+/// 我的收藏页的收藏夹卡片（PRD §4.17 第 4/5 条、§4.19、§4.20）。
 ///
 /// ```css
 /// .menu-card{background:var(--card);border:1px solid var(--border-soft);
@@ -81,11 +81,19 @@ public struct MenuCard<Content: View>: View {
 /// —— 不是 `.disabled`（那会把它变灰、看起来像"暂时不可用"，同决策 **#51**），
 /// 也不加读屏的按钮角色。
 ///
+/// ⚠️ 另有一种"**眼下不给**"：设置页最底下的「退出登录」在**登出在途**时也传 `nil`
+/// （决策 **#78**）—— 那时它右侧说的是 `正在退出…`，而把它变灰会看起来像"登出坏了"，
+/// 其实它正在做。
+///
 /// ## ⚠️ `systemImage` 也可以为 `nil`（= 这一行没有图标）
 ///
 /// **设置页那五个 `.menu-item` 在原型里一个图标都没有**
 /// （`12-me.js:65/69/70/74/75`：`<div class="menu-item">主题<span…>浅色</span></div>`
 /// —— 里面没有任何 `svg(...)`）。而「我的」页与收藏夹页那几行**都有**。
+///
+/// ⚠️ 本 App 的设置页现在是**六行**（原型那五行一条不多、一条不少，另加：
+/// 「前往 GitHub 手动撤销授权」—— 偏差第 **40** 条；「退出登录」搬到末尾一张独立卡片 ——
+/// 偏差第 **46** 条），**六行同样一个图标都不给**。
 ///
 /// 所以图标是 Optional：给了才画，也没了那个固定宽度的图标槽
 /// ⇒ 没有图标时标题从行首开始。若把它做成必填、设置页随便填一个图标，
@@ -299,8 +307,9 @@ private struct TagLabel: View {
                         accessory: .chevron, showsSeparator: false, action: {})
             }
 
-            // ② 设置页「外观 / 账户 / 关于」：**五行一个图标都没有**（原型就是这样），
-            //   三行只显示值、一行红字动作、一行不可点
+            // ② 设置页「外观 / 账户 / 关于」+ 末尾一张**无标题卡片**：六行一个图标都没有
+            //   （原型那五行就是这样，另两处见偏差第 40 / 46 条），
+            //   三行只显示值、两行可点、一行不可点
             SectionHeader(title: "外观")
             MenuCard {
                 MenuRow(title: "主题", value: "浅色")
@@ -308,13 +317,20 @@ private struct TagLabel: View {
             SectionHeader(title: "账户")
             MenuCard {
                 MenuRow(title: "GitHub App · jiangjiang", value: "已授权")
-                MenuRow(title: "退出登录", titleTone: .destructive, showsSeparator: false, action: {})
+                MenuRow(title: "前往 GitHub 手动撤销授权", showsSeparator: false, action: {})
             }
             SectionHeader(title: "关于")
             MenuCard {
                 MenuRow(title: "清除缓存", value: "12.4 MB", action: {})
                 MenuRow(title: "版本", value: "2.0 (1)", showsSeparator: false)
             }
+            // 末尾那张**无标题**卡片：分区标题那 16pt 上边距它没有 ⇒ 自己补，否则会
+            // 贴着「关于」那张、看着像多出来的一行（偏差第 46 条）。
+            // 登出在途时右侧的值会变成 `正在退出…`。
+            MenuCard {
+                MenuRow(title: "退出登录", titleTone: .destructive, showsSeparator: false, action: {})
+            }
+            .padding(.top, Theme.Spacing.l)
 
             // ③ 我的收藏页：自建夹「值 + 尖角」，默认夹「值 + 标签」且**不可点**
             SectionHeader(title: "我的收藏")

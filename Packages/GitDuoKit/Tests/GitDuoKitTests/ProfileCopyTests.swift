@@ -133,6 +133,22 @@ struct ProfileCopyTests {
         #expect(ProfileCopy.signOutSheetHint.contains("无需重新安装 App"))
     }
 
+    @Test("登出在途那句是**一个状态**，且与「退出登录」不是同一串字")
+    func signingOutValueIsAState() {
+        // 2026-10-09 用户走查报回（他那 7 条里的第 6 条）：按下确认之后到登录页出现之间
+        // **什么都没显示** ⇒ 补了这个在途文案（决策 #78）。它守两件事：
+        //
+        // ① 它**不是**「退出登录」—— 两者若写成同一串字，那一行在途时看起来与常态
+        //    一模一样，等于没加；而"屏幕上没有变化"是最难被发现的一种失败
+        //    （文案对、判定对、单测全绿，只有人盯着屏幕才知道它没生效）。
+        // ② 结尾是**中文省略号**（U+2026）而不是三个半角点：`…` 读作"正在做"，
+        //    而 `...` 在中文里会被读成断句（同 `SheetField` 的占位、`写评论…`）。
+        #expect(ProfileCopy.signingOutValue == "正在退出…")
+        #expect(ProfileCopy.signingOutValue != ProfileCopy.signOutRow)
+        #expect(ProfileCopy.signingOutValue.hasSuffix("…"))
+        #expect(!ProfileCopy.signingOutValue.contains("..."))
+    }
+
     @Test("⚠️⚠️ 降级那句与「设置页手动撤销入口」是一对，**缺一个另一个就是空头承诺**")
     func degradedNoticeAndManualEntryMustStayPaired() {
         // 这条是本片（切片 9）新增偏差第 40 条的要害：

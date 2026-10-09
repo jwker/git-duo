@@ -118,6 +118,23 @@ public enum ProfileCopy {
     public static let authorizationValue = "已授权"
 
     public static let signOutRow = "退出登录"
+
+    /// 登出**在途**时那一行右侧显示的值（2026-10-09 用户走查裁定 · 决策 #78）。
+    ///
+    /// ## ⚠️ 为什么必须有这一句
+    ///
+    /// 按下确认之后是**弹层先关、登出随后进行** —— 弹层不能等结果：登出会把 `authState`
+    /// 打回未认证 ⇒ `RootView` 换掉整棵主界面，而弹层正挂在那棵即将消失的树上
+    /// （见 `SettingsView.signsOutAfterDismissal`）。于是"确认之后让按钮转圈"这条
+    /// 最自然的反馈路径**被堵死了**，而从"弹层消失"到"登录页出现"之间还有一次
+    /// **撤销 GitHub 侧授权的网络往返** ⇒ 这段时间屏幕完全静默，用户会以为按钮没生效。
+    ///
+    /// ## ⚠️ 它写得**尽量短**，因为它是一个状态、不是一句话
+    ///
+    /// 与 `MenuRow` 那一列其它值同一形态（`浅色` / `已授权` / `12.4 MB`）。
+    /// ⚠️ 结尾用**中文省略号**（与 `SheetField` 的占位、`写评论…` 同一字形），
+    /// 不是三个点 —— 三个点在中文里看起来像断句。
+    public static let signingOutValue = "正在退出…"
     public static let clearCacheRow = "清除缓存"
     public static let versionRow = "版本"
 
