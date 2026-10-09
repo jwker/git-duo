@@ -1407,7 +1407,8 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
 
 **落地分片：8 个分区不属同一切片**（PRD §4.13 有同一张表）。切片 4 交付 ①头部 ③语言构成 ④Latest Release ⑦参与协作 ⑧贡献者；⑤文件浏览 / ⑥README 由 **6.4d** 交付（与 §4.4 的代码分区**共用** `RepoTreeSection` / `RepoTreeSession`）；②我的收藏由**切片 9** 交付。
 未落地的分区曾用 **`PendingSection`（小型占位块）** 显式标注——与 `SkeletonScreen` 同一哲学（"一眼可辨、不冒充成品"，`AGENTS.md §0`）：整块不渲染会让评审看不出还差什么，而假数据更糟。**2026-10-09（切片 9.5）：占位块归零** —— ②落地后 `PendingSection` 已全 App 无调用点并被删除，`SkeletonPlaceholders.registry` 同步清空。
-⚠️ **这份名单会随切片推进变短，改了就要跟着删** —— 留着过期的占位块或过期的说明，等于把"页面看着完整、其实少一块"换个方向重演一遍。⚠️ 这条纪律**没有随 `PendingSection` 一起消失**：下一个切片若要再出现半成品页面，占位块（`PendingSection`）与登记册（`SkeletonPlaceholders.registry`）两条一起恢复，别只恢复一条。
+**同日稍后（切片 10 收口，用户裁定）：`SkeletonScreen` 类型也一并删除** —— 十个切片做完后全 App 再没有"未落地界面"，它没有收件人了；两个占位类型至此都不在，只剩登记册（空数组）。
+⚠️ **这份名单会随切片推进变短，改了就要跟着删** —— 留着过期的占位块或过期的说明，等于把"页面看着完整、其实少一块"换个方向重演一遍。⚠️ 这条纪律**没有随这两个类型一起消失**：下一个切片若要再出现半成品页面，**三条一起恢复** —— 占位屏（`SkeletonScreen`）、页内占位块（`PendingSection`）、登记册（`SkeletonPlaceholders.registry`），别只恢复一条。
 
 ### 9.12 收藏夹与收藏项（纯本地）
 

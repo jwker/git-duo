@@ -54,6 +54,8 @@
 无障碍判据「**文字**的动态字体」与「**图标**不随字号缩放」**要给两个答案**（后者登记为偏差 41）·
 「**触控目标 44pt**」是**核对登记**（偏差 42）—— SwiftUI 里扩大命中区就得先改 frame ⇒ 会动行高。
 ⇒ **下一步不是再开一片，而是那次"攒到最后"的逐屏对照**（走查单 22–26 + 本片改过的三处首屏骨架）。
+✅ **切片 10 之后的一处收口（2026-10-09，用户裁定）**：**`SkeletonScreen` 已删除** —— 它已无调用点，与 `PendingSection` 同一处置（见施工图 **10.1b**）。
+⚠️ **代价如实记下**：骨架期"页面没写完"有个显式信号（占位屏一眼可辨），删掉之后这类静默**又没信号了** ⇒ 兜底只剩完成定义第 3 条（与原型逐屏对照）。**`SkeletonPlaceholders.registry`（空数组）留着**，它才是那条纪律的常驻落点。
 
 ✅ **6.5 起「我的仓库列表 → 看代码」这条主线**真的通了 —— `RouteView` 里 `.repoDetail` /
 `.fileView` / `.commitDetail` / `.branches` 四条已从占位屏换成真页面，四个入口
@@ -178,7 +180,9 @@
 > ② `REVIEW-CHECKLIST` 的**有意偏差表新增第 40 条、第 24 条扩写**（设置页多一行 / 收藏那两颗按钮没有图标与链接色）
 >    —— 目视时**别把它们当成缺陷报回来**。
 > ⚠️ **本片把"占位"这一套工具收掉了**：`SkeletonPlaceholders.registry` 已清空、`PendingSection` 已删除；
-> `SkeletonScreen` 类型**留着**（§0 那条纪律指向它）。**下一片若还要加半成品页面，请把那两条规则一起恢复**
+> ~~`SkeletonScreen` 类型**留着**（§0 那条纪律指向它）~~ —— **已作废（2026-10-09，切片 10 之后）**：
+> 用户裁定**连它一起删掉**（全 App 已无"未落地界面"，它没有收件人了）。
+> **下一片若还要加半成品页面，请把三条规则一起恢复**（占位屏 + 页内占位块 + 登记册各一条）
 > —— 忘了登记 = 登记册退化成装饰（§5.2）。
 
 | # | 内容 | 状态 |
@@ -210,8 +214,9 @@
 |---|---|---|
 | 10.0 | 文档先行：`TECH_SPEC §8.5` 补「骨架屏统一」四条判据 · `§10.5` 补无障碍五条核对清单 · `§10.7` 记下三个玻璃封装组件**从未落地**（因为一次都没被需要）· `§13.1` 补「首屏预算怎么核对」+ 本文件 §0 与施工图 | ✅ |
 | 10.0a | **实际落地（2026-10-09）**：`§8.5` **+四条判据**（单一原子 / 形状留 Feature / 尺寸对齐 / 三档不互换）· `§10.5` **+五条核对清单**并写清**两条边界**（判据①"文字"与"图标"要分开说、判据⑤ 是"核对登记"而不是"全改成 44pt"）· `§10.7` 补一段"那三个封装为什么不存在"· `§13.1` 补「两条半只能人工」并说明玻璃数量为何是结构性优势。⚠️ **判据 ⑤ 与"图标固定字号"两条是本次新增口径**，都先写进文档再动代码（同 #47 的处置） | ✅ |
-| 10.1 | 骨架屏统一：按四条判据逐处核实（**单一原子** / **形状留 Feature** / **尺寸对齐** / **三档不互换**）并收口。⚠️ 需要用户裁定的一处：`SkeletonScreen` 现在**已无调用点**，收尾后留还是删 | ✅ |
+| 10.1 | 骨架屏统一：按四条判据逐处核实（**单一原子** / **形状留 Feature** / **尺寸对齐** / **三档不互换**）并收口。⚠️ 需要用户裁定的一处：`SkeletonScreen` 现在**已无调用点**，收尾后留还是删 —— **用户 2026-10-09 裁定：删掉**（见 10.1b） | ✅ |
 | 10.1a | **实际落地（2026-10-09）**：<br>**判据 ① 单一原子 ✅**：全项目"骨架色（`surfaceSunken`）+ 圆角矩形"这个组合**只有 `SkeletonBar` 内部那一处**（其余 `surfaceSunken` 的用法逐个看过，都是真组件：`.ghost` 按钮底 / 分段槽 / 分支胶囊 / 卡片内的小槽）。生产调用点 90 处。<br>**判据 ② 形状留 Feature ✅**：设计包里除 `SkeletonBar` 外**没有任何骨架视图**；**6 个命名组合件**（`RepoCardSkeleton` · `PinGridSkeleton` · `ExploreBoardSkeleton` · `ExploreSubListSkeleton` · `SearchResultsSkeleton` · `StarRowSkeleton`）+ **18 处内联**，全部在自己的 Feature 里，且**每一个都挨着它对应的真实组件**（多数就写在同一个文件）。<br>**判据 ③ 尺寸对齐 ⚠️ 发现 4 处真缺陷并修掉**：<br>① `RepoTreeSection.skeleton` 用 `CardBox(vertical: Theme.Spacing.m)`（12），而同文件真实的那个是 `Theme.Spacing.xs`（4）⇒ 数据到达时整块上移 8pt；<br>② `RepoDetailView.commitsSkeleton` 同样 m vs 真实的 xs，且**没有行内边距**（真实 `RepoCommitRow` 有 `padding:11px 4px`）⇒ 雪上加霜；<br>③ `RepoDetailView.codeSkeleton` 与 `RepoTreeSection` 的骨架**逐字重复**（两份）⇒ 收成一个新件 **`RepoTreeSkeleton`**；<br>④ `BranchesView.skeleton` 用 `CardBox(vertical: m, horizontal: 14)`，而真实是 `(vertical: 0, horizontal: 0)`（`BranchRow` 自带 `padding:13px 14px`）⇒ 卡片上下多 12pt、左右多缩进 14pt，5 行还挤成一条。<br>⚠️ **③ 的过程中撞到一条语言事实**：`RepoTreeSection` 是**泛型视图**（`RepoTreeSection<Trailing: View>`，那个 `Trailing` 是面包屑右侧的动作位）⇒ 写 `RepoTreeSection.skeleton` **编译不过**（`generic parameter 'Trailing' could not be inferred`）。**修法不是加泛型参数，而是把共享骨架落成一个独立的非泛型件**（`RepoTreeSkeleton`）—— 两边都写 `RepoTreeSkeleton()`，仍然只有一处定义。<br>⚠️ **另有一处"逐字相同但有意不收"**：`LabelPickerSheet.skeleton` 与 `BranchSheet.skeleton` 代码完全一样，但它们**各对着不同的真实行**（标签行 vs 分支行）⇒ **保持独立**。收成一份之后，改"标签行"的人会以为自己把"分支行"也改了 —— 而它们本来是两条对齐链。<br>**判据 ④ 三档不互换 ✅**：首屏用骨架、续页用 `ProgressView`（`RepoDetailView.commitsFooter` / `SearchView` / `MyStarsView` / `ReposView` 逐处核对）、操作类走 `ActionButton(isWorking:)` + 禁用。 | ✅ |
+| 10.1b | **收口：`SkeletonScreen` 删除**（2026-10-09，用户裁定 —— 即 10.1 抬上来的那个待裁项）。⚠️ 它已无任何生产调用点：全项目只剩它自己那个文件（定义 + 它自己的 `#Preview`）。与 `PendingSection` 同一处置 —— **类型本身也是"还差什么"的说明**，而十个切片做完之后再没有"未落地界面"，它没有收件人了。⚠️ **占位纪律没随类型消失**：`SkeletonPlaceholders.registry`（空数组）**留着**当登记册，它才是那条纪律的常驻落点（§5.2）。⚠️ **代价如实登记**：骨架期"页面没写完"有个显式信号，删掉之后这类静默**又没信号了** ⇒ 兜底只剩完成定义第 3 条（与原型逐屏对照），正是 §2 那条实锤说的场景。配套：`make gen` 重生成工程（删文件必须重跑）+ 三份文档与记忆同步。 | ✅ |
 | 10.2 | 无障碍：按五条清单逐条核实并补齐（**动态字体** / **可点控件能念出** / **装饰件不念** / **降低动态效果** / **触控目标 ≥44pt**） | ✅ |
 | 10.2a | **实际落地（2026-10-09）**：<br>① **动态字体**：**文字 100% 合格** —— `Theme.Font` 的每一个令牌都是**相对样式**（`.caption2` / `.body` / `.headline` / `.system(.footnote, design: .monospaced)`），没有一个写死点数。⚠️ **但"全项目零 `.system(size:)`"是错的**（我在 §10.5 初稿里就这么写的，实测推翻）：全项目有 **50 处** `.font(.system(size:))`，逐处看过 —— **全部是 SF Symbol 图标或头像里的首字母，没有一处是正文文字**。⇒ 拆成两句写进 `§10.5`：文字 ✅、**图标写死尺寸**（不随动态字体缩放）**登记为有意取舍**（原型是唯一可点验收依据，改 50 处等于重定全部图标视觉）。<br>② **可点控件能念出**：3 处工具栏图标按钮（首页 / 仓库 / 探索的右上角放大镜）**都有** `accessibilityLabel("搜索")`；容器级收口的做法已成型（`RepoCard` 用 `accessibilityElement(children: .ignore)` + 一句拼好的 label；`RepoHeroCard` 头部 `.combine`；`StarRow` 的星形图标 `accessibilityHidden`；`RepoHeroCard` 的 Watch / Fork 两颗**不可点**按钮用 `removeTraits(.isButton)` + `accessibilityHint` 说明原因，同决策 #51）。<br>③ **装饰件不念**：设计包逐件核对 —— `SkeletonBar` / `RepoAvatar` / `LabelDot` / `LanguageBar` / `StatusPill` / `ContributionHeatmap` / `Toast` 都带 `accessibilityHidden(true)`；6 处骨架视图里 3 处（`SearchResultsSkeleton` / `ExploreSubListSkeleton` / `RepoDetailView.skeleton` 等）在**容器级**又加了一次（重复但无害，且更稳）。<br>④ **降低动态效果**：`SkeletonBar.animates(reduceMotion:)` 是**纯函数 + 有断言**（先例）；`Toast` / `UserAvatar` / `StatButton` 同一模式。<br>⑤ **触控目标**：**按文档判据做"核对并登记、不追改"** —— 行内的 `ActionButton(verticalPadding: 7)`（如「已 Star」那颗，约 31pt 高）与搜索框的清除按钮**小于 44pt**，但把它们撑到 44 会**改行高**（SwiftUI 里扩大命中区必须先扩大 frame）⇒ 动的是原型定下的视觉。**逐条判断的结论：不动**，理由与"图标固定字号"同一条。 | ✅ |
 | 10.3 | 性能预算核对：代码级核对 §13.1 三条（**无自定义玻璃** / 列表 `Lazy*` / `onAppear` 无同步重活 / 装配点不联网）；**只能人工的那两条半登记为用户目视项** | ✅ |
@@ -430,7 +435,9 @@
 一个"响应里没有凭据"的请求（`GET /user`）照样把 `Authorization: Bearer ghu_…` 写进 `Cache.db`。
 **"响应不含机密"推不出"这个请求可以走系统缓存"**；本包现在**所有出网会话都不挂 `URLCache`**（见 `GitHubURLSession`，决策 #32）。
 
-未落地的界面一律用 `SkeletonScreen` 占位，**没有假数据冒充成品**（登记见 `AppEnvironment.swift`）。
+骨架期未落地的界面一律用占位屏（`SkeletonScreen`）占位，**没有假数据冒充成品**（登记见 `AppEnvironment.swift` 的 `SkeletonPlaceholders.registry`）。
+⚠️ **2026-10-09 更新**：十个切片做完后 App 里**没有"未落地界面"了** ⇒ 占位屏与页内占位块两个类型都已删除，**登记册（空数组）留着**当那条纪律的落点。
+⚠️ 随之而来的后果：凭空冒出一屏"看着完整"的假界面，**现在没有任何工具替你兜底** —— 兜底只剩完成定义第 3 条（与原型逐屏对照，见 §2 那条 ⚠️）。
 
 ---
 
@@ -478,7 +485,7 @@ make device   # 真机：构建(带签名) → 安装 → 启动 —— 手测�
 > 一编就是一片错（`AppEnvironment` 缺 6 个成员等），用户先发现了。
 
 > ⚠️ **"页面没写完"不会产生任何失败信号 —— 这是本项目最危险的一类静默。**
-> 未落地的路由显示的是 `SkeletonScreen`：**编译通过、能跑、四处无红灯**；`RouteView` 的穷尽性检查
+> 骨架期未落地的路由显示的是 `SkeletonScreen`（**该类型已于 2026-10-09 删除**，见 §0）：**编译通过、能跑、四处无红灯**；`RouteView` 的穷尽性检查
 > 只保证"每个 `Route` 有分支"，**不保证"分支不是占位屏"**（它的注释写"不会静默漏页"，指的是另一件事）。
 > `SkeletonPlaceholders.registry` 也只是**手写字符串**，没有任何东西校验它与 `RouteView` 一致。
 > ⇒ 宣称某片做完前，**必须逐项点名施工图里的每一条**，并跑一次完成定义**第 3 条（与原型逐屏对照）**
