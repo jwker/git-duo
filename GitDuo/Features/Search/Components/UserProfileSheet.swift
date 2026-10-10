@@ -7,6 +7,13 @@ import GitDuoKit
 /// 结构：标题 `用户` → 头像 52 + 昵称 + `@登录名 · N 个仓库 · M 关注者` → 简介 →
 /// `关注` / `查看公开仓库` 两个按钮。
 ///
+/// ## 列表行精简、点开才补全（C 方案）
+///
+/// 搜索结果的 `UserHit` 只有登录名（`/search/users` 不返回昵称 / 简介 / 人数）。
+/// 弹层打开时，用 `LoadUserProfile` 走一次 `GET /users/{login}` 补全；
+/// 加载期间先用精简数据（头像 + `@登录名`）占位，失败也保持它 —— 至少呈现得出"这个人是谁"，
+/// 不因为补充字段没拿到就整块打不开。
+///
 /// ## ⚠️ 两个按钮**纯展示、不可点**（2026-10-07 拍板，决策 #46）
 ///
 /// - **关注**：它是**会改变账号状态的写操作**，在落地方案定下来之前不做半截；
@@ -27,7 +34,20 @@ import GitDuoKit
 /// 本视图只画内容（`TECH_SPEC §8.4`）。
 struct UserProfileSheet: View {
 
-    let user: UserHit
+    /// 搜索行给出的精简数据（至少含登录名），作为加载前与失败时的兜底。
+    let fallback: UserHit
+
+    /// 点开后补全完整资料的用例。
+    let loader: LoadUserProfile
+
+    /// 当前用于渲染的资料；初始值是精简兜底，补全成功后被替换。
+    @State private var user: UserHit
+
+    init(fallback: UserHit, loader: LoadUserProfile) {
+        self.fallback = fallback
+        self.loader = loader
+        _user = State(initialValue: fallback)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -44,6 +64,19 @@ struct UserProfileSheet: View {
         .padding(.bottom, Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.Palette.surface)
+        .task(id: fallback.login) {
+            await loadProfile()
+        }
+    }
+
+    /// 补全完整资料。失败时保持精简兜底（不抛错、不阻塞弹层）。
+    private func loadProfile() async {
+        do {
+            user = try await loader.load(login: fallback.login)
+        } catch {
+            // 保持 @State 的初始值（精简兜底）—— 这是"降级呈现"而非"静默失败"，
+            // 与 `ToggleStar.initialState` 取不到基准时的处理同源。
+        }
     }
 
     // MARK: - 标题与头部
@@ -73,7 +106,8 @@ struct UserProfileSheet: View {
                         .lineLimit(1)
 
                     // ⚠️ 这一句与结果行上的**有意不同**：少了「公开」二字、多了 `@登录名`
-                    //    （原型 `openUserSheet` 就是 `@${u} · …`）。两个数拿不到时**整段不渲染**。
+                    //    （原型 `openUserSheet` 就是 `@${u} · …`）；`@登录名` 恒在，所以非空。
+                    //    两个数拿不到时只显示 handle。
                     Text(user.profileMetaLabel)
                         .font(Theme.Font.caption)
                         .foregroundStyle(Theme.Palette.textTertiary)
@@ -186,14 +220,22 @@ private struct SheetActionButton: View {
 }
 
 #Preview {
+    @Previewable @State var environment = AppEnvironment()
+
     VStack(spacing: Theme.Spacing.xl) {
-        UserProfileSheet(user: UserHit(
-            login: "dev-j", name: "jiangjiang", bio: "my-git · iOS / SwiftUI 开发",
-            publicRepoCount: 3, followerCount: 21
-        ))
+        UserProfileSheet(
+            fallback: UserHit(
+                login: "dev-j", name: "jiangjiang", bio: "my-git · iOS / SwiftUI 开发",
+                publicRepoCount: 3, followerCount: 21
+            ),
+            loader: environment.userProfile
+        )
 
         // 昵称与简介都缺、两个计数也查不到 ⇒ 三处各退到"不渲染"或"@登录名"。
-        UserProfileSheet(user: UserHit(login: "torvalds"))
+        UserProfileSheet(
+            fallback: UserHit(login: "torvalds"),
+            loader: environment.userProfile
+        )
     }
     .background(Theme.Palette.background)
 }

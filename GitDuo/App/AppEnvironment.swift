@@ -96,6 +96,9 @@ final class AppEnvironment {
     /// 而搜索桶只有 30 次/分钟 —— 每次重进页面都重发一轮是不可接受的）。
     let search: LoadSearch
 
+    /// 搜索用户弹层的资料补全（C 方案：点开才走 `GET /users/{login}`）。
+    let userProfile: LoadUserProfile
+
     // MARK: - 领域用例（切片 6）
 
     /// 仓库详情页进页取数（头部 + Star 基准，PRD §4.4）。
@@ -334,6 +337,10 @@ final class AppEnvironment {
         //    在这里 new 四个端点再各传一个，会让缓存分成几份、配额各算各的，而且不报错。
         self.search = LoadSearch(
             source: GitHubSearchDataSource(client: client)
+        )
+        // 搜索弹层补全：与搜索端点分开（它走 core 主桶、不是 search 桶）。
+        self.userProfile = LoadUserProfile(
+            source: GitHubPublicUserEndpoint(client: client)
         )
 
         // ── 切片 6 的四条链路。

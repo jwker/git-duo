@@ -98,13 +98,15 @@ struct RepoEndpointsContractTests {
 
     // MARK: - 切片 3 / 4 / 5
 
-    @Test("仓库列表 / Star / 置顶 / 趋势榜 / 搜索 —— 五条接缝")
+    @Test("仓库列表 / Star / 置顶 / 趋势榜 / 搜索 / 用户资料 —— 六条接缝")
     func earlierSliceSeams() {
         let _: any RepositoryDataSource = GitHubRepositoryEndpoint(client: client)
         let _: any StarDataSource = GitHubStarEndpoint(client: client)
         let _: any PinnedRepositoriesDataSource = GitHubPinnedItemsEndpoint(client: graphQLClient)
         let _: any RepositorySearchDataSource = GitHubSearchRepositoriesEndpoint(client: client)
         let _: any SearchDataSource = GitHubSearchDataSource(client: client)
+        // 搜索弹层补全（C 方案）：空扩展体，删掉后编译照过、其余测试照绿 ⇒ 钉住。
+        let _: any UserProfileDataSource = GitHubPublicUserEndpoint(client: client)
     }
 
     // MARK: - 切片 11（Star 写范围的如实降级 · 决策 #80）

@@ -63,6 +63,42 @@ public struct MarkdownSpan: Equatable, Hashable, Sendable {
     }
 }
 
+/// 表格列的对齐方式（GFM 分隔行里的 `:` 决定）。
+public enum MarkdownTableAlignment: Equatable, Hashable, Sendable {
+    /// 左对齐（`:---`，或没写 `:` 的默认值）。
+    case left
+    /// 居中（`:---:`）。
+    case center
+    /// 右对齐（`---:`）。
+    case right
+}
+
+/// 一个 GFM 表格块（表头 + 对齐 + 数据行）。
+///
+/// 单元格内容是行内片段（走 `MarkdownInline.spans`），所以表格里的 `**粗体**` /
+/// `` `代码` `` / `[链接]()` 照常渲染。
+public struct MarkdownTable: Equatable, Hashable, Sendable {
+
+    /// 每列对齐；列数与表头一致，没写 `:` 的列回落为 `.left`。
+    public let alignments: [MarkdownTableAlignment]
+
+    /// 表头：一行单元格，每个单元格是行内片段。
+    public let header: [[MarkdownSpan]]
+
+    /// 数据行：多行，每行是与表头等列的单元格数组。
+    public let rows: [[[MarkdownSpan]]]
+
+    public init(
+        alignments: [MarkdownTableAlignment],
+        header: [[MarkdownSpan]],
+        rows: [[[MarkdownSpan]]]
+    ) {
+        self.alignments = alignments
+        self.header = header
+        self.rows = rows
+    }
+}
+
 /// 一个块级元素（TECH_SPEC §11.1）。
 ///
 /// ## ⚠️ 关于「输出 `AttributedString`」的一处**实现偏离**（已登记）
@@ -112,6 +148,9 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
     /// 分隔线（`---` / `***` / `___`）。
     case divider
 
+    /// GFM 表格（`MarkdownTable`）。
+    case table(MarkdownTable)
+
     /// 这段块是不是空的（**不渲染任何东西**）。
     ///
     /// 空白块要能被识别出来：列表之间、代码块之后常常夹着空行，
@@ -125,6 +164,9 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
             spans.allSatisfy { $0.text.isEmpty }
         case let .codeBlock(_, lines):
             lines.allSatisfy { $0.isEmpty }
+        case let .table(table):
+            table.rows.isEmpty
+              && table.header.allSatisfy { $0.allSatisfy { $0.text.isEmpty } }
         case .divider:
             false
         }

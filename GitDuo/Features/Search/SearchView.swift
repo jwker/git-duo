@@ -62,7 +62,7 @@ struct SearchView: View {
         .navigationTitle("搜索")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $sheetUser) { user in
-            UserProfileSheet(user: user)
+            UserProfileSheet(fallback: user, loader: env.userProfile)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }

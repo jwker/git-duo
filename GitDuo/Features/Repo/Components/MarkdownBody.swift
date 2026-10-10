@@ -28,9 +28,9 @@ import SwiftUI
 ///
 /// ## ⚠️ 原型**只给了** h1 / h2 / 段落 / 列表 / 行内代码 / 代码块的样式
 ///
-/// `MarkdownBlock` 有七种块，其中三种在 `.markdown` 里**没有任何规则**：
-/// **引用**、**分隔线**、**h3–h6**、以及**任务列表的勾选框**。
-/// 这四处都是「规格未给」，逐条登记在各自的注释里 ——
+/// `MarkdownBlock` 有八种块，其中五种在 `.markdown` 里**没有任何规则**：
+/// **引用**、**分隔线**、**h3–h6**、**任务列表的勾选框**、以及 **GFM 表格**。
+/// 这五处都是「规格未给」，逐条登记在各自的注释里 ——
 /// 共同原则是：**能不用新数字就不用，能用既有令牌就不新造颜色**。
 /// 原型是唯一可点验收依据，替它补一套它没写过的视觉，等于把验收对象换成了我的偏好。
 ///
@@ -211,6 +211,7 @@ struct MarkdownBody: View {
         case let .quote(spans): quote(spans)
         case let .codeBlock(language, lines): codeBlock(language: language, lines: lines)
         case .divider: divider
+        case let .table(table): tableView(table)
         }
     }
 
@@ -395,6 +396,90 @@ struct MarkdownBody: View {
             .frame(height: 1)
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.Spacing.m)
+    }
+
+    // MARK: - 表格
+
+    /// GFM 表格。
+    ///
+    /// 用 `Grid`：表头行（加粗 + 下方分隔线）+ 数据行；每个单元格 `frame(maxWidth: .infinity,
+    /// alignment:)`，分隔行指定的左 / 中 / 右对齐生效。
+    /// ⚠️ **列宽口径待目视**：`maxWidth: .infinity` 的弹性列在 `Grid` 里是**瓜分余量**、
+    /// **不按内容加权** ⇒ 直觉上"内容多的列更宽"未必成立，长代码 / URL 列可能溢出
+    /// （已登记在 `TECH_SPEC §11.1`「表格（GFM）已支持」那节与 `REVIEW-CHECKLIST` 偏差第 49 条 / 走查 #154）。
+    ///
+    /// ⚠️ 横向超宽（如很长的代码 / URL）时这里不另加横向滚动，先让正文换行；
+    /// 若目视发现确实溢出，再套 `ScrollView(.horizontal)`。
+    private func tableView(_ table: MarkdownTable) -> some View {
+        Grid(
+            alignment: .top,
+            horizontalSpacing: Theme.Spacing.m,
+            verticalSpacing: 0
+        ) {
+            GridRow {
+                ForEach(Array(table.header.enumerated()), id: \.offset) { index, spans in
+                    tableCell(
+                        spans,
+                        column: index,
+                        alignments: table.alignments,
+                        header: true
+                    )
+                }
+            }
+
+            // 表头与数据之间的分隔线，合并所有列。
+            GridRow {
+                Rectangle()
+                    .fill(Theme.Palette.borderSoft)
+                    .frame(height: 1)
+                    .gridCellColumns(max(1, table.header.count))
+            }
+
+            ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    ForEach(Array(row.enumerated()), id: \.offset) { index, spans in
+                        tableCell(
+                            spans,
+                            column: index,
+                            alignments: table.alignments,
+                            header: false
+                        )
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // 表格与上下块之间留一点间距。
+        .padding(.top, Theme.Spacing.xs)
+        .padding(.bottom, Theme.Spacing.s)
+    }
+
+    /// 表格单元格。
+    private func tableCell(
+        _ spans: [MarkdownSpan],
+        column: Int,
+        alignments: [MarkdownTableAlignment],
+        header: Bool
+    ) -> some View {
+        Text(attributed(spans, base: header ? baseFont.weight(.bold) : baseFont))
+            .font(header ? baseFont.weight(.bold) : baseFont)
+            .foregroundStyle(Theme.Palette.textPrimary)
+            .lineSpacing(lineSpacing)
+            .frame(maxWidth: .infinity, alignment: Self.cellAlignment(alignments, column: column))
+            .padding(.vertical, Theme.Spacing.xs)
+    }
+
+    /// 第 `column` 列的对齐方向；缺对齐信息时回落为左对齐。
+    private static func cellAlignment(
+        _ alignments: [MarkdownTableAlignment],
+        column: Int
+    ) -> Alignment {
+        guard column < alignments.count else { return Alignment.leading }
+        return switch alignments[column] {
+        case .left: Alignment.leading
+        case .center: Alignment.center
+        case .right: Alignment.trailing
+        }
     }
 
     // MARK: - 行内样式（领域层的 spans → `AttributedString`）

@@ -2,6 +2,13 @@ import Foundation
 
 /// 用户搜索结果 —— `GET /search/users` 的 `items` 元素（TECH_SPEC §4.6.1、§9.2、PRD §4.2）。
 ///
+/// ## ⚠️ 两处来源共用它（2026-10-10）
+///
+/// 它既是 `GET /search/users` 的 `items` 元素，也是 **`GET /users/{login}` 的响应体**
+/// （两个响应的字段名相同、可选性也一致，故复用同一个 DTO —— 弹层补全走的就是后者，见 `LoadUserProfile`）。
+/// ⚠️ **类型名里的 "Search" 只反映它最初为搜索而建** —— 单用户端点也用它。
+/// 改名（如 `UserDTO`）会牵动一串调用点与测试，**暂不改**，但用的时候要记得它有**第二个来源**。
+///
 /// ## ⚠️ 四个字段是可选的，而且可能**根本不出现**
 ///
 /// `name` / `bio` / `public_repos` / `followers` 在官方 OpenAPI 的
@@ -19,9 +26,9 @@ import Foundation
 /// 的 `forkCount` / `canWrite` 那条纪律）。`UserHit.metaLabel` 拿不到数就**整段不渲染**，
 /// 而不是写出"0 个公开仓库"这句我们并不知道真假的话。
 ///
-/// ⚠️ 若真不返回、而产品仍要那两个数，唯一的路是**为每个结果补一次** `GET /users/{login}`
-/// （主桶 5,000/小时，不紧张）。那是一笔新增的取数成本 ⇒ 需要产品拍板，
-/// 已登记在 `REVIEW-CHECKLIST §6` 第 10 条的待裁定清单，**不在本切片顺手加**。
+/// ✅ **2026-10-10 拍板「C 方案」**：**列表行继续用精简对象、不逐条补**（省配额也省首屏时间）；
+/// **点开用户弹层时才补一次** `GET /users/{login}`（主桶 5,000/小时、开启缓存 ⇒ 复访大体 304 不计配额）。
+/// 弹层侧由 `LoadUserProfile` 走这条补全，列表行仍照本节处理。
 public struct SearchUserDTO: Sendable, Equatable, Decodable {
 
     public let login: String

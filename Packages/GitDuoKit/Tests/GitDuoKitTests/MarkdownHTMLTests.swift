@@ -111,13 +111,41 @@ struct MarkdownHTMLTests {
         #expect(blocks("</details>").isEmpty)
     }
 
-    // MARK: - 表格（竖着读：内容不丢）
+    // MARK: - HTML 表格 → GFM
 
-    @Test("`<table>` 的每个单元格各成一段")
-    func tableCellsBecomeParagraphs() {
-        #expect(blocks("<table><tr><td>企业微信</td><td>QQ群</td></tr></table>") == [
-            .paragraph([MarkdownSpan(text: "企业微信")]),
-            .paragraph([MarkdownSpan(text: "QQ群")]),
+    @Test("HTML 表格转成 GFM 表格块（`<th>` 为表头）")
+    func htmlTableWithTH() {
+        let html = "<table><tr><th>名称</th><th>数值</th></tr><tr><td>甲</td><td>1</td></tr></table>"
+        #expect(blocks(html) == [
+            .table(MarkdownTable(
+                alignments: [.left, .left],
+                header: [[MarkdownSpan(text: "名称")], [MarkdownSpan(text: "数值")]],
+                rows: [[[MarkdownSpan(text: "甲")], [MarkdownSpan(text: "1")]]]
+            ))
+        ])
+    }
+
+    @Test("⚠️ 全 `<td>` 的表格：第一行兜底为表头")
+    func htmlTableWithoutTHUsesFirstRowAsHeader() {
+        let html = "<table><tr><td>企业微信</td><td>QQ群</td></tr></table>"
+        #expect(blocks(html) == [
+            .table(MarkdownTable(
+                alignments: [.left, .left],
+                header: [[MarkdownSpan(text: "企业微信")], [MarkdownSpan(text: "QQ群")]],
+                rows: []
+            ))
+        ])
+    }
+
+    @Test("`<thead>` 里的 `<td>` 也是表头")
+    func htmlTableWithTHead() {
+        let html = "<table><thead><tr><td>列一</td></tr></thead><tbody><tr><td>数据</td></tr></tbody></table>"
+        #expect(blocks(html) == [
+            .table(MarkdownTable(
+                alignments: [.left],
+                header: [[MarkdownSpan(text: "列一")]],
+                rows: [[[MarkdownSpan(text: "数据")]]]
+            ))
         ])
     }
 
@@ -170,11 +198,32 @@ struct MarkdownHTMLTests {
         #expect(blocks("<p>&lt;div&gt;</p>").isEmpty)
     }
 
-    @Test("有序列表退化成无序（`<ol start=…>` 的编号无法可靠还原）")
-    func orderedListDegrades() {
-        #expect(blocks("<ol><li>一</li><li>二</li></ol>") == [
-            .listItem(ordered: false, number: nil, depth: 0, checked: nil, spans: [MarkdownSpan(text: "一")]),
-            .listItem(ordered: false, number: nil, depth: 0, checked: nil, spans: [MarkdownSpan(text: "二")]),
+    // MARK: - 有序列表
+
+    @Test("`<ol>` 还原编号：1、2、3")
+    func orderedListKeepsNumbers() {
+        #expect(blocks("<ol><li>一</li><li>二</li><li>三</li></ol>") == [
+            .listItem(ordered: true, number: 1, depth: 0, checked: nil, spans: [MarkdownSpan(text: "一")]),
+            .listItem(ordered: true, number: 2, depth: 0, checked: nil, spans: [MarkdownSpan(text: "二")]),
+            .listItem(ordered: true, number: 3, depth: 0, checked: nil, spans: [MarkdownSpan(text: "三")]),
+        ])
+    }
+
+    @Test("`<ol start=5>` 从 5 开始；`<li value=9>` 改变当前编号")
+    func orderedListStartAndValue() {
+        #expect(blocks("<ol start=\"5\"><li>五</li><li value=\"9\">九</li><li>十</li></ol>") == [
+            .listItem(ordered: true, number: 5, depth: 0, checked: nil, spans: [MarkdownSpan(text: "五")]),
+            .listItem(ordered: true, number: 9, depth: 0, checked: nil, spans: [MarkdownSpan(text: "九")]),
+            .listItem(ordered: true, number: 10, depth: 0, checked: nil, spans: [MarkdownSpan(text: "十")]),
+        ])
+    }
+
+    @Test("嵌套列表各自计数（ul 里套 ol；本期不做缩进，层级都是 0）")
+    func nestedOrderedAndUnordered() {
+        #expect(blocks("<ul><li>外</li><ol><li>内一</li><li>内二</li></ol></ul>") == [
+            .listItem(ordered: false, number: nil, depth: 0, checked: nil, spans: [MarkdownSpan(text: "外")]),
+            .listItem(ordered: true, number: 1, depth: 0, checked: nil, spans: [MarkdownSpan(text: "内一")]),
+            .listItem(ordered: true, number: 2, depth: 0, checked: nil, spans: [MarkdownSpan(text: "内二")]),
         ])
     }
 

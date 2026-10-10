@@ -107,6 +107,40 @@ public enum MarkdownParser {
                 continue
             }
 
+            // ④.7 表格（GFM）：当前行是表头（含管道）、下一行是分隔行。
+            //
+            //      排在列表项之前：`| … |` 不是列表标记，但列表续行收集可能吞掉它，
+            //      所以续行 / 段落收集也按"表头 + 分隔行"断句（见 `isTableHeader`）。
+            if index + 1 < lines.count,
+               Self.isTableHeader(content, nextLine: lines[index + 1]) {
+                let headerCells = Self.tableCells(content)
+                let columnCount = headerCells.count
+                let alignments = Self.tableAlignments(
+                    Self.tableCells(lines[index + 1].trimmingCharacters(in: .whitespaces))
+                )
+
+                var rowIndex = index + 2
+                var rows: [[[MarkdownSpan]]] = []
+                while rowIndex < lines.count {
+                    let rowContent = lines[rowIndex].trimmingCharacters(in: .whitespaces)
+                    // 数据行必须含管道；空行或普通文字（无管道）⇒ 表格结束。
+                    if rowContent.isEmpty || !rowContent.contains("|") { break }
+                    rows.append(Self.normalizedRow(Self.tableCells(rowContent), columnCount: columnCount))
+                    rowIndex += 1
+                }
+
+                blocks.append(.table(
+                    MarkdownTable(
+                        alignments: alignments,
+                        header: Self.normalizedRow(headerCells, columnCount: columnCount),
+                        rows: rows
+                    )
+                ))
+                index = rowIndex
+                indentStack.removeAll()
+                continue
+            }
+
             // ⑤ 列表项
             if let item = Self.listItem(line) {
                 let depth = Self.depth(forIndent: item.indent, stack: &indentStack)
@@ -118,6 +152,8 @@ public enum MarkdownParser {
                     let next = lines[index]
                     let nextContent = next.trimmingCharacters(in: .whitespaces)
                     if nextContent.isEmpty || Self.isBlockStart(nextContent) { break }
+                    if index + 1 < lines.count,
+                       Self.isTableHeader(nextContent, nextLine: lines[index + 1]) { break }
                     if Self.leadingIndent(next) < item.indent { break }
                     itemLines.append(nextContent)
                     index += 1
@@ -140,6 +176,8 @@ public enum MarkdownParser {
             while index < lines.count {
                 let nextContent = lines[index].trimmingCharacters(in: .whitespaces)
                 if nextContent.isEmpty || Self.isBlockStart(nextContent) { break }
+                if index + 1 < lines.count,
+                   Self.isTableHeader(nextContent, nextLine: lines[index + 1]) { break }
                 paragraphLines.append(nextContent)
                 index += 1
             }
@@ -165,6 +203,98 @@ public enum MarkdownParser {
             || content.hasPrefix(">")
             || htmlBlockStart(content)
             || listItem(content) != nil
+    }
+
+    // MARK: - 表格判定
+
+    /// 该行（结合下一行）是不是表格表头：含管道、能拆出非空单元格、
+    /// 且下一行是与表头同列的分隔行。
+    static func isTableHeader(_ content: String, nextLine: String?) -> Bool {
+        guard content.contains("|") else { return false }
+        guard let nextLine else { return false }
+        let headerCells = tableCells(content)
+        let separatorCells = tableCells(nextLine.trimmingCharacters(in: .whitespaces))
+        guard !headerCells.isEmpty, headerCells.count == separatorCells.count else { return false }
+        return tableAlignments(separatorCells).count == separatorCells.count
+    }
+
+    /// 把一行表格拆成单元格（已 trim）；首尾管道产生的空单元格去掉。
+    /// 转义的 `\|` 不拆（保留为单元格内的 `|`）。
+    static func tableCells(_ line: String) -> [String] {
+        var cells: [String] = []
+        var current = ""
+        var index = line.startIndex
+
+        while index < line.endIndex {
+            let character = line[index]
+            let next = line.index(after: index)
+            if character == "\\", next < line.endIndex, line[next] == "|" {
+                current.append("|")
+                index = line.index(after: next)
+                continue
+            }
+            if character == "|" {
+                cells.append(current)
+                current = ""
+                index = next
+                continue
+            }
+            current.append(character)
+            index = next
+        }
+        cells.append(current)
+
+        // 首尾管道各产生一个空单元格 ⇒ 去掉（仅当确实为空）。
+        if cells.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { cells.removeFirst() }
+        if cells.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { cells.removeLast() }
+
+        return cells.map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    /// 解析分隔行的列对齐；任一单元格不是合法分隔符则返回空数组（调用方据此判定不是表格）。
+    static func tableAlignments(_ cells: [String]) -> [MarkdownTableAlignment] {
+        var alignments: [MarkdownTableAlignment] = []
+        for cell in cells {
+            guard let alignment = tableAlignment(cell) else { return [] }
+            alignments.append(alignment)
+        }
+        return alignments
+    }
+
+    /// 单个分隔单元格的对齐：`:---` 左 / `:---:` 中 / `---:` 右 / `---` 左（默认）。
+    static func tableAlignment(_ cell: String) -> MarkdownTableAlignment? {
+        let trimmed = cell.trimmingCharacters(in: .whitespaces)
+        let leadingColon = trimmed.hasPrefix(":")
+        let trailingColon = trimmed.hasSuffix(":")
+        var core = trimmed
+        if leadingColon { core.removeFirst() }
+        // ⚠️ **先判 `core` 非空再删尾**。`":"` 上 `hasPrefix` / `hasSuffix` **同时为真**，
+        //    去掉首字符后 `core` 已经是空串 —— 这时 `removeLast()` 会直接
+        //    `Fatal error: Can't remove last element from an empty collection`（**整机崩**，不是解析失败）。
+        //    而 `:` 只可能出现在分隔行里，是**远程 README / Issue 正文可控**的输入：
+        //    `| a |` + `| : |` 两行就能让 App 崩在渲染 README 的路上。`:` 本身也不是合法分隔符
+        //    （GFM 要求至少一个 `-`）⇒ 落下面那条 `guard` 返回 `nil`（不是表格）才是对的。
+        if trailingColon, !core.isEmpty { core.removeLast() }
+        guard !core.isEmpty, core.allSatisfy({ $0 == "-" }) else { return nil }
+
+        if leadingColon && trailingColon { return .center }
+        if trailingColon { return .right }
+        return .left
+    }
+
+    /// 把一行单元格文本转成行内片段，并按列数归一化（少补空、多截断）。
+    /// - Returns: 一行（`[[MarkdownSpan]]`）：每个单元格是一个 `[MarkdownSpan]`。
+    static func normalizedRow(_ cells: [String], columnCount: Int) -> [[MarkdownSpan]] {
+        var row = cells.map { MarkdownInline.spans($0) }
+        if row.count < columnCount {
+            row.append(contentsOf: Array(
+                repeating: [MarkdownSpan(text: "")],
+                count: columnCount - row.count
+            ))
+        } else if row.count > columnCount {
+            row = Array(row.prefix(columnCount))
+        }
+        return row
     }
 
     /// 这一行是不是 **HTML 块的起始**（CommonMark 的 6 / 7 型，简化版）。

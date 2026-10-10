@@ -33,6 +33,17 @@ struct MarkdownParserTests {
                 return "code(\(language ?? "-")):\(lines.joined(separator: "\\n"))"
             case .divider:
                 return "hr"
+            case let .table(table):
+                let header = table.header
+                    .map { MarkdownSpan.plainText(of: $0) }
+                    .joined(separator: "/")
+                let body = table.rows
+                    .map { $0.map { MarkdownSpan.plainText(of: $0) }.joined(separator: "/") }
+                    .joined(separator: ";")
+                let align = table.alignments
+                    .map { switch $0 { case .left: "L"; case .center: "C"; case .right: "R" } }
+                    .joined()
+                return "table[\(align)]:\(header)#\(body)"
             }
         }
     }
@@ -190,6 +201,103 @@ struct MarkdownParserTests {
         #expect(outline("--") == ["p:--"])
         // `- -` 是"一个列表项，内容是 `-`"：记号后确实有一个空格。
         #expect(outline("- -") == ["li0-:-"])
+    }
+
+    // MARK: - 表格（GFM）
+
+    @Test("GFM 表格：表头、分隔行、数据行，默认左对齐")
+    func gfmTable() {
+        let markdown = """
+        | 名称 | 数值 |
+        | --- | --- |
+        | 甲 | 1 |
+        | 乙 | 2 |
+        """
+        #expect(outline(markdown) == ["table[LL]:名称/数值#甲/1;乙/2"])
+    }
+
+    @Test("列对齐：`:---` 左 / `:---:` 中 / `---:` 右")
+    func tableAlignments() {
+        let markdown = """
+        | L | C | R |
+        | :--- | :---: | ---: |
+        | a | b | c |
+        """
+        #expect(outline(markdown) == ["table[LCR]:L/C/R#a/b/c"])
+    }
+
+    @Test("没有首尾管道的表格也能识别")
+    func tableWithoutOuterPipes() {
+        let markdown = """
+        名称 | 数值
+        --- | ---
+        甲 | 1
+        """
+        #expect(outline(markdown) == ["table[LL]:名称/数值#甲/1"])
+    }
+
+    @Test("⚠️ 数据行列数不一致时按列数归一化：少补空、多截断")
+    func tableRowCellNormalization() {
+        let markdown = """
+        | a | b |
+        | --- | --- |
+        | 1 |
+        | 2 | 3 | 4 |
+        """
+        #expect(outline(markdown) == ["table[LL]:a/b#1/;2/3"])
+    }
+
+    @Test("⚠️ 有管道但下一行不是分隔行 ⇒ 不是表格，是段落")
+    func pipeLineWithoutSeparatorIsParagraph() {
+        let markdown = """
+        甲 | 乙
+        丙 | 丁
+        """
+        let allParagraphs = blocks(markdown).allSatisfy {
+            if case .paragraph = $0 { true } else { false }
+        }
+        #expect(allParagraphs)
+    }
+
+    @Test("⚠️ 转义的 `\\|` 不拆单元格")
+    func escapedPipeIsNotCellSeparator() {
+        let markdown = """
+        | a \\| b | c |
+        | --- | --- |
+        | x | y |
+        """
+        #expect(outline(markdown) == ["table[LL]:a | b/c#x/y"])
+    }
+
+    @Test("表格单元格里的行内样式照常解析（粗体 / 链接）")
+    func tableInlineStyles() {
+        let markdown = """
+        | 名称 | 链接 |
+        | --- | --- |
+        | **粗** | [主页](https://example.com) |
+        """
+        let result = blocks(markdown)
+        guard case let .table(table) = result.first else {
+            Issue.record("应当是表格")
+            return
+        }
+        #expect(table.rows[0][0] == [MarkdownSpan(text: "粗", style: .bold)])
+        guard case let .link(url) = table.rows[0][1].first?.style else {
+            Issue.record("第二个单元格应是链接")
+            return
+        }
+        #expect(url.absoluteString == "https://example.com")
+    }
+
+    @Test("⚠️ 只写一个 `:` 的分隔行不是表格 —— 曾在这里**崩过**（`removeLast` 空集合）")
+    func singleColonSeparatorIsNotATable() {
+        // 表头 1 格、分隔行 1 格 ⇒ 会走到 `tableAlignments([":"])`。
+        // `:` 上 `hasPrefix` / `hasSuffix` **同时为真** ⇒ 去掉首字符后 `core` 是空串 ⇒
+        // `removeLast()` 直接 `Fatal error: Can't remove last element from an empty collection`。
+        // 这条输入**远程可控**（README / Issue 正文）⇒ 必须钉住"不崩 + 不是表格"。
+        #expect(outline("| a |\n| : |") == ["p:| a | | : |"])
+        // 变体：两侧都带空格的单冒号分隔行，同样不是表格。
+        #expect(outline("| a |\n| : |\n| b |") == ["p:| a | | : | | b |"])
     }
 
     // MARK: - 段落

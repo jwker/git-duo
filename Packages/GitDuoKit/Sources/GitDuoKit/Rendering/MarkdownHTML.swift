@@ -18,7 +18,7 @@ import Foundation
 /// 这也让本件是一个**纯函数**（`String -> String`），可以用等号断言钉住：
 /// 领域层出结构、可单测，是决策 #34 那条标准的直接应用。
 ///
-/// ## ⚠️ 四档降级（都**不丢正文**，只是形状变了）
+/// ## ⚠️ 四档降级 + 一条表格改写（降级都**不丢正文**，只是形状变了）
 ///
 /// | HTML | 变成 | 为什么 |
 /// |---|---|---|
@@ -26,17 +26,20 @@ import Foundation
 /// | `<br>` | **空行** | `MarkdownSpan` 里没有"换行"这一档（`AGENTS.md §3` 的登记一起看） |
 /// | `<img src alt>` | `[alt](src)` | 图片这一期不画；退化成"指向那张图的链接"，点下去进文件查看页（那一页本来就会画图片）。`alt` 为空则整张丢掉 |
 /// | `<a href>` | `[文字](href)` | 复用行内链接；仓库内的相对地址由 `RepoLinkResolver` 再解析 |
+/// | `<table>` / `<tr>` / `<td>` / `<th>` | **GFM 表格**（表头 + 分隔行 + 数据行） | 已有表格块类型（`TECH_SPEC §11.1`「表格（GFM）已支持」）；`<th>` / `<thead>` 判为表头，**全 `<td>` 时首行兜底为表头**（GFM 表格必须有表头） |
 /// | 其余标签 | 只去标签、留文字 | 最保守的一档 |
 ///
-/// ## ⚠️ 两条已知的有损处（登记待评审）
+/// ## ⚠️ 一条已知的有损处（登记待评审）
 ///
-/// 1. **`<ol>` 的编号丢了** —— 列表项一律变 `- `（无序）。有序标记的解析规则
-///    （`1. `）与 HTML 的 `<ol>` 之间没有可靠的对应（`start` 属性、
-///    `<li value=…>` 都会改编号），而"编错号"比"没有号"更难解释。
-/// 2. **字面量标签会被吃掉** —— 正文里靠实体转义写出的 `<div>`（`&lt;div&gt;`）
+/// 1. **字面量标签会被吃掉** —— 正文里靠实体转义写出的 `<div>`（`&lt;div&gt;`）
 ///    在**第一趟之后**才被还原，于是第二趟会把它当标签去掉。
 ///    代码块（``` 围栏）不受影响：围栏在块判定的第一支就被拿走了，永远到不了这里。
 ///    要根治得区分"实体来源的 `<`"，代价是给本件加一份位置表 —— 与收益不成比例。
+///
+/// （`<ol>` 的编号**已修复**：扫描时维护列表栈、区分 ol/ul 各自计数，支持 `<ol start=…>` 与 `<li value=…>`。
+///    ⚠️ **嵌套只还原编号、不还原缩进**（层级仍是 0）—— HTML 的嵌套深度没有对应的 markdown 写法。
+///    ⚠️ **`colspan` / `rowspan` 合并格不做**：列数按表头归一化时**多截断**，
+///    会丢被合并的多余格 ⇒ 与本节"不丢正文"那条原则有张力，已登记待评审。）
 public enum MarkdownHTML {
 
     /// 一段 HTML → 一段 Markdown 源。
@@ -61,6 +64,22 @@ public enum MarkdownHTML {
         MarkdownParser.blocks(from: markdown(from: html))
     }
 
+    /// 一张 HTML 表格的改写状态。
+    fileprivate struct TableState {
+        /// 当前 `<tr>` 已开始的单元格数。
+        var cellCount = 0
+        /// 是否在 `<thead>` 内。
+        var inHead = false
+        /// 当前行是否出现过 `<th>`。
+        var rowHasTH = false
+        /// 表头分隔行是否已输出（一张表只输出一次）。
+        var separatorEmitted = false
+        /// 当前单元格是否已闭合（用来兼容省略 `</td>` 的写法）。
+        var lastCellClosed = true
+        /// 已处理的 `<tr>` 行数（第一行兜底为表头：GFM 表格必须有表头）。
+        var rowCount = 0
+    }
+
     // MARK: - 改写
 
     /// 扫一遍文本：标签按映射改写（`mapping` 为假时一律丢弃），其余原样保留。
@@ -70,6 +89,11 @@ public enum MarkdownHTML {
         // 待闭合的 `<a>` 栈。存 `href`，`nil` 表示"这个 `<a>` 没有地址"。
         // ⚠️ `<a>` 不允许嵌套，所以一层栈就够；深一层也不会错，只是用不上。
         var openAnchors: [String?] = []
+        // 列表栈：元素为有序列表的"下一个编号"（Int），或 `nil`（无序列表）。
+        // 用栈是因为列表会嵌套（ul 里套 ol、ol 里套 ul），每层各自计数。
+        var listStack: [Int?] = []
+        // 表格栈：把 HTML `<table>` 改写成 GFM 表格（真实 README 里 HTML 表格很多）。
+        var tableStack: [TableState] = []
 
         while index < text.endIndex {
             guard text[index] == "<" else {
@@ -106,14 +130,26 @@ public enum MarkdownHTML {
             }
 
             guard mapping else { continue }
-            apply(tag: body, to: &out, openAnchors: &openAnchors)
+            apply(
+                tag: body,
+                to: &out,
+                openAnchors: &openAnchors,
+                listStack: &listStack,
+                tableStack: &tableStack
+            )
         }
 
         return out
     }
 
     /// 一个标签的落点。
-    private static func apply(tag body: String, to out: inout String, openAnchors: inout [String?]) {
+    private static func apply(
+        tag body: String,
+        to out: inout String,
+        openAnchors: inout [String?],
+        listStack: inout [Int?],
+        tableStack: inout [TableState]
+    ) {
         let trimmed = body.trimmingCharacters(in: .whitespaces)
 
         // `<!DOCTYPE …>` / `<?xml …>` —— 声明，丢。
@@ -136,18 +172,119 @@ public enum MarkdownHTML {
                 out += isClosing ? "\n\n" : "\n\n" + String(repeating: "#", count: level) + " "
             }
 
-        case "p", "div", "tr", "table", "thead", "tbody", "tfoot", "ul", "ol",
+        case "p", "div",
              "details", "blockquote", "dd", "dt", "figure", "figcaption", "dl",
              "picture", "video", "section", "article", "header", "footer", "main":
             if !isClosing { out += "\n\n" }
 
+        // ── 表格：改写成 GFM（表头 + 分隔行 + 数据行）──
+        case "table":
+            if isClosing {
+                _ = tableStack.popLast()
+            } else {
+                tableStack.append(TableState())
+                out += "\n"
+            }
+
+        case "thead":
+            if !tableStack.isEmpty {
+                tableStack[tableStack.count - 1].inHead = !isClosing
+            }
+
+        case "tbody", "tfoot":
+            if !tableStack.isEmpty {
+                tableStack[tableStack.count - 1].inHead = false
+            }
+
+        case "tr":
+            guard !tableStack.isEmpty else { break }
+            if isClosing {
+                var state = tableStack[tableStack.count - 1]
+                // 第一行兜底为表头：GFM 表格必须有表头，即使 HTML 没写 th/thead。
+                let isHeadRow = state.inHead || state.rowHasTH || state.rowCount == 0
+                if isHeadRow && !state.separatorEmitted {
+                    // 最后一个单元格若没闭合，先补上结尾管道。
+                    if !state.lastCellClosed {
+                        out += "|"
+                        state.lastCellClosed = true
+                    }
+                    // 表头分隔行：每列一段 `---`。
+                    out += "\n|" + String(repeating: "---|", count: max(1, state.cellCount))
+                    state.separatorEmitted = true
+                }
+                state.rowCount += 1
+                tableStack[tableStack.count - 1] = state
+            } else {
+                // 新行：重置行内状态，输出行首管道。
+                tableStack[tableStack.count - 1].cellCount = 0
+                tableStack[tableStack.count - 1].rowHasTH = false
+                tableStack[tableStack.count - 1].lastCellClosed = true
+                out += "\n|"
+            }
+
+        case "ol":
+            if isClosing {
+                _ = listStack.popLast()
+            } else {
+                // 有序列表：起始编号由 `start` 决定（默认 1），编号存在栈顶。
+                let start = attribute("start", in: body).flatMap(Int.init) ?? 1
+                listStack.append(start)
+                out += "\n\n"
+            }
+
+        case "ul":
+            if isClosing {
+                _ = listStack.popLast()
+            } else {
+                // 无序列表：栈顶存 nil。
+                listStack.append(nil)
+                out += "\n\n"
+            }
+
         case "td", "th":
-            // 每个单元格独占一行 —— 没有表格块类型，横向排布无从表达；
-            // 竖着读是**内容不丢**的那一侧（`RepoLinkResolver` 与这一条无关）。
-            out += "\n"
+            let isHeaderCell = name == "th"
+            guard !tableStack.isEmpty else {
+                // 表格外的孤立 td/th，保留每个单元格换行的旧降级。
+                out += "\n"
+                break
+            }
+            var state = tableStack[tableStack.count - 1]
+            if isClosing {
+                if !state.lastCellClosed {
+                    out += "|"
+                    state.lastCellClosed = true
+                }
+            } else {
+                // 上一个单元格没闭合就先关上（兼容省略 `</td>` 的写法）。
+                if state.cellCount > 0 && !state.lastCellClosed {
+                    out += "|"
+                }
+                state.cellCount += 1
+                if isHeaderCell { state.rowHasTH = true }
+                state.lastCellClosed = false
+            }
+            tableStack[tableStack.count - 1] = state
 
         case "li":
-            if !isClosing { out += "\n- " }
+            // 只在开标签时输出一个列表项；闭标签不产出。
+            guard !isClosing else { break }
+            if !listStack.isEmpty {
+                // `value` 可以指定这一项的编号（仅对有序列表生效）。
+                if let value = attribute("value", in: body).flatMap(Int.init) {
+                    listStack[listStack.count - 1] = value
+                }
+                if let number = listStack[listStack.count - 1] {
+                    // 有序：输出当前编号并把栈顶计数 +1。
+                    out += "\n\(number). "
+                    listStack[listStack.count - 1] = number + 1
+                } else {
+                    // 栈顶为 nil ⇒ 无序。
+                    out += "\n- "
+                }
+            } else {
+                // 不在任何列表里的孤立 <li>，兜底成无序项。
+                out += "\n- "
+            }
 
         case "summary":
             // 折叠标题：`<summary>` 之后是正文，加粗一下才看得出它是标题。
