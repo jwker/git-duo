@@ -425,26 +425,32 @@ struct RepoDetailView: View {
     /// 留着那句 hint，"这三个出口还不能用"在代码里就仍然看起来成立 ——
     /// 而它们现在**都能用**。
     ///
-    /// ⚠️ 形态一个像素都没动：这一片改的是**行为**，不是版式。
+    /// ## ⚠️ 2026-10-11：删掉了那颗独立的 `plus` 图标（用户报回「有两个加号」）
+    ///
+    /// 原型是 `I.plus` **配**全角 `＋` 文案（`GitHubIcon` 那条注释写了"两者都在"），
+    /// 照搬过来就是两个加号并排。保留**文案里**那一个 —— 它与「添加」二字
+    /// 同字体、同字号（都是 `footnote`，13pt），严格同大。
+    /// 已登记为有意偏差（`REVIEW-CHECKLIST` **第 52 条**）。
+    ///
+    /// ⚠️ 它此前那套"画出但不可点"（`allowsHitTesting(false)` + 读屏 hint +
+    /// 一个真的什么都不做的闭包）连同 `RepoCopy.addFileUnavailableHint` 一起删掉了。
+    /// 留着那句 hint，"这三个出口还不能用"在代码里就仍然看起来成立 ——
+    /// 而它们现在**都能用**。
     private var addFileButton: some View {
         Button {
             sheet = .addFile
         } label: {
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: GitHubIcon.plus)
-                    .font(.system(size: 13, weight: .semibold))
-                Text(RepoCopy.addFileAction)
-            }
-            // 原型 `.btn{font-size:13.5px;font-weight:650}` ⇒ `footnote` + semibold。
-            .font(Theme.Font.footnote.weight(.semibold))
-            .foregroundStyle(Theme.Palette.textPrimary)
-            // 原型这一处覆写 `padding:5px 12px`。
-            .padding(.vertical, 5)
-            .padding(.horizontal, Theme.Spacing.m)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                    .fill(Theme.Palette.surfaceSunken)
-            )
+            Text(RepoCopy.addFileAction)
+                // 原型 `.btn{font-size:13.5px;font-weight:650}` ⇒ `footnote` + semibold。
+                .font(Theme.Font.footnote.weight(.semibold))
+                .foregroundStyle(Theme.Palette.textPrimary)
+                // 原型这一处覆写 `padding:5px 12px`。
+                .padding(.vertical, 5)
+                .padding(.horizontal, Theme.Spacing.m)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                        .fill(Theme.Palette.surfaceSunken)
+                )
         }
         .buttonStyle(.plain)
     }

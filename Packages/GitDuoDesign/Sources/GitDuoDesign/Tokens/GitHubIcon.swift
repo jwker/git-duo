@@ -39,8 +39,11 @@ public enum GitHubIcon {
     /// 列表行右侧的指示符 —— 原型 `I.chev`。
     public static let chevron = "chevron.right"
 
-    /// 面包屑右侧的「＋ 添加」（原型用 `I.plus` 配全角 `＋` 文案，两者都在）。
-    public static let plus = "plus"
+    // ⚠️ **2026-10-11 删掉了 `plus`**（它原本是面包屑右侧那颗「＋ 添加」的图标）。
+    //    原型用 `I.plus` 配全角 `＋` 文案 —— **两者都在**，照搬过来就是两个加号并排。
+    //    用户报回「有两个加号」后，保留**文案里**那一个（与「添加」二字同字体、同字号），
+    //    那颗独立图标连同本令牌一并删除 ⇒ 全仓再无引用。
+    //    见 `REVIEW-CHECKLIST` 第 52 条。
 
     // MARK: - Fork（§4.4 / §4.13 的统计按钮）
 
