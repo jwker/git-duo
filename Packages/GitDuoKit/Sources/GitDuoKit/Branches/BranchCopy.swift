@@ -92,7 +92,7 @@ public enum BranchCopy {
     /// 默认分支不可删（原型 `deleteBranchAsk` 逐字）。
     ///
     /// ⚠️ 正常情况下用户点不到它（`BranchSummary.canDelete` 为假时**不画**删除按钮），
-    /// 这句是**逻辑层拦截**那一路的输出 —— 两条路都要在，同收藏夹默认夹的做法。
+    /// 这句是**逻辑层拦截**那一路的输出 —— 「不给入口」与「逻辑层拦截」两条路都要在。
     public static func defaultBranchBlockedToast(branch: String) -> String {
         "\(branch) 是默认分支，不可删除"
     }

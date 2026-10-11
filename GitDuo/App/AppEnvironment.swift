@@ -80,7 +80,7 @@ final class AppEnvironment {
     ///
     /// 它是**跨页共享的一份缓存**（一个会话里只查一次 `GET /user/installations`）。
     /// 两个实例的表现是"同一个仓库在两个页面上一个能点一个不能点"，而两页单看都对
-    /// —— 与 `folders` / `branchMemory` 那两条先例同源。
+    /// —— 与 `branchMemory` 那条先例同源。
     ///
     /// ⚠️ 它是一份**账号数据** —— 名单是"这个账号装了 GitDuo 的那些账号"，
     /// 换个人登录就变了 ⇒ `signOut()` 必须 `clear()`（§3.6 第 ③ 步）。
@@ -223,19 +223,6 @@ final class AppEnvironment {
     /// ⇒ `signOut()` 必须清掉（§3.6 第 ③ 步）。
     let commentDrafts: any CommentDraftStore
 
-    /// 收藏夹与收藏归属（落盘实现见 `UserDefaultsFolderStore`，§9.12）。
-    ///
-    /// ## ⚠️⚠️ 全 App **只能有这一个实例**
-    ///
-    /// 「我的收藏」管理页（`FoldersView`）与仓库详情页的「选择收藏列表」弹层
-    /// （`ExploreRepoDetailView` 的 ② 分区）读的是**同一份数据**（§9.12 末段）。
-    /// 两个实例的表现是"在一边建了夹、另一边看不见"，而两边看起来都正常
-    /// —— 与 `branchMemory` 那条先例一模一样（那条的后果是"记忆时有时无"）。
-    /// ⇒ **任何地方都不要再 new 一个**，一律从组合根取这一个。
-    ///
-    /// ⚠️ 它是**账号数据**：夹名是用户自己起的 ⇒ `signOut()` 必须清掉（§3.6 第 ③ 步）。
-    let folders: any FolderStore
-
     // MARK: - 全局 UI 通道
 
     /// 轻提示的唯一通道（TECH_SPEC §8.4）—— 挂在 `MainTabView` 上，四个 Tab 共用。
@@ -291,15 +278,11 @@ final class AppEnvironment {
         let searchHistory = UserDefaultsSearchHistoryStore()
         let branchMemory = UserDefaultsBranchMemoryStore()
         let commentDrafts = UserDefaultsCommentDraftStore()
-        // ⚠️ 切片 9：收藏夹。它**没有网络那一半**（GitHub 连读接口都没有，§9.12），
-        //    所以在"本地存储"这一段里造，与另外五个落盘 store 并列。
-        let folders = UserDefaultsFolderStore()
         self.recentVisits = visits
         self.starSnapshots = snapshots
         self.searchHistory = searchHistory
         self.branchMemory = branchMemory
         self.commentDrafts = commentDrafts
-        self.folders = folders
 
         self.repositories = LoadRepositoriesPage(
             source: GitHubRepositoryEndpoint(client: client)
@@ -419,7 +402,7 @@ final class AppEnvironment {
         //    必须是**同一个数**，分开写的那天会出现"压到 1.2MB 再被 1MB 的判据拒掉"。
         self.uploadIntake = UploadIntake(processor: ImageProcessor())
 
-        // ── 切片 9：「我的」那条线上的取数（收藏夹见上面"本地存储"那一段）。
+        // ── 切片 9：「我的」那条线上的取数。
         //
         // ⚠️ `GitHubProfileDataSource` 要**两个客户端**（REST 取 `/user`、
         //    GraphQL 取日历与两个计数）—— 它们是两个端点、两个配额桶、
@@ -552,7 +535,6 @@ final class AppEnvironment {
         //    · 最近搜索（切片的 5 —— 它记的是"这个人在搜什么"）
         //    · 分支记忆（切片 6.4 —— 分支名会暴露私有仓库的结构）
         //    · 评论草稿（切片 7 —— 草稿里可能有还没发布的正文）
-        //    · 收藏夹与归属映射（切片 9 —— 夹名是用户自己起的）
         //    · **Star 可写范围**（切片 11 —— 它是"这个账号把 GitDuo 装在哪几个账号上"，
         //      换个人登录，能写的仓库也换了）
         //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
@@ -561,7 +543,6 @@ final class AppEnvironment {
         await searchHistory.clear()
         await branchMemory.clear()
         await commentDrafts.clear()
-        await folders.clear()
         await starWriteScope.clear()
         // ⚠️ `LoadSearch` 与 `LoadMyConversations` 都是 actor，它们缓存的是
         //    **上一个账号搜出来的结果**（含私有仓库名、他提过的 PR）⇒
@@ -620,9 +601,10 @@ enum AuthNotice: Equatable {
 ///        `pullDetail` / `pullAction` 五条用例与 `commentDrafts` 的装配）。
 /// 已消解：`RouteView` 的 `.editor`（切片 8.4 → `EditorView` + `saveFile` / `renameFile` /
 ///        `deleteFile` 三条写用例的装配）。
-/// 已消解：`RouteView` 的 `.stars` / `.folders` / `.settings`（切片 9.4+9.5 →
-///        `MyStarsView` / `FoldersView` / `SettingsView` + `profileOverview` /
-///        `folders` / `conversations` 三条用例与 `conversations` 的登出清缓存）。
+/// 已消解：`RouteView` 的 `.stars` / `.settings`（切片 9.4+9.5 →
+///        `MyStarsView` / `SettingsView` + `profileOverview` /
+///        `conversations` 三条用例与 `conversations` 的登出清缓存）。
+///        （`.folders` 也曾在这里 —— 「我的收藏」功能已于 2026-10-11 整体移除。）
 /// 已消解：「我的」Tab 根页（切片 9.4 → `ProfileView` 重写，摘掉 `SkeletonScreen`；
 ///        登出那一行已迁进 `SettingsView`）。
 enum SkeletonPlaceholders {

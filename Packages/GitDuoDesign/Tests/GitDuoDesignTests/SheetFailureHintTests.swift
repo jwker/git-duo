@@ -23,7 +23,7 @@ struct SheetFailureHintTests {
     func colorComesFromTheDestructiveSlot() {
         // 原型里弹层内这一行是红字（`Scripts/15-sheets.js` 那类校验），
         // 而 App 侧的取值出处集中在 `Theme.Palette.destructive` 一处。
-        #expect(SheetFailureHint("收藏夹已存在").color == Theme.Palette.destructive)
+        #expect(SheetFailureHint("已有同名标签").color == Theme.Palette.destructive)
     }
 
     @Test("⚠️ 字号取的是 `caption` —— 与 `RenameFileSheet` 那份裸写**逐字同档**")
@@ -31,7 +31,7 @@ struct SheetFailureHintTests {
         // 这一条是"收拢副本"的守卫：`RenameFileSheet` 原本裸写的正是 `Theme.Font.caption`，
         // 若哪天有人把本件改成 `footnote`（"看起来更清楚"），
         // 那一张弹层的那一行会跟着变 —— 而它属于切片 8 已验收的界面。
-        #expect(SheetFailureHint("收藏夹已存在").font == Theme.Font.caption)
+        #expect(SheetFailureHint("已有同名标签").font == Theme.Font.caption)
     }
 
     @Test("⚠️ 它与 `NoticeBar` **不是同一件**：两处取的不是同一个令牌")
@@ -40,7 +40,7 @@ struct SheetFailureHintTests {
         // 代价是：`NoticeBar` 服务**页面**（原型 `#sendErr`，圆角色底）、
         // 本件服务**弹层内部**（无底色），两个场景的可用宽度与周围留白都不同。
         // 这一条钉住"两个令牌不许被改成同一个"。
-        let inline = SheetFailureHint("收藏夹已存在")
+        let inline = SheetFailureHint("已有同名标签")
         let bar = NoticeBar(text: "⚠ 发送失败：网络不可用。草稿已保留，可重试。")
 
         #expect(inline.color == Theme.Palette.destructive)

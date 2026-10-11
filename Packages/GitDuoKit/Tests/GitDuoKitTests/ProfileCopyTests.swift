@@ -7,7 +7,7 @@ import Testing
 ///
 /// ## 为什么单独一个文件
 ///
-/// 同 `FolderCopyTests`：这一族文案在 9.1 建起来时**一条断言都没有**，
+/// 同 `SearchCopyTests`：这一族文案在 9.1 建起来时**一条断言都没有**，
 /// 而 `AGENTS.md §5` 的纪律是"文案是契约、一律提为可测领域数据"。
 ///
 /// ## 这一套里最贵的两条
@@ -56,10 +56,9 @@ struct ProfileCopyTests {
         #expect(label.contains(ProfileCopy.yearLabel(2025)))
     }
 
-    @Test("五条菜单逐字（原型两张卡片）")
+    @Test("四条菜单逐字（原型两张卡片）")
     func menuItemsAreVerbatim() {
         #expect(ProfileCopy.menuStars == "Star 管理")
-        #expect(ProfileCopy.menuFolders == "我的收藏")
         #expect(ProfileCopy.menuPullRequests == "我的 Pull Request")
         #expect(ProfileCopy.menuIssues == "我的 Issue")
         #expect(ProfileCopy.menuSettings == "设置")

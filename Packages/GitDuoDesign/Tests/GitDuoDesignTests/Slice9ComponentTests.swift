@@ -181,10 +181,10 @@ struct Slice9ComponentTests {
     @Test("⚠️ `systemImage` 默认 `nil` —— 设置页那五行在原型里**一个图标都没有**")
     func menuRowIconIsOptional() {
         // `12-me.js` 的五个 `.menu-item` 里没有任何 `svg(...)`；
-        // 而「我的」页与收藏夹页那几行都有 ⇒ 图标只能是 Optional。
+        // 而「我的」页那几行都有 ⇒ 图标只能是 Optional。
         // 若哪天有人给它一个默认图标，设置页五行会**多出一个原型没有的图标**。
         #expect(MenuRow(title: "主题", value: "浅色").systemImage == nil)
-        #expect(MenuRow(systemImage: GitHubIcon.bookmark, title: "我的收藏").systemImage != nil)
+        #expect(MenuRow(systemImage: GitHubIcon.star, title: "Star 管理").systemImage != nil)
     }
 
     @Test("⚠️ `action` 默认 `nil` —— 不可点的那几行**根本不是按钮**")
@@ -220,17 +220,15 @@ struct Slice9ComponentTests {
         // 分隔线由**行**决定（卡片不知道自己装了几行）⇒ 默认画，最后一行传 `false`。
         #expect(row.showsSeparator)
 
-        // 三种附件是**穷尽**的：`value` 是独立的参数（收藏夹行是「3 项 + ›」两样一起）。
+        // 两种附件是**穷尽**的：`value` 是独立的参数（可与尖角同时出现）。
         #expect(MenuRow(title: "x", accessory: .chevron).accessory == .chevron)
-        #expect(MenuRow(title: "x", accessory: .tag("默认")).accessory == .tag("默认"))
-        #expect(MenuRow(title: "x", accessory: .chevron).accessory != .tag("默认"))
+        #expect(MenuRow(title: "x", accessory: .chevron).accessory != .none)
     }
 
-    @Test("⚠️ 三个新图标名与原型 `I.*` 对得上（名字写错不会报错，只能靠这份表拦住笔误）")
+    @Test("⚠️ 两个新图标名与原型 `I.*` 对得上（名字写错不会报错，只能靠这份表拦住笔误）")
     func menuIcons() {
-        // 原型 `12-me.js:23` = `svg(I.star)`，`:24` = `svg(I.bm)`，`:29` = `svg(I.gear)`。
+        // 原型 `12-me.js:23` = `svg(I.star)`，`:29` = `svg(I.gear)`。
         #expect(GitHubIcon.star == "star")
-        #expect(GitHubIcon.bookmark == "bookmark")
         #expect(GitHubIcon.settings == "gearshape")
 
         // ⚠️ 「我的 Pull Request / 我的 Issue」两行**不新造常量**：

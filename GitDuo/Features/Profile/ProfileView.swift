@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// 结构（自上而下，顺序即原型 `12-me.js` 的 `SCR.me`）：
 /// 大标题「我的」· 个人资料头部（大头像 / 昵称 / `@登录名` / 简介 / 三个统计项）·
-/// 贡献热力图卡片 · 菜单卡片一（Star 管理 / 我的收藏 / 我的 PR / 我的 Issue）·
+/// 贡献热力图卡片 · 菜单卡片一（Star 管理 / 我的 PR / 我的 Issue）·
 /// 菜单卡片二（设置）。
 ///
 /// ## ⚠️ 切片 1 的那条例外到此结束
@@ -216,13 +216,6 @@ struct ProfileView: View {
                 accessory: .chevron
             ) {
                 env.router.push(.stars)
-            }
-            MenuRow(
-                systemImage: GitHubIcon.bookmark,
-                title: ProfileCopy.menuFolders,
-                accessory: .chevron
-            ) {
-                env.router.push(.folders)
             }
             // 图标取 `StateIcon` 那两个常量（原型 `I.pr` / `I.issueO` 的出处），
             // 不在 `GitHubIcon` 里再抄一份 —— 见那个文件的尾巴。

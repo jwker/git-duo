@@ -128,7 +128,7 @@
 - `Features/<域>/` —— 域名 = `Auth` `Home` `Explore` `Repos` `Repo` `Search` `Profile`；每个域下 `Views/` · `Components/` · `ViewModels/`
 - `Resources/`
 
-**领域层** `Packages/GitDuoKit/Sources/GitDuoKit/` —— `Home` `Explore` `Repos` `Repo` `Branches` `Files` `Search` `Profile` `Favorites` `Rendering`（Markdown / diff / 高亮）· `Mapping` `Models` `Paging` `Loading`
+**领域层** `Packages/GitDuoKit/Sources/GitDuoKit/` —— `Home` `Explore` `Repos` `Repo` `Branches` `Files` `Search` `Profile` `Rendering`（Markdown / diff / 高亮）· `Mapping` `Models` `Paging` `Loading`
 
 **数据层** `Packages/GitHubAPI/Sources/GitHubAPI/` —— `REST/`（端点 + DTO）· `GraphQL/` · `HTTP/`（传输 / 缓存 / 错误）· `Auth/` · `Cache/` · `Pagination/`
 

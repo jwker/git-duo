@@ -90,7 +90,7 @@ public struct DeleteBranch: Sendable {
         defaultBranch: String
     ) async throws -> DeleteBranchResult {
         // ── 第 1 步：入口判据。UI 已经不给入口了，这里再拦一次
-        //    （同收藏夹默认夹的做法：「不给入口」与「逻辑层拦截」两条都要在）。
+        //    （「不给入口」与「逻辑层拦截」两条都要在）。
         if let reason = branch.deleteBlockReason(defaultBranch: defaultBranch) {
             switch reason {
             case .defaultBranch: return .blockedDefault

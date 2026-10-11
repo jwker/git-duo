@@ -75,9 +75,6 @@ struct RouteView: View {
                 starScope: env.starWriteScope,
                 memory: env.branchMemory,
                 visits: env.recentVisits,
-                // 切片 9：② 「我的收藏」分区（§5.5 / §5.6）。
-                // ⚠️ 与「我的收藏」管理页共用组合根那一个 `FolderStore`（§9.12 末段）。
-                folders: env.folders,
                 toast: env.toast
             )
         case let .fileView(fullName, path, readOnly):
@@ -199,11 +196,6 @@ struct RouteView: View {
                 starToggle: env.starToggle,
                 toast: env.toast
             )
-        case .folders:
-            // PRD §4.19。⚠️ 传的是组合根那**唯一一个** `FolderStore` ——
-            //    仓库详情页的「选择收藏列表」弹层读的是同一份数据；
-            //    这里若 new 一个，表现是"在一边建了夹、另一边看不见"（§9.12 末段）。
-            FoldersView(store: env.folders, toast: env.toast)
         case let .myConversations(kind):
             // PRD §4.21 / 决策 #73。⚠️ 两页共用**同一个** `LoadMyConversations`
             //    （它缓存里按 `kind` 分键）⇒ 切到「我的 Issue」再切回来不重发一轮

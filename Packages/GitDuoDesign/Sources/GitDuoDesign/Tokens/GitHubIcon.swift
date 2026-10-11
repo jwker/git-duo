@@ -97,9 +97,6 @@ public enum GitHubIcon {
     /// （金色在白底上对比度不足 2:1，见 `starActive` 的抬头）。
     public static let star = "star"
 
-    /// 「我的收藏」菜单行 / 收藏夹行 —— 原型 `I.bm`（`12-me.js:24` 与 `11-favorites.js:71`）。
-    public static let bookmark = "bookmark"
-
     /// 「设置」菜单行 —— 原型 `I.gear`（`12-me.js:29`）。
     ///
     /// ⚠️ 取的是小写 `gearshape`（齿轮形状那一个），**不是** `Gear` / `gearshape.fill`

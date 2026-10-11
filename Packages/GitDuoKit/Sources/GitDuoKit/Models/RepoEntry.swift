@@ -11,7 +11,7 @@ import Foundation
 public enum RepoEntry: Sendable, Hashable {
     /// 可写工作台：浏览代码、编辑文件、提交、管理分支、处理 Issue 与 PR。
     case writable
-    /// 只读阅览室：仅浏览 + Star / Watch / Fork / 收藏，无写操作。
+    /// 只读阅览室：仅浏览 + Star / Watch / Fork，无写操作。
     case readOnly
 }
 

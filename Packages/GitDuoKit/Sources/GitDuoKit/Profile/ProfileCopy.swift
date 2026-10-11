@@ -6,7 +6,7 @@ import GitDuoCore
 ///
 /// ## 为什么放在领域层
 ///
-/// 与 `SearchCopy` / `FolderCopy` 同源：这些是**可见契约**（PRD §7 那张表逐条列着它们），
+/// 与 `SearchCopy` 同源：这些是**可见契约**（PRD §7 那张表逐条列着它们），
 /// 而"什么时候说哪一句"是一条产品规则。放进 `GitDuoKit` 才能被单测钉住 ——
 /// App target 没有测试 target。
 ///
@@ -64,7 +64,6 @@ public enum ProfileCopy {
     // MARK: - 菜单（原型两张卡片）
 
     public static let menuStars = "Star 管理"
-    public static let menuFolders = "我的收藏"
     public static let menuPullRequests = "我的 Pull Request"
     public static let menuIssues = "我的 Issue"
     public static let menuSettings = "设置"
@@ -162,7 +161,6 @@ public enum ProfileCopy {
     /// ⚠️ **规格未给**（自拟）。PRD §4.20 只说"完成后显示释放空间"，
     /// 没给措辞 —— 这里照 8.7 那条 caption 的做法**把两个数都写出来**
     /// （释放了多少），因为"清完了"与"清掉了多少"不是同一件事。
-    /// 与 `FolderCopy.deleted` 同构（都带一个数量）。
     public static func cacheCleared(released: Int) -> String {
         "已清除缓存 · 释放 \(cacheSize(bytes: released))"
     }

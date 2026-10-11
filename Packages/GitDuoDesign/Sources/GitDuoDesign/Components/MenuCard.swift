@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 菜单卡片 —— 「我的」页那两张卡片、设置页各分区的卡片（含末尾那张**无标题**的）、
-/// 我的收藏页的收藏夹卡片（PRD §4.17 第 4/5 条、§4.19、§4.20）。
+/// 菜单卡片 —— 「我的」页那两张卡片、设置页各分区的卡片（含末尾那张**无标题**的）
+/// （PRD §4.17 第 4/5 条、§4.20）。
 ///
 /// ```css
 /// .menu-card{background:var(--card);border:1px solid var(--border-soft);
@@ -89,7 +89,7 @@ public struct MenuCard<Content: View>: View {
 ///
 /// **设置页那五个 `.menu-item` 在原型里一个图标都没有**
 /// （`12-me.js:65/69/70/74/75`：`<div class="menu-item">主题<span…>浅色</span></div>`
-/// —— 里面没有任何 `svg(...)`）。而「我的」页与收藏夹页那几行**都有**。
+/// —— 里面没有任何 `svg(...)`）。而「我的」页那几行**都有**。
 ///
 /// ⚠️ 本 App 的设置页现在是**六行**（原型那五行一条不多、一条不少，另加：
 /// 「前往 GitHub 手动撤销授权」—— 偏差第 **40** 条；「退出登录」搬到末尾一张独立卡片 ——
@@ -116,7 +116,7 @@ public struct MenuRow: View {
     /// 标题的颜色档。
     ///
     /// ⚠️ 判据 **#43**：这是纯视觉枚举，不认识任何领域模型 ——
-    /// 它**不叫** `.signOut` / `.deleteFolder`（与 `SheetRow.TitleTone` 同一条判据）。
+    /// 它**不叫** `.signOut`（与 `SheetRow.TitleTone` 同一条判据）。
     public enum TitleTone: Sendable, Hashable {
 
         /// 普通行（`textPrimary`）。
@@ -128,8 +128,8 @@ public struct MenuRow: View {
 
     /// 标题右侧那个附件。
     ///
-    /// 原型里 `.menu-item` 的尾部**只有这三种**（值那一样是独立的 `value` 参数，
-    /// 因为它常与后两者同时出现：收藏夹行是「3 项 + ›」、默认夹行是「45 项 + 默认」）。
+    /// 原型里 `.menu-item` 的尾部**只有这两种**（值那一样是独立的 `value` 参数，
+    /// 因为它常与尖角同时出现）。
     public enum Accessory: Sendable, Hashable {
 
         /// 什么都不画（设置页那些只显示值的行）。
@@ -137,9 +137,6 @@ public struct MenuRow: View {
 
         /// 一个尖角（`›`）—— "这一行能进去"的唯一视觉信号。
         case chevron
-
-        /// 一枚小标签（`.ftag`）—— 只有内置「默认收藏夹」那一行用（PRD §4.19）。
-        case tag(String)
     }
 
     /// SF Symbol 名；`nil` = 这一行没有图标（设置页那五行就是这样）。
@@ -216,7 +213,7 @@ public struct MenuRow: View {
                     // …同一行的 `stroke:var(--text2)`。
                     .foregroundStyle(Theme.Palette.textSecondary)
                     // 固定宽度：原型的图标都是 19px 的方框，所以标题天然对齐；
-                    // SF Symbols 的字形宽度各不相同（`star` 比 `bookmark` 窄），
+                    // SF Symbols 的字形宽度各不相同（`star` 比 `gearshape` 窄），
                     // 不固定的话每一行的标题会各差一两个点 —— 单看一行完全看不出来。
                     .frame(width: 22)
             }
@@ -243,8 +240,6 @@ public struct MenuRow: View {
                 EmptyView()
             case .chevron:
                 chevron
-            case let .tag(text):
-                TagLabel(text: text)
             }
         }
         // 原型 `padding:13px 14px`（13 不在 4pt 阶里 ⇒ 写原值；14 同 `CardBox` 的横向内边距）。
@@ -263,44 +258,14 @@ public struct MenuRow: View {
     }
 }
 
-// MARK: - 默认收藏夹那一枚小标签
-
-/// 原型 `.ftag`（只有「我的收藏」页的默认夹那一行用）。
-///
-/// ⚠️ **字号与字重各差一点点**：原型是 `10.5px/700`，本仓最近的一档是
-/// `Theme.Font.tag`（`.caption2` 11 + semibold 600）。差 0.5pt 与一档字重，
-/// 换来的是一条既有令牌而不是一个新的魔法字号 —— 与 `SectionHeader` 那条
-/// "6 不在 4pt 阶里就写原值"不同：那是**间距**（没有语义档位），
-/// 而这里**有**一档现成的"小标签"令牌，再造一个只会多一个将来要同步的东西。
-private struct TagLabel: View {
-
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(Theme.Font.tag)
-            .foregroundStyle(Theme.Palette.textTertiary)
-            // 原型 `letter-spacing:.3px`。
-            .tracking(0.3)
-            // 原型 `padding:2px 7px`（2 是 `Spacing.xxs`；7 不在阶里 ⇒ 写原值）。
-            .padding(.vertical, Theme.Spacing.xxs)
-            .padding(.horizontal, 7)
-            // 原型 `background:var(--chip)` = `#eff2f5` = `surfaceSunken`。
-            .background(Theme.Palette.surfaceSunken)
-            // 原型 `border-radius:6px` = `Radius.chip`。
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.chip, style: .continuous))
-    }
-}
-
 #Preview {
     ScrollView {
         VStack(alignment: .leading, spacing: 0) {
-            // ① 「我的」页第一张卡：四行都有图标与尖角，最后一行的分隔线要关掉
+            // ① 「我的」页第一张卡：三行都有图标与尖角，最后一行的分隔线要关掉
             //（PR 与 Issue 两行取 `StateIcon` 那两个常量，见 `GitHubIcon` 尾巴上的说明）
             SectionHeader(title: "菜单卡片一")
             MenuCard {
                 MenuRow(systemImage: GitHubIcon.star, title: "Star 管理", accessory: .chevron, action: {})
-                MenuRow(systemImage: GitHubIcon.bookmark, title: "我的收藏", accessory: .chevron, action: {})
                 MenuRow(systemImage: StateIcon.pullRequestOpen, title: "我的 Pull Request",
                         accessory: .chevron, action: {})
                 MenuRow(systemImage: StateIcon.issueOpen, title: "我的 Issue",
@@ -331,17 +296,6 @@ private struct TagLabel: View {
                 MenuRow(title: "退出登录", titleTone: .destructive, showsSeparator: false, action: {})
             }
             .padding(.top, Theme.Spacing.l)
-
-            // ③ 我的收藏页：自建夹「值 + 尖角」，默认夹「值 + 标签」且**不可点**
-            SectionHeader(title: "我的收藏")
-            MenuCard {
-                MenuRow(systemImage: GitHubIcon.bookmark, title: "默认收藏夹", value: "45 项",
-                        accessory: .tag("默认"))
-                MenuRow(systemImage: GitHubIcon.bookmark, title: "前端好项目", value: "2 项",
-                        accessory: .chevron, action: {})
-                MenuRow(systemImage: GitHubIcon.bookmark, title: "Swift 学习", value: "5 项",
-                        accessory: .chevron, showsSeparator: false, action: {})
-            }
         }
         .padding(Theme.Spacing.page)
     }

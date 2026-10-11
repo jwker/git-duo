@@ -338,8 +338,7 @@ public struct SheetHint: View {
 /// ## 判据 #43：它进设计包
 ///
 /// 只收一个 `String`，不认识任何领域模型；文案由各 Feature / 领域层给
-/// （`FolderCopy.emptyName` / `duplicateInManagement` / `duplicateInRename` ·
-/// `IssueCopy.emptyLabelNameHint` · `ActionCopy.failed`）。
+/// （`IssueCopy.emptyLabelNameHint` · `ActionCopy.failed`）。
 public struct SheetFailureHint: View {
 
     /// 字色。⚠️ 非 `private`：单测要能钉住"它取的是哪一档"（同 `SheetRow.titleColor`）。
@@ -529,7 +528,7 @@ public struct SheetField: View {
 
         // 决策 #77：弹层里"没成"的那一行 —— 位置就在动作按钮**上方**（原型没有这一形态，
         // 见类型说明：它的存在理由是弹层把页面级的提示条盖住了）。
-        SheetFailureHint("收藏夹已存在")
+        SheetFailureHint("已有同名标签")
 
         ActionButton(title: "合并", style: .primary, verticalPadding: 12, action: {})
         ActionButton(title: "取消", style: .ghost, verticalPadding: 12, action: {})

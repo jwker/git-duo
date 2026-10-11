@@ -20,7 +20,7 @@ import SwiftUI
 ///
 /// 不给删除入口的判据在 `BranchSummary.canDelete(defaultBranch:)`（决策 #53），
 /// 列表那一步就不画删除按钮。`DeleteBranch.run` 里还有一次**逻辑层拦截** ——
-/// 两条路都要在（同收藏夹默认夹的做法），而拦截的四种结局各有各的文案
+/// 两条路都要在，而拦截的四种结局各有各的文案
 /// （`DeleteBranchResult.message(branch:)`，唯一落点）。
 struct DeleteBranchSheet: View {
 

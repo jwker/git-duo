@@ -56,30 +56,6 @@ final class ExploreRepoViewModel {
     /// "**还没查到就不拦**"。差别在于本页**真的会用到 `false`**（那一页基本用不到）。
     private(set) var starWritable = true
 
-    /// 这个仓库现在在哪个收藏夹里；`nil` = 没收藏过（PRD §4.13 的 ② 分区）。
-    ///
-    /// ## ⚠️ 它是**纯本地**的，与 Star 那一套完全不同
-    ///
-    /// GitHub 没有"收藏夹"这个资源（§9.12：连读接口都没有）⇒ 这一块
-    /// **永远不发请求、永远不会失败**，也就不需要 Baseline 那一套
-    /// （对照 `star`：它得先 `GET /user/starred/{o}/{r}` 确认基准，决策 #41）。
-    /// 它只有"还没读出来"这一瞬（首帧），没有"读错了"。
-    private(set) var favoriteFolder: String?
-
-    /// 「选择收藏列表」弹层要画的那份清单（夹名 + 项目数）。
-    ///
-    /// ⚠️ 与 `favoriteFolder` **同一次读回来**（`loadFavorite()` 里两行），
-    /// 所以不存在"勾在哪"与"清单里有没有它"对不上的中间帧。
-    private(set) var folderSummaries: [FolderSummary] = []
-
-    /// **弹层内**那一行校验提示（`nil` = 不显示）。
-    ///
-    /// ⚠️ 本页只有 `.emptyName` 那一档用它（新建收藏夹）。另外两档（建成 / 重名复用）
-    /// 都会**关掉弹层** ⇒ 照旧 `toast.show(…)` —— 弹层不在的时候提示条看得见。
-    /// 而 `.emptyName` 那一档**弹层留着**（用户还得接着打字），提示条会被弹层整块盖住
-    /// ⇒ 必须画在弹层里（决策 #77 / 偏差第 45 条；详见 `FoldersViewModel.sheetHint`）。
-    private(set) var sheetHint: String?
-
     /// 相对时间现算用的"现在"。由视图在渲染那刻传进来（见 `open` 处的说明）。
     var now: Date { .now }
 
@@ -87,7 +63,6 @@ final class ExploreRepoViewModel {
     private let starToggle: ToggleStar
     private let starScope: StarWriteScopeCache
     private let visits: any RecentVisitStore
-    private let folders: any FolderStore
     private let toast: ToastCenter
 
     let fullName: String
@@ -102,7 +77,6 @@ final class ExploreRepoViewModel {
         starScope: StarWriteScopeCache,
         memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
-        folders: any FolderStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
@@ -110,7 +84,6 @@ final class ExploreRepoViewModel {
         self.starToggle = starToggle
         self.starScope = starScope
         self.visits = visits
-        self.folders = folders
         self.toast = toast
         self.tree = RepoTreeSession(
             fullName: fullName,
@@ -134,12 +107,7 @@ final class ExploreRepoViewModel {
         //    零额外请求、零猜测（TECH_SPEC §7.2）。
         await visits.record(fullName: fullName, canWrite: false, at: Date())
 
-        // ⚠️ 收藏状态**排在四路取数之前**：它是本地的（§9.12），一瞬就回来，
-        //    排在后面只会让 ② 分区在那几秒里显示成"没收藏过"—— 而它并不是没读出来，
-        //    是我们**还没去读**（那正是 §8.5 说的"加载中 ≠ 无数据"那种错）。
-        await loadFavorite()
-
-        // ⚠️ 「Star 写不写得动」也排在这里（稳态下是缓存命中，组合根冷启动就预热过）。
+        // ⚠️ 「Star 写不写得动」排在这里（稳态下是缓存命中，组合根冷启动就预热过）。
         //    本页这一问**基本上每次都是有意义的** —— 它进来的多半是别人的仓库。
         await resolveStarWritable()
 
@@ -148,10 +116,7 @@ final class ExploreRepoViewModel {
     }
 
     func refresh() async {
-        // 收藏也重读一次：它可能在**另一个入口**被改过（「我的收藏」管理页、
-        // 或别的仓库详情页），而这两处读的是同一份本地数据（§9.12 末段）。
-        await loadFavorite()
-        // 可写范围同理：稳态下白做不了什么，但**第一次没问到**时（断网进的页）
+        // 可写范围重问一次：稳态下白做不了什么，但**第一次没问到**时（断网进的页）
         // 这里是唯一的重试出口 —— `StarWriteScopeCache` 有意不缓存失败。
         await resolveStarWritable()
         await load()
@@ -197,104 +162,6 @@ final class ExploreRepoViewModel {
         guard await tree.switchBranch(to: name, defaultBranch: defaultBranch) else { return }
         // 只读浏览也能切分支 ⇒ 切成功要给一句（与 §4.4 同一句）。
         toast.show(BranchCopy.switchedToast(branch: name))
-    }
-
-    // MARK: - 收藏（纯本地，PRD §4.13 的 ② 分区 / §5.5 / §5.6）
-
-    /// 读一次本地收藏状态：**这个仓库属于哪个夹** + **清单里各夹几项**。
-    ///
-    /// 进页一次；之后每次变更（收藏 / 换夹 / 取消 / 新建并收藏）再读一次。
-    /// ⚠️ 它**不出网**（§9.12）⇒ 不需要"在途"标志，也不会失败。
-    func loadFavorite() async {
-        favoriteFolder = await folders.folder(ofRepo: fullName)
-        folderSummaries = await folders.summaries()
-    }
-
-    /// 没收藏时那颗按钮：收进默认夹（原型 `favNow`）。
-    ///
-    /// ⚠️ 首次收藏的提示里带着「再点可选择列表」—— 那是**一次性引导**，
-    /// 而它必须兑现：用户第一次点的时候并不知道"再点一下能换夹"
-    /// （`FolderCopy.favoritedToDefault` 的说明）。所以两句**不能合并**。
-    func favoriteToDefault() async {
-        let outcome = await folders.move(repo: fullName, to: FolderDefaults.name)
-        await loadFavorite()
-
-        switch outcome {
-        case let .moved(previous, current):
-            toast.show(previous == nil
-                ? FolderCopy.favoritedToDefault
-                : FolderCopy.favorited(to: current))
-        case let .unchanged(folder):
-            // 这一支从"未收藏"那颗按钮进来时不可达（它就是按"不在任何夹里"画的）。
-            // 留着是因为**不能靠"界面的分支"来保证领域层的一致性** ——
-            // 另一处刚好把它收了进来时，说"已收藏到「X」"仍然是对的。
-            toast.show(FolderCopy.favorited(to: folder))
-        case .unknownFolder:
-            // 默认夹是存储的不变量（一定存在）⇒ 到不了这里；真到了也不静默吞掉。
-            toast.show(ActionCopy.failed)
-        }
-    }
-
-    /// 弹层里点了某一项（原型 `pickFav`）。
-    ///
-    /// ⚠️ **点已选中的那个夹 = 取消收藏**（不是"什么都不做"）——
-    /// `FolderCopy.listSheetHint` 逐字写着「再点已选列表取消收藏」。
-    /// 这是本页唯一一个"取消收藏"的入口（列表行上没有）。
-    func pickFolder(_ name: String) async {
-        if favoriteFolder == name {
-            // 返回值只在"另一处刚好也把它删了"时才是 `false`（两处操作同一份本地数据）
-            // —— 而那时成品状态与那句提示说的**完全一致**（它现在不在收藏里），
-            // 所以不看返回值（`remove` 的说明也写了这种情形不是失败）。
-            await folders.remove(repo: fullName)
-            await loadFavorite()
-            toast.show(FolderCopy.removed)
-            return
-        }
-
-        let outcome = await folders.move(repo: fullName, to: name)
-        await loadFavorite()
-
-        switch outcome {
-        case let .moved(_, current):
-            toast.show(FolderCopy.favorited(to: current))
-        case let .unchanged(folder):
-            toast.show(FolderCopy.favorited(to: folder))
-        case .unknownFolder:
-            // 清单就是从 `folderSummaries` 画的 ⇒ 理论上点不出一个不存在的夹。
-            toast.show(ActionCopy.failed)
-        }
-    }
-
-    /// 弹层里「新建收藏夹…」→ 创建并把这个仓库放进去（原型 `createFav`、PRD §5.6 前半）。
-    ///
-    /// ⚠️ 重名时走 **`duplicateInRepository`**（"已存在，已为你选中"）而不是管理页那一句
-    /// —— 两个入口在这一步**有意不同**（§9.12），差别就在这半句话上。
-    ///
-    /// - Returns: **这一张弹层该不该关**。空名 ⇒ `false`（留在弹层里改；提示画在**弹层内**，
-    ///   因为它这一档不关弹层 —— 提示条会被弹层盖住，决策 #77）；建成或重名复用 ⇒ `true`
-    ///   （原型两条路都是 `closeSheet()`；那两档关掉弹层之后照旧走提示条）。
-    ///   弹层的 `sheet` 状态在本视图手上，所以由调用点据此决定 ——
-    ///   在这里持有一个"该不该关"的布尔量会变成第二份真相。
-    func createFolderAndFavorite(name: String) async -> Bool {
-        // 这一次的结果说了算，先清上一次的。
-        sheetHint = nil
-
-        let outcome = await folders.createAndFavorite(name: name, repo: fullName)
-        await loadFavorite()
-
-        switch outcome {
-        case let .created(name):
-            toast.show(FolderCopy.created(name))
-            return true
-        case .reused:
-            toast.show(FolderCopy.duplicateInRepository)
-            return true
-        case .emptyName:
-            // ⚠️ 这一档 `return false`（弹层留着）—— 提示与返回值必须**同向**：
-            //    若哪天改成 `return true`，这句话就没人看得见了（弹层关掉、而它没走提示条）。
-            sheetHint = FolderCopy.emptyName
-            return false
-        }
     }
 
     // MARK: - 内部
@@ -345,7 +212,6 @@ enum ExploreRepoCopy {
     static var noRelease: String { RepoInsightNotice.noRelease }
     static var noContributors: String { RepoInsightNotice.noContributors }
 
-    static let myFoldersSection = "我的收藏（私人整理 · 仅自己可见）"
     static let languageSection = "语言构成"
     static let releaseSection = "Latest Release"
 

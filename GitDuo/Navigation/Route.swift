@@ -51,7 +51,6 @@ enum Route: Hashable, Sendable {
     case exploreIssueList(fullName: String)
     case explorePRList(fullName: String)
     case stars
-    case folders
     case settings
 
     /// 「我的 Pull Request」/「我的 Issue」（切片 9 新增，`TECH_SPEC §8.2`、决策 #73）。
