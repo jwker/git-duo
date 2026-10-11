@@ -34,6 +34,22 @@ import SwiftUI
 /// 这里用 djb2，跨进程稳定 —— 与 `AvatarStack` 用的是**同一份实现**
 /// （这个类型把它提了出来，那边改为委派，免得两份算法各自漂移）。
 ///
+/// ## 图片按显示尺寸降采样（2026-10-11 落地，`TECH_SPEC §5.3`）
+///
+/// GitHub 头像端点的原图约 460px 见方，而这里最大的用处是「我的」页那个 86pt 圆
+/// —— `@3x` 也才 258px。不降采样的话，一个 28pt 的提交行头像也要先拖回一张 460px 的原图，
+/// 再缩到 28pt 去画；屏幕上看到的就是"先闪一个首字母块、过一会儿才换成真图"。
+/// 所以请求前把 `?s=<像素>` 追上去。
+///
+/// ⚠️ **收口在本类型**，而不是三处调用点各改一遍 —— 带 `avatarURL` 的三处
+/// （「我的」页 86pt / 提交行 28pt / 贡献者堆叠 34pt）**全都经过本件**，
+/// 而 `diameter` 就是各自的真实展示尺寸、`displayScale` 由环境给。
+/// 这样"同一个头像在两处走两种 URL"不会发生 —— `ProfileMapper.avatarURL(from:)`
+/// 那条注释当初担心的正是这个，它因此**没有**在领域层单方面补尺寸。
+///
+/// ⚠️ **只对 `githubusercontent.com` 的 host 追加**：那是 `§5.3` 点名"支持 `?s=`"的端点。
+/// 别的 host（将来若换了图床）**原样请求** —— 不给它塞一个它不认识的参数。
+///
 /// ## 图片可空，缺了也不消失
 ///
 /// `avatarURL` 为 `nil`（或取不到）时画首字母兜底圆 —— 而不是让那个位置空一块。
@@ -77,6 +93,12 @@ public struct UserAvatar: View {
     /// 首字母的字号。`nil` = `Theme.Font.label`（既有两档的行为，见类型说明）。
     public let initialFont: Font?
 
+    /// 屏幕缩放（`@2x` / `@3x`）—— 只用来算请求头像的像素边长。
+    ///
+    /// 走环境而不是写死 3：本项目是纯 iPhone（决策 #2），但预览与将来的外接屏
+    /// 不必为这个假设背锅，而读环境是零成本。
+    @Environment(\.displayScale) private var displayScale
+
     public init(
         login: String?,
         avatarURL: URL? = nil,
@@ -93,8 +115,8 @@ public struct UserAvatar: View {
 
     public var body: some View {
         Group {
-            if let avatarURL {
-                AsyncImage(url: avatarURL) { phase in
+            if let requestURL {
+                AsyncImage(url: requestURL) { phase in
                     switch phase {
                     case let .success(image):
                         image.resizable().scaledToFill()
@@ -111,6 +133,19 @@ public struct UserAvatar: View {
         .frame(width: diameter, height: diameter)
         .clipShape(Circle())
         .accessibilityLabel(login ?? "匿名贡献者")
+    }
+
+    /// 真正拿去请求的地址 —— `avatarURL` 按本件的展示尺寸降采样之后的结果。
+    ///
+    /// ⚠️ 它必须**稳定**：`AsyncImage` 的缓存键就是这个 URL，若它每次都变
+    /// （比如把某个会抖的量算进了像素数），头像会陷入反复重下。
+    /// `diameter` 与 `displayScale` 在同一台设备上都不变 ⇒ 同一个头像永远是同一个 URL。
+    private var requestURL: URL? {
+        guard let avatarURL else { return nil }
+        return Self.downsampled(
+            avatarURL,
+            pixels: Self.pixelSize(for: diameter, scale: displayScale)
+        )
     }
 
     private var fallback: some View {
@@ -149,6 +184,41 @@ public struct UserAvatar: View {
         var hash: UInt64 = 5_381
         for byte in text.utf8 { hash = hash &* 33 &+ UInt64(byte) }
         return Int(hash % UInt64(Theme.Palette.avatarFallback.count))
+    }
+
+    // MARK: - 纯函数：降采样（可单测）
+
+    /// 一个边长 `diameter`（pt）的头像，在 `scale` 倍屏上要请求多少像素。
+    ///
+    /// `28pt @3x = 84`、`86pt @3x = 258`。**向上取整**：宁可多要一个像素，
+    /// 也不要因为 `28 × 2.75 = 77` 取整成 77 而让圆的边缘糊掉一点。
+    ///
+    /// `nonisolated` 的理由同 `initial(for:)` —— 它不碰任何 UI 状态。
+    public nonisolated static func pixelSize(for diameter: CGFloat, scale: CGFloat) -> Int {
+        max(1, Int((diameter * max(scale, 1)).rounded(.up)))
+    }
+
+    /// 给 GitHub 头像地址追一个 `?s=<pixels>`（`TECH_SPEC §5.3`）。
+    ///
+    /// 四条规矩，每条都有一个具体理由：
+    ///
+    /// 1. **已有 `s` ⇒ 覆盖**。服务端偶尔会带一个自己的默认尺寸，不覆盖等于白算。
+    /// 2. **其余 query 原样保留**（`v=4` 那类）—— 它是 CDN 的缓存键的一部分，丢掉它会拿到旧图。
+    /// 3. **只认 `githubusercontent.com` 的子域** ⇒ 别的地址**原样返回**，
+    ///    不给它塞一个它不认识的参数（那会让某些图床返回 400，比慢更糟）。
+    ///    ⚠️ 判据写 `.githubusercontent.com`（**带前导点**）而不是裸串：
+    ///    后者会把 `evil-githubusercontent.com` 这种拼法一起放过去。
+    /// 4. **拼不回去就原样返回**：宁可不降采样，也不要一个自己拼坏的 URL。
+    public nonisolated static func downsampled(_ url: URL, pixels: Int) -> URL {
+        guard url.host?.hasSuffix(".githubusercontent.com") == true,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == "s" }
+        items.append(URLQueryItem(name: "s", value: String(pixels)))
+        components.queryItems = items
+        return components.url ?? url
     }
 }
 

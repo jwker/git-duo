@@ -42,9 +42,12 @@ public struct ProfileMapper: Sendable {
     ///
     /// `avatars.githubusercontent.com` 的地址不含空格，所以 `trimming` 之后为空
     /// 只可能是"服务端给了个空串"这一种情形（`gravatar_id` 就是这么发的）。
-    /// ⚠️ **不补 `?s=<size>`**：§5.3 那条降采样规则三处消费点都还没做，属独立的整理
-    /// （`TECH_SPEC §5.3` 已登记为欠账）—— 在这里单方面补上会让同一个头像在
-    /// 三处走两种 URL。
+    /// ⚠️ **不补 `?s=<size>`**（2026-10-11 起仍是不补，但理由换了）：尺寸是**显示端**的知识
+    /// （pt × 屏缩放），领域层这里没有它、也不该有 —— 降采样因此落在视图侧**一处收口**
+    /// （`UserAvatar.downsampled`，按各自的 `diameter` 算像素），
+    /// 三个消费点全都经过那个类型。**在这里补上反而是错的**：它会让同一个头像
+    /// 在"经过 `UserAvatar` 的"与"没经过的"两处走两种 URL。
+    /// 原委见 `TECH_SPEC §5.3`（那条欠账的落地记录）。
     static func avatarURL(from raw: String) -> URL? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : URL(string: trimmed)
