@@ -24,11 +24,31 @@ struct ReposView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            segmentBar
-            mainArea
+        // ⚠️ 2026-10-11：这里改成了**两种骨架**，只为修一件事 ——
+        //    「首页」与「我的」两页是 `ScrollView` **直接当根**，上滑时大标题会收成
+        //    顶部一行小字；本页此前把 `ScrollView` 塞进 `VStack` 里（分段条在外），
+        //    导航栏就盯不住那个滚动视图了，大标题**不收**。用户报回「与首页不一样」。
+        //
+        //    修法就是按首页那样把滚动容器提到根上；分段条仍旧**吸顶**
+        //    （用 `pinnedViews` 的 section header，不是把它挪进滚动内容里 ——
+        //     那样它会跟着滚走，切分段的入口就没了）。
+        Group {
+            switch model.content {
+            case .items, .skeleton:
+                scrollableBody
+
+            case .needsMore, .empty, .failure:
+                // 这三档**本来就没有可滚的内容**，保持原样（分段条在外、内容居中）。
+                // ⚠️ 别顺手把它们也塞进 `ScrollView`：滚动视图给内容的建议高度是 `nil`，
+                //    那几颗用来居中的 `Spacer` 会塌成 0，空态 / 失败态会掉到顶上 ——
+                //    而它们挂着「重试」出口，位置一变就像换了个页面。
+                VStack(spacing: 0) {
+                    segmentBar
+                    mainArea
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.Palette.background)
         .navigationTitle("仓库")
         .toolbar {
@@ -42,6 +62,23 @@ struct ReposView: View {
             }
         }
         .task { await model.loadIfNeeded() }
+    }
+
+    /// 有内容时的骨架：滚动容器在根上，分段条是**吸顶的分区头**。
+    private var scrollableBody: some View {
+        ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    mainArea
+                } header: {
+                    segmentBar
+                        // ⚠️ 吸顶时它是**压在**滚过去的内容上的 ⇒ 这一层必须不透明，
+                        //    否则卡片会从分段之间的缝隙里透出来。
+                        .background(Theme.Palette.background)
+                }
+            }
+        }
+        .refreshable { await model.refresh() }
     }
 
     // MARK: - 分段
@@ -67,12 +104,13 @@ struct ReposView: View {
 
     // MARK: - 主区域
 
+    /// ⚠️ **这里自己不再是滚动容器** —— 滚动与吸顶的分段条都在 `body` 那一层
+    /// （2026-10-11 起；此前 `.skeleton` / `.items` 各自带一个 `ScrollView`）。
     @ViewBuilder
     private var mainArea: some View {
         switch model.content {
         case .skeleton:
-            ScrollView { RepoCardSkeleton().padding(pageInsets) }
-                .scrollDisabled(true)
+            RepoCardSkeleton().padding(pageInsets)
 
         case .items:
             list
@@ -94,29 +132,26 @@ struct ReposView: View {
         let items = model.visibleItems
         let lastID = items.last?.id
 
-        return ScrollView {
-            LazyVStack(spacing: Theme.Spacing.s) {
-                ForEach(items) { repository in
-                    Button {
-                        open(repository)
-                    } label: {
-                        RepoCard(repository: repository)
-                    }
-                    .buttonStyle(.plain)
-                    .onAppear {
-                        // 滚到底自动加载（§4.4：普通列表用自动加载，搜索才用手动按钮）。
-                        // 只对最后一行触发，否则每次出现一行都会打一次请求。
-                        if repository.id == lastID {
-                            Task { await model.loadMore() }
-                        }
+        return LazyVStack(spacing: Theme.Spacing.s) {
+            ForEach(items) { repository in
+                Button {
+                    open(repository)
+                } label: {
+                    RepoCard(repository: repository)
+                }
+                .buttonStyle(.plain)
+                .onAppear {
+                    // 滚到底自动加载（§4.4：普通列表用自动加载，搜索才用手动按钮）。
+                    // 只对最后一行触发，否则每次出现一行都会打一次请求。
+                    if repository.id == lastID {
+                        Task { await model.loadMore() }
                     }
                 }
-
-                footer
             }
-            .padding(pageInsets)
+
+            footer
         }
-        .refreshable { await model.refresh() }
+        .padding(pageInsets)
     }
 
     /// 列表底部：加载中 → 转圈；失败 → 重试行（**不遮挡已有内容**，§8.5）。

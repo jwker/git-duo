@@ -44,13 +44,23 @@ struct ExploreView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 分段条固定在顶部（与 `ReposView` 同一安排）：它自己带左右页边距，
-            // 放进已加过边距的滚动容器里会变成双份。
-            boardBar
-            mainArea
+        // ⚠️ 2026-10-11：滚动容器**提到了根上**，分段条改成**吸顶的分区头** ——
+        //    与「首页」「我的」同一形状，大标题才会在上滑时收成顶部一行小字。
+        //    此前本页与 `ReposView` 一样把 `ScrollView` 塞在 `VStack` 里（分段条在外），
+        //    导航栏盯不住那个滚动视图 ⇒ **大标题不收**。用户报回「与首页不一样」。
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    mainArea
+                } header: {
+                    boardBar
+                        // ⚠️ 吸顶时它是**压在**滚过去的内容上的 ⇒ 这一层必须不透明，
+                        //    否则趋势卡会从分段之间的缝隙里透出来。
+                        .background(Theme.Palette.background)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .refreshable { await model.refresh() }
         .background(Theme.Palette.background)
         .navigationTitle("探索")
         .toolbar {
@@ -114,31 +124,31 @@ struct ExploreView: View {
 
     // MARK: - 主区域
 
-    @ViewBuilder
+    /// 滚动内容。⚠️ **这里自己不再是滚动容器** —— 它在 `body` 那一层那个
+    /// `ScrollView` 里（2026-10-11 起），左右页边距加在它身上，
+    /// 而吸顶的 `boardBar` 在它**外面**（`SegmentedBar` 自带页边距，
+    /// 再套一层会变成双份）。
     private var mainArea: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                chips
-                listTitle
+        VStack(alignment: .leading, spacing: 0) {
+            chips
+            listTitle
 
-                // ⚠️ `incomplete_results` 的说明行**不是错误态**（PRD §4.12）：
-                //    已拿到的条目照常显示，只是这一页少了些本该在里面的仓库。
-                //    不静默忽略的理由见 `ExploreBoardNotice`。
-                if let notice = model.notice {
-                    Text(notice)
-                        .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.Palette.textSecondary)
-                        .padding(.bottom, Theme.Spacing.s)
-                }
-
-                content
-
-                footer
+            // ⚠️ `incomplete_results` 的说明行**不是错误态**（PRD §4.12）：
+            //    已拿到的条目照常显示，只是这一页少了些本该在里面的仓库。
+            //    不静默忽略的理由见 `ExploreBoardNotice`。
+            if let notice = model.notice {
+                Text(notice)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .padding(.bottom, Theme.Spacing.s)
             }
-            .padding(.horizontal, Theme.Spacing.page)
-            .padding(.bottom, Theme.Spacing.xl)
+
+            content
+
+            footer
         }
-        .refreshable { await model.refresh() }
+        .padding(.horizontal, Theme.Spacing.page)
+        .padding(.bottom, Theme.Spacing.xl)
     }
 
     private var listTitle: some View {
