@@ -95,7 +95,12 @@ struct RepoCard: View {
                 }
             }
             Label(CompactNumber.string(from: repository.starCount), systemImage: "star")
-            Label(CompactNumber.string(from: repository.forkCount), systemImage: "arrow.triangle.branch")
+            Label {
+                Text(CompactNumber.string(from: repository.forkCount))
+            } icon: {
+                // SF Symbols 里没有「实线 fork」字形，改用设计包自绘的 `ForkIcon`。
+                ForkIcon().frame(width: 11, height: 11)
+            }
         }
         .font(Theme.Font.caption)
         .foregroundStyle(Theme.Palette.textSecondary)

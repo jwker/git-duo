@@ -214,9 +214,9 @@ struct RepoHeroCard: View {
     /// Fork —— **纯展示**（见类型说明）。
     private var forkButton: some View {
         StatButton(
-            // ⚠️ 走 `GitHubIcon.fork` 而不是字面量：`RepoDetailHero`（§4.4）画的是同一个按钮，
-            //    两处各写一串字面量时，"换一个图标"只会改到其中一处。
-            systemImage: GitHubIcon.fork,
+            // ⚠️ 走 `ForkIcon()` 而不是 SF Symbol：SF Symbols 里没有「实线 fork」这个字形，
+            // 用户报回相差太多，所以设计包里自绘了 `ForkIcon`，与 `RepoDetailHero` 统一用。
+            icon: ForkIcon().frame(width: 12, height: 12),
             title: RepoCopy.forkLabel(count: detail.forkCount),
             action: {}
         )

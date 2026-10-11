@@ -45,17 +45,11 @@ public enum GitHubIcon {
     //    那颗独立图标连同本令牌一并删除 ⇒ 全仓再无引用。
     //    见 `REVIEW-CHECKLIST` 第 52 条。
 
-    // MARK: - Fork（§4.4 / §4.13 的统计按钮）
-
-    /// Fork —— 原型 `I.fork`（`05-repo.js` 的 `stat-btn` 与 `10-explore-repo.js` 各一处）。
-    ///
-    /// ⚠️ 与 `branch` 用的是**同一个**符号：原型这两处都画 `I.fork`。
-    /// 复用而不是另找一个 —— 找不到同形的，"语义接近"的另一个符号
-    /// 只会让这两处看起来是两件事。
-    ///
-    /// 原先两个头部卡里各自写了一串字面 `"arrow.triangle.branch"`，
-    /// 2026-10-07（6.4）收拢到本常量 —— 与 `RepoCopy.watchLabel` 收拢那三句文案同一处置。
-    public static let fork = "arrow.triangle.branch"
+    // ⚠️ **2026-10-11 删掉了 `fork`**（它原本是仓库头部 `StatButton` / 卡片 fork 计数的图标）。
+    //    SF Symbols 里没有「两个上圆点 + 一个下圆点 + 实线」的 fork 字形：
+    //    `point.3.connected.trianglepath.dotted` 的连线是虚点，与用户给的参考图相差太多。
+    //    改由设计包自绘 `ForkIcon.swift` 统一处理这几处。
+    //    见 `REVIEW-CHECKLIST` 第 54 条。
 
     // MARK: - 文件查看页的空态（切片 6.4）
 

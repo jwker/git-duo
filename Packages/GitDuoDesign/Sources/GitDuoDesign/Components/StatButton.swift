@@ -13,7 +13,7 @@ import SwiftUI
 /// | 图标与文字 | **上下两行** | **同一行**（`HStack`） |
 /// | 宽度 | `flex:1` 三等分撑满整行 | **随内容**（每颗只包住自己那一串） |
 /// | 内边距 | `padding:9px 0` | `Theme.Spacing.s` 四边 |
-/// | 图标 | 17px | 15pt |
+/// | 图标 | 17px | **与文案同字号**（`Theme.Font.label`，12pt） |
 /// | 高度 | ≈ 52pt | ≈ 34pt |
 ///
 /// ⚠️ 承载的**三态语义一个都没变**（已选中换实心符号 + 自定前景色、`.disabled` 的灰、
@@ -43,6 +43,11 @@ public struct StatButton: View {
 
     /// 激活态图标（如 `star.fill`）；`nil` 表示这个按钮没有激活态。
     public let activeSystemImage: String?
+
+    /// 自定义图标视图（覆盖 `systemImage`）。用于 SF Symbols 里找不到同形字形的场景，
+    /// 例如 `ForkIcon`（上下翻转的小写 `h`：三个空心圆在左上 / 右上 / 左下）。
+    /// ⚠️ 自定义图标**没有激活态**（目前唯一的使用者 Fork 本来就没有）。
+    public let icon: AnyView?
 
     /// 按钮文案（如 `Star · 2,341`）。**由调用方算好** —— 见类型说明。
     public let title: String
@@ -78,6 +83,28 @@ public struct StatButton: View {
     ) {
         self.systemImage = systemImage
         self.activeSystemImage = activeSystemImage
+        self.icon = nil
+        self.title = title
+        self.isActive = isActive
+        self.activeTint = activeTint
+        self.action = action
+    }
+
+    /// 带**自定义图标视图**的构造器。
+    ///
+    /// `icon` 优先级高于 `systemImage`；传进来后会直接放进 `HStack`，
+    /// 不再包一层 `Image(systemName:)`。调用方负责尺寸（建议 `Theme.Font.label` 同大）。
+    /// 自定义图标目前**没有激活态**（只有 Fork 使用，而 Fork 没有 on/off 状态）。
+    public init<Icon: View>(
+        icon: Icon,
+        title: String,
+        isActive: Bool = false,
+        activeTint: Color = Theme.Palette.accent,
+        action: @escaping () -> Void
+    ) {
+        self.systemImage = ""
+        self.activeSystemImage = nil
+        self.icon = AnyView(icon)
         self.title = title
         self.isActive = isActive
         self.activeTint = activeTint
@@ -98,17 +125,24 @@ public struct StatButton: View {
     }
 
     public var body: some View {
-        Button(action: action) {
-            HStack(spacing: Theme.Spacing.xs) {
+        let iconView: AnyView = {
+            if let icon { return icon }
+            return AnyView(
                 Image(systemName: Self.resolvedSystemImage(
                     systemImage: systemImage,
                     activeSystemImage: activeSystemImage,
                     isActive: isActive
                 ))
-                // 原型图标是 17px（随竖排）；横排后为压高度降到 15。
-                // ⚠️ 图标字号没有令牌档位（`Theme.Font` 全是**文字**语义层），
-                //    同 `MenuCard` 的尖角 —— 此处写点数。
-                .font(.system(size: 15))
+                // 用户裁定的比例：图标必须和文字**同字号**，不能大一号。
+                // 用 `Theme.Font.label`（12pt semibold）而非硬编码点数，
+                // 这样 Dynamic Type 放大时图标与文字仍然同步。
+                .font(Theme.Font.label)
+            )
+        }()
+
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.xs) {
+                iconView
                 Text(title)
                     .font(Theme.Font.label)
                     .lineLimit(1)
@@ -146,7 +180,10 @@ public struct StatButton: View {
                        title: "已 Star · 2,342", isActive: true,
                        activeTint: Theme.Palette.starActive) {}
             StatButton(systemImage: "eye", title: "Watch · 45") {}
-            StatButton(systemImage: GitHubIcon.fork, title: "Fork · 88") {}
+            StatButton(
+                icon: ForkIcon().frame(width: 12, height: 12),
+                title: "Fork · 88"
+            ) {}
         }
 
         // 长数字 + 窄容器：放不下就折到下一行 —— 这正是 `FlowLayout` 在这里的用途
@@ -155,7 +192,10 @@ public struct StatButton: View {
             StatButton(systemImage: "star", activeSystemImage: "star.fill",
                        title: "Star · 128,441", activeTint: Theme.Palette.starActive) {}
             StatButton(systemImage: "eye", title: "Watch · 12,004") {}
-            StatButton(systemImage: GitHubIcon.fork, title: "Fork · 9,318") {}
+            StatButton(
+                icon: ForkIcon().frame(width: 12, height: 12),
+                title: "Fork · 9,318"
+            ) {}
         }
         .frame(width: 300)
     }

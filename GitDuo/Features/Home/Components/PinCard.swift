@@ -105,7 +105,12 @@ struct PinCard: View {
             // Fork 与私有标记都只在**数据源真的给了**的时候才画。
             // `nil` 表示"这个接口不返回这个字段"（决策 #43），不是"值是 0 / false"。
             if let forkCount = summary.forkCount {
-                Label(CompactNumber.string(from: forkCount), systemImage: "arrow.triangle.branch")
+                Label {
+                    // SF Symbols 里没有「实线 fork」字形，改用设计包自绘的 `ForkIcon`。
+                    Text(CompactNumber.string(from: forkCount))
+                } icon: {
+                    ForkIcon().frame(width: 11, height: 11)
+                }
             }
             if summary.isPrivate == true {
                 Text("私有")

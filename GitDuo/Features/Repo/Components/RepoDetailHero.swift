@@ -201,9 +201,11 @@ struct RepoDetailHero: View {
 
     private var forkButton: some View {
         StatButton(
-            // ⚠️ 走 `GitHubIcon.fork` 而不是字面量：`RepoHeroCard`（§4.13）画的是同一个按钮，
-            //    两处各写一串字面量时，"换一个图标"只会改到其中一处。
-            systemImage: GitHubIcon.fork,
+            // ⚠️ 走 `ForkIcon()` 而不是 SF Symbol：`GitHubIcon.fork` 只能拿到
+            // `point.3.connected.trianglepath.dotted`（虚点连线），与用户给的参考图
+            //（两个上圆点 + 一个下圆点 + 实线）相差太多。所以设计包里自绘了一个
+            // `ForkIcon`，两处统一用它。
+            icon: ForkIcon().frame(width: 12, height: 12),
             title: RepoCopy.forkLabel(count: detail.forkCount),
             action: {}
         )
