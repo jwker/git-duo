@@ -138,8 +138,13 @@ struct RepoHeroCard: View {
         }
     }
 
+    /// 三颗统计按钮。
+    ///
+    /// ⚠️ 用 `FlowLayout`（**不是** `HStack`）：三颗的宽度随内容（2026-10-11 由
+    /// "竖排 · 三等分整宽"改，见 `StatButton`），长数字或 Dynamic Type 放大时
+    /// 应当**折行**；`HStack` 放不下只会把它们压扁，把那串数字截掉。
     private var statRow: some View {
-        HStack(spacing: Theme.Spacing.s) {
+        FlowLayout(spacing: Theme.Spacing.s) {
             starButton
             watchButton
             forkButton

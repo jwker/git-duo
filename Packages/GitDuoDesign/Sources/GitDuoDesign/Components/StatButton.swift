@@ -3,6 +3,23 @@ import SwiftUI
 /// 统计按钮 —— 仓库头部那一排 `Star · 2,341` / `Watch · 45` / `Fork · 88`
 /// （原型 `styles/04-screens.css` 的 `.stat-btn`，见 PRD §4.13）。
 ///
+/// ## ⚠️ 形态**有意偏离原型**：横排、宽度随内容（2026-10-11）
+///
+/// 原型是 `.stat-btn{flex:1;flex-direction:column;padding:9px 0}` —— 图标在上、文字在下，
+/// 三颗**等分整宽**，单颗约 52pt 高。用户反馈"太大了，重新设计、排版"后改为：
+///
+/// | | 原型 / 改造前 | 现在 |
+/// |---|---|---|
+/// | 图标与文字 | **上下两行** | **同一行**（`HStack`） |
+/// | 宽度 | `flex:1` 三等分撑满整行 | **随内容**（每颗只包住自己那一串） |
+/// | 内边距 | `padding:9px 0` | `Theme.Spacing.s` 四边 |
+/// | 图标 | 17px | 15pt |
+/// | 高度 | ≈ 52pt | ≈ 34pt |
+///
+/// ⚠️ 承载的**三态语义一个都没变**（已选中换实心符号 + 自定前景色、`.disabled` 的灰、
+/// 在途时那颗 `ProgressView`）—— 变的只有几何。
+/// 已登记为对原型的有意偏差（`REVIEW-CHECKLIST` **第 50 条**）。
+///
 /// ## 它为什么收文案而不是收计数
 ///
 /// 按钮上是 `Star · 2,341` 还是 `已 Star · 2,342`，取决于**是否已 Star** 这个业务状态
@@ -32,7 +49,21 @@ public struct StatButton: View {
 
     public let isActive: Bool
 
-    /// 激活时图标与文字的颜色。默认强调色；Star 按钮传 `Theme.Palette.starActive`。
+    /// 激活时**图标与文字**的颜色（见下方那条"与原型不符"）。默认强调色；Star 按钮传 `Theme.Palette.starActive`。
+    ///
+    /// ## ⚠️ 它在**已 Star** 那一档与原型不符（既有问题，2026-10-11 查出、未处置）
+    ///
+    /// 这里把 `activeTint` 一次性套在**整块**（图标 + 文字）上，而原型
+    /// `.stat-btn.starred svg{fill:#eac54f}` 的选择器**只命中 `svg`** —— 文字仍是正文色。
+    /// `Theme.Palette.starActive` 的抬头也明写"只用于星形图标的填充 / 描边，**绝不用作文字色**"
+    /// （金色在白底上对比度约 1.5:1）。⇒ **原型 / 令牌注释 / 实现**三处不一致。
+    ///
+    /// ⚠️ 单测拦不住它：`ThemeTests` 那条测的是"与状态色的距离"与"对比度区间"，
+    /// **没有一行代码知道它被用在了文字上**。
+    ///
+    /// ⇒ 修法只有一处（图标吃 `activeTint`、文字恒 `textPrimary`），但**要不要改得单独决定**
+    /// —— 它会把"已 Star"的观感从"整块金"变回"金星 + 深字"。
+    /// 本次只动几何、保持现状；原委记在 `REVIEW-CHECKLIST` 第 50 条那一段末尾。
     public let activeTint: Color
 
     public let action: () -> Void
@@ -57,7 +88,7 @@ public struct StatButton: View {
     ///
     /// 做成 **`nonisolated static` 纯函数**（与 `SkeletonBar.animates` 同一模式）：
     /// `View` 协议的成员默认继承主 actor 隔离，而"已 Star 时用的是 `star.fill`"这件事
-    /// 最好能被单测钉住 —— 不必靠肉眼看着一个 17pt 的图标去分辨它是实心还是空心。
+    /// 最好能被单测钉住 —— 不必靠肉眼看着一个 15pt 的图标去分辨它是实心还是空心。
     nonisolated static func resolvedSystemImage(
         systemImage: String,
         activeSystemImage: String?,
@@ -68,23 +99,28 @@ public struct StatButton: View {
 
     public var body: some View {
         Button(action: action) {
-            VStack(spacing: 3) {
+            HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: Self.resolvedSystemImage(
                     systemImage: systemImage,
                     activeSystemImage: activeSystemImage,
                     isActive: isActive
                 ))
-                .font(.system(size: 17))
+                // 原型图标是 17px（随竖排）；横排后为压高度降到 15。
+                // ⚠️ 图标字号没有令牌档位（`Theme.Font` 全是**文字**语义层），
+                //    同 `MenuCard` 的尖角 —— 此处写点数。
+                .font(.system(size: 15))
                 Text(title)
                     .font(Theme.Font.label)
                     .lineLimit(1)
-                    // 窄屏上 `Watch · 1,234` 可能超出按钮宽度 —— 缩小而不是截断成「Watch …」，
-                    // 截断会连数字一起吃掉，那正是用户要看的东西。
+                    // ⚠️ 保留它作兜底：常态下按钮宽度随内容，不会被压缩。
+                    //    但若将来被放进一个**定宽**容器（或 Dynamic Type 放大到一行放不下），
+                    //    截断会连数字一起吃掉 —— 而那个数正是用户要看的东西。
                     .minimumScaleFactor(0.8)
             }
             .foregroundStyle(isActive ? activeTint : Theme.Palette.textPrimary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
+            // ⚠️ **不要加回 `.frame(maxWidth: .infinity)`** —— 那是"三等分整宽"的写法，
+            //    加回去等于把这次改造撤销掉（而且单看一颗按钮看不出来）。
+            .padding(Theme.Spacing.s)
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                     .fill(Theme.Palette.surfaceSunken)
@@ -103,13 +139,27 @@ public struct StatButton: View {
 }
 
 #Preview {
-    HStack(spacing: Theme.Spacing.s) {
-        StatButton(systemImage: "star", activeSystemImage: "star.fill",
-                   title: "已 Star · 2,342", isActive: true,
-                   activeTint: Theme.Palette.starActive) {}
-        StatButton(systemImage: "eye", title: "Watch · 45") {}
-        StatButton(systemImage: "arrow.triangle.branch", title: "Fork · 88") {}
+    VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+        // 常态：三颗左对齐、各自只包住自己的内容（**不是**三等分整宽）。
+        FlowLayout {
+            StatButton(systemImage: "star", activeSystemImage: "star.fill",
+                       title: "已 Star · 2,342", isActive: true,
+                       activeTint: Theme.Palette.starActive) {}
+            StatButton(systemImage: "eye", title: "Watch · 45") {}
+            StatButton(systemImage: GitHubIcon.fork, title: "Fork · 88") {}
+        }
+
+        // 长数字 + 窄容器：放不下就折到下一行 —— 这正是 `FlowLayout` 在这里的用途
+        //（改造前是三等分整宽，数字长了只会把字号压小）。
+        FlowLayout {
+            StatButton(systemImage: "star", activeSystemImage: "star.fill",
+                       title: "Star · 128,441", activeTint: Theme.Palette.starActive) {}
+            StatButton(systemImage: "eye", title: "Watch · 12,004") {}
+            StatButton(systemImage: GitHubIcon.fork, title: "Fork · 9,318") {}
+        }
+        .frame(width: 300)
     }
     .padding(Theme.Spacing.page)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .background(Theme.Palette.background)
 }

@@ -11,6 +11,7 @@ import SwiftUI
 /// 把下面的语言构成 / 文件浏览全推走。2026-10-11 定：**正文从卡片移到这里**，
 /// 卡片只留一颗「更多」。按钮文案与弹层标题都是这次**自拟**的
 /// （`LatestRelease.notesButtonTitle` / `notesSheetTitle(tagName:)`）。
+/// 已登记为对原型的有意偏差（`REVIEW-CHECKLIST` **第 51 条**）。
 ///
 /// 形态照既有的只读弹层走：`SheetTitle` + 正文，不加关闭按钮（下拉关，
 /// 与 `ExploreFilterSheet` 同一条 —— 它也没有关闭按钮，靠 `presentationDragIndicator`）。
