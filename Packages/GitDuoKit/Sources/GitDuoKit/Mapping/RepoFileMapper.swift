@@ -10,18 +10,16 @@ import GitHubAPI
 /// 而它们要钉住的恰恰是"错了不会报错、只会显示成别的东西"的那几条：
 ///
 /// - `type` 的四种取值怎么落到 `TreeEntry.Kind` 的三档上（映射错了目录就点不动）；
-/// - `size` 缺席时给什么（给错就选错通道，见 `FileContent`）；
-/// - 提交信息怎么拆首行 / 正文（三处显示会对不上）。
+/// - `size` 缺席时给什么（给错就选错通道，见 `FileContent`）。
 public enum RepoFileMapper {
 
     // MARK: - 目录条目
 
     /// 目录清单的一项 → 文件树的一行。
     ///
-    /// ⚠️ **`recentCommit` 一律为 `nil`** —— 副标题是决策 #49 那一次
-    /// `GET …/commits?path=&per_page=1` 换来的，**目录清单里没有它**。
-    /// 这里不编、不占位：`TreeEntry.subtitle` 为 `nil` 时视图整行不渲染，
-    /// 收到后再赋值的路径由调用方（分两趟填充）走。
+    /// ⚠️ 目录清单接口带的就是这五样（名字 / 路径 / 种类 / 大小 / SHA）。
+    /// 2026-10-11 之前这里还给 `recentCommit` 留了个"由第二趟补请求填"的口子 ——
+    /// 那条链路（决策 #49）已整条删除。
     public static func treeEntry(_ dto: ContentEntryDTO) -> TreeEntry {
         TreeEntry(
             name: dto.name,
@@ -49,22 +47,6 @@ public enum RepoFileMapper {
         case .file: .file
         case .symlink, .submodule, .unknown: .unsupported
         }
-    }
-
-    // MARK: - 目录行的副标题（决策 #49）
-
-    /// `GET …/commits?path=&per_page=1` 的第一条 → 目录行副标题。
-    ///
-    /// ⚠️ **不要复用 `RepoCommitMapper.summary`**：那个类型还要管作者头像与跳详情页，
-    /// 而目录行只要"信息 + SHA + 时间"三样（`RecentCommit` 的字段集是照着它剪的）。
-    /// 两者的差别不是省字段，是**语义**：目录行不显示作者。
-    public static func recentCommit(_ dto: CommitListItemDTO) -> RecentCommit {
-        RecentCommit(
-            message: dto.commit.message,
-            sha: dto.sha,
-            authorLogin: dto.author?.login,
-            authoredAt: dto.authoredAt
-        )
     }
 
     // MARK: - 文件正文

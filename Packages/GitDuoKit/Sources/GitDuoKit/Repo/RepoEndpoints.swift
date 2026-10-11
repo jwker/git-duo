@@ -9,7 +9,7 @@ import GitHubAPI
 ///
 /// ## 为什么每个端点一个协议、而不是"一个大协议"
 ///
-/// 每个用例只用得上其中一两个端点（`LoadRepoTree` 要 contents + commits，
+/// 每个用例只用得上其中一两个端点（`LoadRepoTree` 要 contents + branches，
 /// `LoadBranches` 只要 branches）。合成一个大协议会让**每个替身都得实现全部方法**，
 /// 于是"这个用例到底依赖哪几个动作"这件事就从类型上消失了 ——
 /// 而那正是这层接缝存在的理由（见 `RepositoryDataSource` 的类型说明）。
@@ -68,7 +68,7 @@ extension GitHubRepoContentEndpoint: RepoContentsDataSource {}
 
 // MARK: - ③ 提交
 
-/// 提交列表 / 提交详情 / 某一文件的最近一条（§4.4 分区四、§4.7、决策 #49）。
+/// 提交列表 / 提交详情（§4.4 分区四、§4.7）。
 public protocol RepoCommitsDataSource: Sendable {
 
     /// 一页提交（`cursor` 为 `nil` 取第一页）。
@@ -81,17 +81,6 @@ public protocol RepoCommitsDataSource: Sendable {
 
     /// 提交详情 —— 含 `stats` 与 `files[].patch`。
     func commit(owner: String, repo: String, sha: String) async throws -> CommitDetailDTO
-
-    /// 最近一次改动该路径的提交；该路径没有任何提交时 `nil`。
-    ///
-    /// ⚠️ **它走的是一次真实请求**（`per_page=1`），文件树的每一行都要它一次
-    /// —— 这正是决策 #49 的代价，也是"副标题分两趟填"的由来。
-    func latestCommit(
-        owner: String,
-        repo: String,
-        path: String,
-        ref: String?
-    ) async throws -> CommitListItemDTO?
 }
 
 extension GitHubRepoCommitEndpoint: RepoCommitsDataSource {}

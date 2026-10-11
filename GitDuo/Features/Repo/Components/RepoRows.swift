@@ -13,12 +13,11 @@ import SwiftUI
 ///                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /// ```
 ///
-/// ## ⚠️ 副标题取不到时**整行不渲染那一行**，不写占位
+/// ## ⚠️ 2026-10-11：`.fmsg`（行副标题）**有意不画**
 ///
-/// `TreeEntry.subtitle` 为 `nil` 有两种情形 —— 还没取回来（决策 #49 的逐条补请求）、
-/// 以及这个条目确实没有提交（不该发生，但类型允许）。原型给的 `f.msg` 是演示数据，
-/// 永远有值。若这里写一个 `读取中…`，30 行会在请求回来时**同时跳一次文字**，
-/// 比它晚一点出现更刺眼（`TreeEntry.subtitle` 的说明里写了同一条）。
+/// 它要靠"每个条目补一次 `GET /commits?path=`"换来（决策 #49），
+/// 用户认为这点信息不值这个代价 ⇒ 那条链路整条删除（`TreeEntry` 上已没有它）。
+/// 原型那行 CSS 留在上面只为对照，本件不再渲染。
 ///
 /// ## ⚠️ 图标用 SF Symbols，不照 SVG 描
 ///
@@ -42,22 +41,11 @@ struct RepoFileRow: View {
                     .foregroundStyle(Theme.Palette.textTertiary)
                     .frame(width: 20)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(entry.name)
-                        // 原型 14.5px/550 ⇒ 最近的一档是 `rowTitle`（`.subheadline` 15）。
-                        .font(Theme.Font.rowTitle)
-                        .foregroundStyle(Theme.Palette.textPrimary)
-                        .lineLimit(1)
-
-                    if let subtitle = entry.subtitle {
-                        Text(subtitle)
-                            // 原型 11.5px ⇒ `caption`（`.caption2` 11）。
-                            .font(Theme.Font.caption)
-                            .foregroundStyle(Theme.Palette.textTertiary)
-                            .lineLimit(1)
-                            .padding(.top, Theme.Spacing.xxs)
-                    }
-                }
+                Text(entry.name)
+                    // 原型 14.5px/550 ⇒ 最近的一档是 `rowTitle`（`.subheadline` 15）。
+                    .font(Theme.Font.rowTitle)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .lineLimit(1)
 
                 Spacer(minLength: 0)
 
@@ -174,15 +162,11 @@ struct RepoCommitRow: View {
                 RepoFileRow(
                     entry: TreeEntry(
                         name: "GitDuo", path: RepoPath(path: "GitDuo"), kind: .directory,
-                        size: 0, sha: "abc", recentCommit: RecentCommit(
-                            message: "feat(repo): 切片 6 之 6.4", sha: "1234567",
-                            authorLogin: "dev-j", authoredAt: Date()
-                        )
+                        size: 0, sha: "abc"
                     ),
                     showsSeparator: true,
                     action: {}
                 )
-                // 副标题还没取回来 ⇒ 那一行整个不渲染。
                 RepoFileRow(
                     entry: TreeEntry(
                         name: "README.md", path: RepoPath(path: "README.md"), kind: .file,

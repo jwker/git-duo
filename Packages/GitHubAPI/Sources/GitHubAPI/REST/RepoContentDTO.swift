@@ -58,14 +58,15 @@ public enum RepoContentType: Sendable, Hashable {
 }
 
 /// **目录**清单的一项 —— `GET /repos/{owner}/{repo}/contents/{path}` 在 `path` 是目录时
-/// 返回一个数组，元素形如本类型（TECH_SPEC §9.5、决策 #49）。
+/// 返回一个数组，元素形如本类型（TECH_SPEC §9.5）。
 ///
 /// ## ⚠️ 这里**没有任何提交信息**（2026-10-07 实测）
 ///
 /// 实测返回项只有 `name` / `path` / `sha` / `size` / `type` / `url` / `_links` /
 /// `git_url` / `html_url` / `download_url` —— PRD §3.2 要的「最近提交信息」
-/// **不在这个响应里**（`git/trees` 也没有），只能逐条补
-/// `GET …/commits?path={p}&per_page=1`（决策 #49）。
+/// **不在这个响应里**（`git/trees` 也没有）。它原先靠逐条补
+/// `GET …/commits?path={p}&per_page=1` 换来（决策 #49），
+/// 2026-10-11 用户决定去掉（一个 30 项目的录要 30 个额外请求，不值）⇒ **那条链路已删**。
 /// 所以本类型**不收** `url` / `_links` / `git_url` / `html_url` / `download_url`：
 /// 本切片没有任何界面要用它们，收了就是五个死字段
 /// （同 `IssueDTO` "只声明卡片真正用到的字段"的取舍）。

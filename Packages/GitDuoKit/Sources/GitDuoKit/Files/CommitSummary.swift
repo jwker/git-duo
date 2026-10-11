@@ -3,17 +3,16 @@ import GitDuoCore
 
 /// 提交列表的一行（PRD §3.7、§4.4 分区四；原型 `SCR.repoDetail` 的 `commit-row`）。
 ///
-/// ## 与 `RecentCommit` 的分工
+/// ## ⚠️ 2026-10-11：同族的 `RecentCommit` 已删
 ///
-/// 两者都叫"提交"，但**用途不同**：`RecentCommit` 只服务目录行那一行小字（首行 + SHA），
-/// 本类型服务提交列表（作者头像 + 作者 + 时间 + 短 SHA + 可点进详情）。
-/// 字段集互有出入，合并不成立（同 `Repository` / `RepositoryDetail` 的取舍）。
+/// 原有一个只服务"文件树每行那一行小字"的兄弟类型（决策 #49 的逐条补请求），
+/// 已随那条链路一起删除。本类型从此是**提交**这条线上唯一的行模型。
 public struct CommitSummary: Sendable, Hashable, Identifiable {
 
     /// 完整 SHA —— 跳详情页用的键。
     public let sha: String
 
-    /// 提交信息**首行**（见 `RecentCommit.summary` 的说明）。
+    /// 提交信息**首行**（拆分规则见 `CommitMessage.firstLine`）。
     public let message: String
 
     /// 作者登录名。**可以是 `nil`** —— 账号被删除后 GitHub 把 `author` 整段置为 `null`，

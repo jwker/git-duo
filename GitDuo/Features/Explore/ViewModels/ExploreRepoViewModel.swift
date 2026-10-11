@@ -14,7 +14,7 @@ import GitDuoKit
 /// | 目录 + README | `GET /contents` 等 | 详情回来之后 —— 它要 `defaultBranch` |
 ///
 /// 第三条走 **`RepoTreeSession`**（§4.4 的「代码」分区用的是同一个会话）：
-/// 分支两段式解析、记忆失效回落、副标题逐条补填那几条规则只有一个落点。
+/// 分支两段式解析、记忆失效回落那几条规则只有一个落点。
 ///
 /// ## ⚠️ 一路失败 ⇒ 整页失败（有意如此）
 ///
@@ -31,7 +31,7 @@ final class ExploreRepoViewModel {
 
     private(set) var insights: LoadState<RepoInsights> = .idle
 
-    /// 目录浏览的会话（当前分支 + 目录页 + 分支列表 + 副标题补填）。
+    /// 目录浏览的会话（当前分支 + 目录页 + 分支列表）。
     ///
     /// ⚠️ 它是**只读浏览**的那一半：可切分支（记忆照写）、不可增删合并 ——
     /// 后者由 `BranchSheet(isReadOnly: true)` 那一侧决定，与本类型无关。

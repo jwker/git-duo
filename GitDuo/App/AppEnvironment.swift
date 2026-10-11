@@ -342,7 +342,6 @@ final class AppEnvironment {
         )
         self.repoTree = LoadRepoTree(
             contents: contentEndpoint,
-            commits: commitEndpoint,
             branches: branchEndpoint
         )
         self.fileContent = LoadFileContent(contents: contentEndpoint)

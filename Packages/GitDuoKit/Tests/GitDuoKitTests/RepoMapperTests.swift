@@ -60,40 +60,6 @@ struct RepoMapperTests {
         #expect(entry.path.components == ["docs", "guide.md"])
         #expect(entry.size == 0)
         #expect(entry.sha == "blob-sha")
-        // ⚠️ 副标题是决策 #49 那一次补请求换来的，目录清单里没有 ⇒ 映射后必须是 nil
-        //    （视图据此"整行不渲染"，而不是显示一个占位）
-        #expect(entry.recentCommit == nil)
-        #expect(entry.subtitle == nil)
-    }
-
-    // MARK: - 最近提交 → RecentCommit
-
-    @Test("recentCommit：信息带正文时，副标题只取**首行**")
-    func recentCommitUsesFirstLine() {
-        let dto = CommitListItemDTO(
-            sha: "abc1234567",
-            commit: CommitInfoDTO(
-                message: "fix: 面包屑跳级\n\n正文一段，不该出现在 11.5pt 的一行里。",
-                authoredAt: authoredAt
-            ),
-            author: CommitUserDTO(login: "dev-j")
-        )
-
-        let recent = RepoFileMapper.recentCommit(dto)
-
-        #expect(recent.summary == "fix: 面包屑跳级")
-        #expect(recent.authorLogin == "dev-j")
-        #expect(recent.authoredAt == authoredAt)
-    }
-
-    @Test("recentCommit：信息为空 ⇒ 副标题回落短 SHA（**不能是空白** —— 空白与「没加载完」同相）")
-    func recentCommitFallsBackToShortSHA() {
-        let dto = CommitListItemDTO(
-            sha: "0123456789abcdef",
-            commit: CommitInfoDTO(message: "   ", authoredAt: authoredAt)
-        )
-
-        #expect(RepoFileMapper.recentCommit(dto).summary == "0123456")
     }
 
     // MARK: - 文件正文（决策 #54）
@@ -184,7 +150,7 @@ struct RepoMapperTests {
         #expect(summary.metaLabel(now: authoredAt).hasPrefix("提交于 "))
     }
 
-    @Test("summary：空信息 ⇒ 标题回落短 SHA（与目录行副标题同一规矩）")
+    @Test("summary：空信息 ⇒ 标题回落短 SHA（与提交详情页标题同一规矩）")
     func summaryFallsBackToShortSHA() {
         let dto = CommitListItemDTO(
             sha: "0123456789",
@@ -302,18 +268,11 @@ struct RepoMapperTests {
         )
     }
 
-    // MARK: - 三处显示必须用同一套拆分规则
+    // MARK: - 两处显示必须用同一套拆分规则
 
-    @Test("⚠️ 同一条提交信息在**三处**显示成同一个标题（首行规则只有一份实现）")
+    @Test("⚠️ 同一条提交信息在**两处**显示成同一个标题（首行规则只有一份实现）")
     func firstLineRuleIsShared() {
         let message = "fix: 面包屑跳级\r\n\r\n正文"
-
-        let directoryLine = RepoFileMapper.recentCommit(
-            CommitListItemDTO(
-                sha: "s1",
-                commit: CommitInfoDTO(message: message, authoredAt: authoredAt)
-            )
-        ).summary
 
         let listRow = RepoCommitMapper.summary(
             CommitListItemDTO(
@@ -330,9 +289,8 @@ struct RepoMapperTests {
         )
 
         // CRLF 检出的仓库很常见：`\r` 留在标题末尾会表现为看不见的空位
-        #expect(directoryLine == "fix: 面包屑跳级")
-        #expect(listRow == directoryLine)
-        #expect(detail.headline == directoryLine)
+        #expect(listRow == "fix: 面包屑跳级")
+        #expect(detail.headline == listRow)
         #expect(detail.body == "正文")
     }
 }

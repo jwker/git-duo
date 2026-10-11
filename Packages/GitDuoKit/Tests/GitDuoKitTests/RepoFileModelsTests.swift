@@ -17,42 +17,15 @@ struct RepoFileModelsTests {
         _ name: String,
         path: String? = nil,
         kind: TreeEntry.Kind = .file,
-        size: Int = 10,
-        message: String? = nil
+        size: Int = 10
     ) -> TreeEntry {
         TreeEntry(
             name: name,
             path: RepoPath(path: path ?? name),
             kind: kind,
             size: size,
-            sha: "sha",
-            recentCommit: message.map {
-                RecentCommit(message: $0, sha: "abc1234", authorLogin: "dev", authoredAt: ago(3600))
-            }
+            sha: "sha"
         )
-    }
-
-    @Test("副标题取提交信息，`nil` 时整行不渲染（**不写「读取中…」** —— 30 行同时跳一次文字更刺眼）")
-    func subtitleComesFromRecentCommit() {
-        #expect(entry("a.swift", message: "fix: 修一个崩溃").subtitle == "fix: 修一个崩溃")
-        #expect(entry("a.swift").subtitle == nil)
-    }
-
-    @Test("提交信息只取**首行**（正文段落属于 message 的身体，塞进 11.5pt 的一行会被截在随机位置）")
-    func recentCommitTakesFirstLine() {
-        let commit = RecentCommit(message: "fix: 标题\n\n这里是正文\n还有一段", sha: "abc", authoredAt: base)
-
-        #expect(commit.summary == "fix: 标题")
-    }
-
-    @Test("⚠️ 提交信息为空时回落到短 SHA（否则副标题是**空白**，与「还没加载出来」长得一样）")
-    func emptyMessageFallsBackToShortSHA() {
-        let empty = RecentCommit(message: "", sha: "abcdef1234", authoredAt: base)
-        let blankLine = RecentCommit(message: "   \n正文", sha: "abcdef1234", authoredAt: base)
-
-        #expect(empty.summary == "abcdef1")
-        #expect(blankLine.summary == "abcdef1")
-        #expect(!empty.summary.isEmpty)
     }
 
     @Test("⚠️ 目录读 `size` 恒为 0；可进入性由 `Kind` 决定（`unsupported` 不可进入）")

@@ -3,7 +3,7 @@ import GitHubAPI
 
 /// 代码浏览的取数：目录清单 + README + **两段式分支解析**。
 ///
-/// 依据：TECH_SPEC §9.4.1（分支解析）、§9.5（代码浏览）、决策 #49 / #55。
+/// 依据：TECH_SPEC §9.4.1（分支解析）、§9.5（代码浏览）、决策 #55。
 ///
 /// ## ⚠️ 为什么分支解析落在这里而不是视图里
 ///
@@ -21,31 +21,20 @@ import GitHubAPI
 /// 三种情形最终都收敛到"用某个分支取一次目录"，所以第 2、3 步共用同一个重取动作。
 public struct LoadRepoTree: Sendable {
 
-    /// 副标题填充的并发上限。
-    ///
-    /// ⚠️ **不能全并发**：一个 30 项的目录会瞬间发出 30 个请求，
-    /// 而 GitHub 的二级限流（secondary rate limit）正是冲这种形状来的 ——
-    /// 被限流之后**整页**都慢下来，代价远大于"慢慢填"。4 是保留序列感的同时
-    /// 让 30 项大约 8 个往返完成的折中。
-    public static let subtitleConcurrency = 4
-
     private let contents: any RepoContentsDataSource
-    private let commits: any RepoCommitsDataSource
 
     /// 分支列表 —— 只用于第 2 步的校正（`BranchResolver.resolved` 要看"记忆值还在不在"）。
     private let branchSource: any RepoBranchDataSource
 
     public init(
         contents: any RepoContentsDataSource,
-        commits: any RepoCommitsDataSource,
         branches: any RepoBranchDataSource
     ) {
         self.contents = contents
-        self.commits = commits
         self.branchSource = branches
     }
 
-    // MARK: - 第一趟：目录 + README
+    // MARK: - 目录 + README
 
     /// 取一个路径的目录清单（根目录另附 README）。
     ///
@@ -144,110 +133,6 @@ public struct LoadRepoTree: Sendable {
         return (payload.entries, readme)
     }
 
-    // MARK: - 第二趟：逐条补副标题（决策 #49）
-
-    /// 逐条取「最近一次改动该路径的提交」，**取到一条回调一条**。
-    ///
-    /// 目录清单里没有这个信息，也没有任何批量接口能把它带出来 ⇒ 只能逐条补。
-    /// 决策 #49 要求"副标题随请求陆续填充、不阻塞文件列表先出"，
-    /// 所以本方法是**流式**的：`onEach` 每收到一条就被调一次，
-    /// 调用方据此就地更新那一行（而不是等全部回来再一次性刷新）。
-    ///
-    /// - Parameters:
-    ///   - onEach: `(路径, 最近提交)`，路径是仓库内**完整**路径（`RepoPath.raw`）。
-    ///   - onRefMissing: 某一条吃了 **404** 时被调**一次**，随后**整趟中止**。
-    ///
-    ///     ⚠️ 为什么 404 要中止而不是"跳过这一条"：这里的 404 意味着
-    ///     **当前 `ref` 在服务端不存在**（§9.4.1 明写：与回落相关的请求都不许把 404
-    ///     吞成空值）。继续问下去只会拿到剩下全部条目的 404，
-    ///     而"静默空白"会让分支回落**永远不被触发**。交回调用方重解析分支才是对的。
-    ///
-    /// - Note: 单条的网络 / 配额失败（**不是 404**）只是这一条留空，
-    ///   不中止整趟 —— 一个副标题取不到不该让另外 29 行也跟着不显示。
-    public func loadSubtitles(
-        fullName: String,
-        ref: String,
-        paths: [RepoPath],
-        onEach: @Sendable (String, RecentCommit) async -> Void,
-        onRefMissing: @Sendable () async -> Void
-    ) async {
-        guard let (owner, repo) = try? RepositoryMapper.splitFullName(fullName) else { return }
-        guard !paths.isEmpty else { return }
-
-        await withTaskGroup(of: SubtitleOutcome.self) { group in
-            var next = 0
-
-            // ⚠️ 这里**不能**抽成嵌套函数：`withTaskGroup` 的 body 拿到的是 `inout` 的
-            //    group，而嵌套函数（以及逃逸闭包）不允许捕获 `inout` 参数。
-            //    所以"发起一条"抽成了 `Self.fetchSubtitle`（它不碰 group），
-            //    两处调度各写一遍 —— 只有三行。
-            while next < paths.count, next < Self.subtitleConcurrency {
-                let path = paths[next]
-                next += 1
-                group.addTask {
-                    await Self.fetchSubtitle(
-                        commits: commits, owner: owner, repo: repo, path: path, ref: ref
-                    )
-                }
-            }
-
-            while let outcome = await group.next() {
-                switch outcome {
-                case let .found(path, commit):
-                    await onEach(path, commit)
-                case .missing, .failed:
-                    // 该路径没有提交（正常）／这一条取不到（留空）：都不打断其余条目。
-                    break
-                case .refMissing:
-                    group.cancelAll()
-                    await onRefMissing()
-                    return
-                }
-                if next < paths.count {
-                    let path = paths[next]
-                    next += 1
-                    group.addTask {
-                        await Self.fetchSubtitle(
-                            commits: commits, owner: owner, repo: repo, path: path, ref: ref
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    /// 一条副标题的请求与归一化（不碰 `TaskGroup`，见 `loadSubtitles` 的说明）。
-    private static func fetchSubtitle(
-        commits: any RepoCommitsDataSource,
-        owner: String,
-        repo: String,
-        path: RepoPath,
-        ref: String
-    ) async -> SubtitleOutcome {
-        do {
-            let dto = try await commits.latestCommit(
-                owner: owner, repo: repo, path: path.raw, ref: ref
-            )
-            guard let dto else { return .missing(path.raw) }
-            return .found(path.raw, RepoFileMapper.recentCommit(dto))
-        } catch {
-            // ⚠️ 只有 404 算"ref 失效"；其余（断网 / 配额 / 5xx）是**这一条**的事。
-            if case GitHubError.notFound = error { return .refMissing }
-            return .failed(path.raw)
-        }
-    }
-
-    /// 一条副标题的四种结局。
-    ///
-    /// ⚠️ 四档而不是 `RecentCommit?`：`nil` 会把"这个路径没有提交"（正常）
-    /// 与"这一条请求失败了"（异常）合成同一个结果，而两者对调用方的含义不同 ——
-    /// 前者什么都不用做，后者是**一次被吞掉的失败**。
-    private enum SubtitleOutcome: Sendable {
-        case found(String, RecentCommit)
-        case missing(String)
-        case refMissing
-        case failed(String)
-    }
 }
 
 /// 一个路径的目录清单（根目录另附 README）与**解析后的分支**。
@@ -289,14 +174,4 @@ public struct RepoTreePage: Sendable {
 
     /// 视图要传给 `CodeSurface` 的行（README 与这里无关，它走 Markdown 渲染）。
     public var isEmptyDirectory: Bool { entries.isEmpty }
-
-    /// 换掉条目列表（副标题陆续填充时用）—— 理由同 `TreeEntry.withRecentCommit`。
-    public func replacingEntries(_ entries: [TreeEntry]) -> RepoTreePage {
-        RepoTreePage(
-            branch: branch,
-            entries: entries,
-            readme: readme,
-            didFallBack: didFallBack
-        )
-    }
 }

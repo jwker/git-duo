@@ -2,7 +2,7 @@ import Foundation
 import GitHubAPI
 import GitDuoKit
 
-/// 一次「目录浏览」的会话状态 —— 当前分支 + 当前目录那一页 + 分支列表 + 副标题补填。
+/// 一次「目录浏览」的会话状态 —— 当前分支 + 当前目录那一页 + 分支列表。
 ///
 /// ## 为什么它是一个独立类型，而不是两个 ViewModel 里各写一遍
 ///
@@ -12,7 +12,7 @@ import GitDuoKit
 ///
 /// 两者的**取数与状态迁移完全一样**，而且每一条都是"错了不报错"的那一类：
 /// 分支两段式解析（决策 #55）、记忆失效后静默回落并重发一次（§9.4.1 第 3 条）、
-/// 副标题逐条补填 + 404 中止整趟（决策 #49）、分支列表按需取（命中 304）。
+/// 分支列表按需取（命中 304）。
 /// 它们差的是**外壳**：谁推入、点一行去哪里、面包屑右边有没有「＋ 添加」——
 /// 那些留在各自的视图里（见 `RepoTreeSection`）。
 ///
@@ -44,7 +44,7 @@ final class RepoTreeSession {
     private let branchesLoader: LoadBranches
     private let memory: any BranchMemoryStore
 
-    /// 上一次 `load` 用的默认分支 —— 记忆失效要回落到它（见 `handleRefMissing`）。
+    /// 上一次 `load` 用的默认分支 —— `reload()` 重取时要用它。
     private var defaultBranch: String?
 
     let fullName: String
@@ -91,57 +91,8 @@ final class RepoTreeSession {
             // ⚠️ **不报错、不提示**：回落是设计里"被无声吸收"的那一类，
             //    用户看到的是"还是打开了，只是回到了默认分支"—— 那正是要的结果。
             if value.didFallBack { await memory.forget(fullName: fullName) }
-
-            // ⚠️ **起一个独立任务，不 `await`** —— 决策 #49 要求"副标题随请求陆续填充、
-            //    不阻塞列表先出"。`page.succeed(value)` 上面已经写过了，所以列表此刻
-            //    就能渲染；若在这里 `await`，那几十个补请求全部回来之前
-            //    `load` 不会返回 ⇒ **下拉刷新的圈会一直转**（而内容早就出来了）。
-            Task { [weak self] in await self?.fillSubtitles(value) }
         } catch {
             page.fail(Self.failure(from: error))
-        }
-    }
-
-    /// 第二趟：逐条补副标题（决策 #49）。**取到一条更新一行**。
-    private func fillSubtitles(_ value: RepoTreePage) async {
-        let paths = value.entries.map(\.path)
-        guard !paths.isEmpty else { return }
-
-        let snapshotBranch = value.branch
-        await loader.loadSubtitles(
-            fullName: fullName,
-            ref: snapshotBranch,
-            paths: paths,
-            onEach: { [weak self] raw, commit in
-                await MainActor.run { self?.applySubtitle(path: raw, commit: commit) }
-            },
-            onRefMissing: { [weak self] in
-                // 当前分支在服务端不存在了（§9.4.1 第 3 条）⇒ 重解析一次。
-                // 记忆被清掉之后，下一次 `load` 会走 `initial` ⇒ 拿默认分支。
-                await MainActor.run { self?.handleRefMissing() }
-            }
-        )
-    }
-
-    private func applySubtitle(path raw: String, commit: RecentCommit) {
-        guard let value = page.value,
-              let index = value.entries.firstIndex(where: { $0.path.raw == raw })
-        else { return }
-
-        var entries = value.entries
-        entries[index] = entries[index].withRecentCommit(commit)
-        page.succeed(value.replacingEntries(entries))
-    }
-
-    private func handleRefMissing() {
-        guard let current = branch, let fallback = defaultBranch else { return }
-        // 已经在默认分支上了 ⇒ 再落一次只会无限循环（`load` 又会触发这一支）。
-        guard current != fallback else { return }
-        branch = fallback
-        Task { [weak self] in
-            guard let self else { return }
-            await self.memory.forget(fullName: self.fullName)
-            await self.load(defaultBranch: fallback)
         }
     }
 

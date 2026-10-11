@@ -32,7 +32,7 @@ import GitDuoKit
 /// ## ⚠️ 目录那一条**不在本类型里**
 ///
 /// 它在 `RepoTreeSession`（§4.13 的「文件浏览」分区用的是**同一个**会话）——
-/// 分支两段式解析、记忆失效回落、副标题逐条补填那几条规则只有一个落点。
+/// 分支两段式解析、记忆失效回落那几条规则只有一个落点。
 /// 本类型只做三件与它有关的事：**把 `defaultBranch` 交下去**、
 /// 切分支后清掉自己的提交列表、以及在弹层里转发一次重试。
 @MainActor
@@ -43,7 +43,7 @@ final class RepoDetailViewModel {
 
     private(set) var snapshot: LoadState<RepoDetailSnapshot> = .idle
 
-    /// 目录浏览的会话（当前分支 + 目录页 + 分支列表 + 副标题补填）。
+    /// 目录浏览的会话（当前分支 + 目录页 + 分支列表）。
     let tree: RepoTreeSession
 
     /// 提交列表 —— 子列表，**与目录那一块各有各的骨架屏**。

@@ -216,19 +216,15 @@ struct RepoEndpointQuotaTests {
         }
     }
 
-    // MARK: - 提交（3 条）
+    // MARK: - 提交（2 条）
 
-    @Test("提交 3 条路由 —— 全部主桶（含决策 #49 的逐文件副标题）")
+    @Test("提交 2 条路由 —— 全部主桶")
     func commitRoutesAreCore() async {
         await assertCoreBucket("commits（列表）", stub: Self.listItemJSON) { client in
             _ = try await GitHubRepoCommitEndpoint(client: client).commits(owner: "o", repo: "r")
         }
         await assertCoreBucket("commits/{sha}（详情）", stub: Self.commitDetailJSON) { client in
             _ = try await GitHubRepoCommitEndpoint(client: client).commit(owner: "o", repo: "r", sha: "s")
-        }
-        await assertCoreBucket("commits?path=（最近一条）", stub: Self.listItemJSON) { client in
-            _ = try await GitHubRepoCommitEndpoint(client: client)
-                .latestCommit(owner: "o", repo: "r", path: "f", ref: "main")
         }
     }
 

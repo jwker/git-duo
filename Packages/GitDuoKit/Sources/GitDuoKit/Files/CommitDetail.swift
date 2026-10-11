@@ -170,10 +170,10 @@ public struct CommitDetail: Sendable, Hashable, Identifiable {
 
     /// 提交信息的首行（详情页标题）。
     ///
-    /// ⚠️ 空白信息（少见的空 message）回落到完整 SHA —— 与 `RecentCommit.summary` 同规矩：
+    /// ⚠️ 空白信息（少见的空 message）回落到完整 SHA —— 与提交列表行同规矩：
     /// 空白标题与"还没加载出来"在界面上是同一种样子。
     public var headline: String {
-        // 与 `RecentCommit.summary` / 提交列表行共用同一个实现，见 `CommitMessage`
+        // 与提交列表行共用同一个实现，见 `CommitMessage`
         CommitMessage.firstLine(message, fallback: sha)
     }
 

@@ -2,23 +2,16 @@ import Foundation
 
 /// 文件树的一行（PRD §3.2、TECH_SPEC §9.5）。
 ///
-/// ## ⚠️ 副标题是**分两趟来的**（决策 #49）
+/// ## ⚠️ 2026-10-11：行副标题（「最近提交信息」）已整条删除
 ///
-/// PRD §3.2 要求每行写一条「最近提交信息」，原型每行也都画着它（`f.msg`）。
-/// 但目录清单接口 `GET /repos/{o}/{r}/contents/{path}` 的返回项里
-/// **一个提交字段都没有**（2026-10-07 实测，只有 `name`/`path`/`sha`/`size`/`type`
-/// 与几个 URL）；`git/trees` 同样没有 —— GitHub **没有**任何批量接口能把它带出来。
+/// 它原先是"逐条补一次 `GET …/commits?path={p}&per_page=1`"换来的
+/// —— 目录清单接口 `GET /repos/{o}/{r}/contents/{path}` 的返回项里
+/// **一个提交字段都没有**（2026-10-07 实测；`git/trees` 同样没有，
+/// GitHub 也没有任何批量接口能把它带出来），所以一个 30 项的目录
+/// 就是 30 个额外请求（并发 4）。用户认为这点信息不值这个代价 ⇒ **决策 #49 作废**。
 ///
-/// 于是它是"逐条补一次 `GET …/commits?path={p}&per_page=1`"换来的
-/// ⇒ 模型里它必须是 **`Optional`**，且**允许在列表已经显示之后才填上**：
-/// 30 项的目录若等 30 个请求全回来才渲染，用户会盯着骨架屏看很久，
-/// 而那条副标题其实谁也等不来。
-///
-/// ## ⚠️ `nil` 同时意味着"还没回来"与"取不到"
-///
-/// 这是**有意**的取舍：视图对两者的处理完全一样（不渲染副标题那一行），
-/// 而区分它们需要给每一行维护一个小状态机，收益只是"日志里能看出区别"。
-/// 代价是"取失败"会静默表现为空白 —— 已登记为已知偏差，见 `REVIEW-CHECKLIST`。
+/// 于是本类型只剩"名字 / 路径 / 种类 / 大小 / SHA"五样，
+/// 原型的 `f.msg` 在 App 里**有意不再画**（原型本身按惯例不动）。
 public struct TreeEntry: Sendable, Hashable, Identifiable {
 
     /// 条目名（不含路径）。⚠️ 面包屑与目录行显示的都是它，不是 `path`。
@@ -40,9 +33,6 @@ public struct TreeEntry: Sendable, Hashable, Identifiable {
     /// 以 `sha` 表示"更新"），所以不能因为本页只读就丢掉。
     public let sha: String
 
-    /// 最近一次改动这个条目的提交（决策 #49）。
-    public let recentCommit: RecentCommit?
-
     /// `ForEach` 的键 —— 路径在仓库内唯一。
     public var id: String { path.raw }
 
@@ -51,39 +41,13 @@ public struct TreeEntry: Sendable, Hashable, Identifiable {
         path: RepoPath,
         kind: Kind,
         size: Int,
-        sha: String,
-        recentCommit: RecentCommit? = nil
+        sha: String
     ) {
         self.name = name
         self.path = path
         self.kind = kind
         self.size = size
         self.sha = sha
-        self.recentCommit = recentCommit
-    }
-
-    /// 目录行的副标题。取不到时为 `nil` ⇒ **视图整行不渲染**（不写占位文字）。
-    ///
-    /// ⚠️ 为什么不给一个占位（如 `—` 或 `读取中…`）：决策 #49 明写
-    /// "副标题随请求陆续填充、不阻塞列表先出"，而一行里的 `读取中…` 会在
-    /// 请求回来后被替换成真内容 —— 30 行同时跳一次文字，比它晚一点出现更刺眼。
-    public var subtitle: String? { recentCommit?.summary }
-
-    /// 填上/替换副标题 —— 决策 #49 的"随请求陆续填充"要用它。
-    ///
-    /// 本类型是值类型，视图持有的那份在 `@State` 里、不可变。
-    /// 把"重建一个只改 `recentCommit` 的副本"这件事留给调用方写，
-    /// 就等于让每个调用点都抄一遍那六个字段 —— 漏一个字段是**静默**的
-    /// （`size` / `sha` 丢了照常编译，只是文件页少了两样东西）。
-    public func withRecentCommit(_ commit: RecentCommit?) -> TreeEntry {
-        TreeEntry(
-            name: name,
-            path: path,
-            kind: kind,
-            size: size,
-            sha: sha,
-            recentCommit: commit
-        )
     }
 
     public enum Kind: Sendable, Hashable {
@@ -114,47 +78,5 @@ public struct TreeEntry: Sendable, Hashable, Identifiable {
             case .unsupported: false
             }
         }
-    }
-}
-
-/// 「最近提交信息」—— `GET …/commits?path={p}&per_page=1` 取回的**第一条**。
-///
-/// 列在这里而不是复用 `CommitSummary`（提交列表行）的原因：本类型只承载
-/// 目录行那一行小字所需的三样东西（信息首行、SHA、时间），
-/// 而 `CommitSummary` 还要管作者头像与跳详情页。两者字段集互有出入，
-/// 与 `Repository` / `RepositoryDetail` 不合并同源。
-public struct RecentCommit: Sendable, Hashable {
-
-    /// 提交信息的**首行**。
-    ///
-    /// ⚠️ 只取首行不是裁剪展示，是语义：一条 commit message 的首行是它的标题
-    /// （git 的约定），后面那些段落属于正文。整段塞进 11.5pt 的一行里，
-    /// 会被省略号截在一个随机位置。
-    public let message: String
-
-    public let sha: String
-
-    /// 作者登录名。**可以是 `nil`** —— 账号被删除后 GitHub 把 `author` 整段置为 `null`
-    /// （同 `IssueRow.authorLogin` 的处理）。
-    public let authorLogin: String?
-
-    public let authoredAt: Date
-
-    public init(message: String, sha: String, authorLogin: String? = nil, authoredAt: Date) {
-        self.message = message
-        self.sha = sha
-        self.authorLogin = authorLogin
-        self.authoredAt = authoredAt
-    }
-
-    /// 目录行副标题：提交信息的首行（原型 `f.msg` 逐字就是这个）。
-    ///
-    /// 空信息（有些提交的 message 是空串）回落到短 SHA —— 否则那一行会是**空白**，
-    /// 而空白与"还没加载出来"（`nil`）在界面上是同一种样子，
-    /// 会让用户以为这条一直没加载完。
-    public var summary: String {
-        // 规则本体在 `CommitMessage.firstLine` —— 这一处、提交列表行、详情页标题
-        // 三处共用同一个实现（各写一遍迟早会分叉成三个不同的标题）。
-        CommitMessage.firstLine(message, fallback: String(sha.prefix(7)))
     }
 }

@@ -3,12 +3,13 @@ import Testing
 
 @testable import GitHubAPI
 
-/// 提交：列表 / 详情 / 某一文件的最近一条。
-/// TECH_SPEC §4.6.2 / §9.5、决策 #49。
+/// 提交：列表 / 详情。
+/// TECH_SPEC §4.6.2 / §9.5。
+/// （「某一文件的最近一条」于 2026-10-11 随决策 #49 一起删除。）
 ///
 /// 靶心是**列表与详情的字段差**（列表没有 `files` / `stats`）与
 /// **`authoredAt` 的回落链** —— 后者是"宁可解码失败也不编一个时间"那条纪律的落点。
-@Suite("GitHubRepoCommitEndpoint · 列表 / 详情 / 最近一条")
+@Suite("GitHubRepoCommitEndpoint · 列表 / 详情")
 struct GitHubRepoCommitEndpointTests {
 
     private let credentials = GitHubAppCredentials(
@@ -218,46 +219,5 @@ struct GitHubRepoCommitEndpointTests {
 
         #expect(detail.files.isEmpty)
         #expect(detail.stats == nil)
-    }
-
-    // MARK: - 某一文件的最近一条（决策 #49）
-
-    @Test("最近一条：path + sha + **per_page=1**（只有 1 是我们想要的，不是 30）")
-    func latestCommitRequestShape() async throws {
-        let harness = StubURLProtocol.makeHarness()
-        harness.stub(.json("[\(listItemJSON())]"))
-
-        _ = try await makeEndpoint(harness: harness)
-            .latestCommit(owner: "o", repo: "r", path: "docs/guide.md", ref: "feature/x")
-
-        let url = try #require(harness.lastRequest?.url)
-        let query = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
-        #expect(query.first { $0.name == "path" }?.value == "docs/guide.md")
-        #expect(query.first { $0.name == "per_page" }?.value == "1")
-        // ⚠️ 不带 sha 的话服务端查的是**默认分支** —— 在 feature/x 上浏览时
-        //    每行副标题显示的会是 main 上的提交（一个"看着很合理"的错值）
-        #expect(query.first { $0.name == "sha" }?.value == "feature/x")
-    }
-
-    @Test("最近一条：该路径没有任何提交（服务端回 []）⇒ nil，**不是错误**")
-    func latestCommitEmptyIsNil() async throws {
-        let harness = StubURLProtocol.makeHarness()
-        harness.stub(.json("[]"))
-
-        let commit = try await makeEndpoint(harness: harness)
-            .latestCommit(owner: "o", repo: "r", path: "empty")
-
-        #expect(commit == nil)
-    }
-
-    @Test("⚠️ 最近一条的 404 **不能吞** —— §9.4.1 的分支回落正是靠这个 404 触发")
-    func latestCommitDoesNotSwallow404() async throws {
-        let harness = StubURLProtocol.makeHarness()
-        harness.stub(.json(#"{"message":"Not Found"}"#, status: 404))
-
-        await #expect(throws: GitHubError.notFound) {
-            _ = try await makeEndpoint(harness: harness)
-                .latestCommit(owner: "o", repo: "r", path: "docs", ref: "已删除的分支")
-        }
     }
 }
