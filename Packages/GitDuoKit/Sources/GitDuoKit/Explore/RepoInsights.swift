@@ -20,8 +20,19 @@ public struct LatestRelease: Sendable, Hashable {
     public let name: String?
 
     /// 版本说明。**可以是 `nil`**（发版本时正文留空是常态）。
-    /// 本切片按**纯文本**展示（自研 Markdown 渲染器是另一个模块，§11.1）。
+    ///
+    /// ⚠️ **它不再在详情页的卡片里铺开**（2026-10-11 改口径）：原型 `10-explore-repo.js:46`
+    /// 把整段说明直接铺在正文里，于是一段几百字的 release note 会把「Latest Release」
+    /// 这张卡撑到占满整屏、把下面的语言构成 / 文件浏览全推走。
+    /// 现在卡片里**一个字都不画**，只多一颗「更多」按钮，点开弹层看全文（`notesBlocks`）。
     public let notes: String?
+
+    /// 版本说明**解析后的块**（§11.1）—— 弹层里用 `MarkdownBody` 渲染它。
+    ///
+    /// ⚠️ 与 `IssueDetail.bodyBlocks` / `PullDetail.bodyBlocks` 同一分工：**解析在取数这一层**
+    /// 做一次，视图只负责画（`MarkdownDocument` 的说明写了为什么不能在 `body` 里重扫全文）。
+    /// 空 / 只有空白 ⇒ 空数组（`hasNotes` 为假时界面连「更多」入口都不给）。
+    public let notesBlocks: [MarkdownBlock]
 
     /// 发布时间。**可以是 `nil`** —— 界面遇到 `nil` **不渲染时间**，
     /// 而不是拿当前时间顶上（那会把"发布时间未知"显示成"刚刚发布"）。
@@ -36,6 +47,21 @@ public struct LatestRelease: Sendable, Hashable {
     /// 「下载源码」按钮文案（PRD §4.13 第 4 条原文）。
     public static let sourceCodeButtonTitle = "下载源码"
 
+    /// 卡片底部那颗「更多」的按钮文案 —— 版本说明的入口。
+    ///
+    /// ⚠️ **自拟**（2026-10-11）：原型那张卡把说明直接铺在正文里、**没有这颗按钮**，
+    /// 所以本句与下面那个弹层标题都不是原型文本，是这次新定的口径
+    /// （形态照 §5.16 那类"原型没有的新规格"的处置：先自拟、在注释里注明、等拍板）。
+    public static let notesButtonTitle = "更多"
+
+    /// 版本说明弹层的标题 `版本说明 · {tag}`。
+    ///
+    /// ⚠️ **自拟**（同上）。用「版本说明」这个词而不是「更新说明 / Release Notes」，
+    /// 是因为它已经是本仓的既有口径：`RepoInsights` 与原型 `fnote` 都写「版本说明」。
+    public static func notesSheetTitle(tagName: String) -> String {
+        "版本说明 · \(tagName)"
+    }
+
     public init(
         tagName: String,
         name: String? = nil,
@@ -46,6 +72,8 @@ public struct LatestRelease: Sendable, Hashable {
         self.tagName = tagName
         self.name = name
         self.notes = notes
+        // 解析点在这里（取数那一层），不在视图的 `body` 里 —— 见 `notesBlocks` 的说明。
+        self.notesBlocks = notes.map { MarkdownDocument($0).blocks } ?? []
         self.publishedAt = publishedAt
         self.assetCount = assetCount
     }

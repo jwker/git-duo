@@ -278,6 +278,24 @@ struct RepoInsightsTests {
         #expect(LatestRelease(tagName: "v1", notes: "修了几个 bug").hasNotes)
     }
 
+    @Test("版本说明在**取数这一层**解析成块（弹层里用 Markdown 渲染）—— 空 / 空白 ⇒ 空数组")
+    func notesAreParsedIntoBlocks() {
+        #expect(LatestRelease(tagName: "v1", notes: nil).notesBlocks.isEmpty)
+        #expect(LatestRelease(tagName: "v1", notes: "   \n  ").notesBlocks.isEmpty)
+
+        // ⚠️ 走的是与 README / Issue / PR **同一个** `MarkdownDocument`，不是这里另起一套 ——
+        //    另起一套的那天，同一个 `## 新增` 在弹层里与在 README 里会长得不一样，
+        //    而两边单看都"像对的"。
+        #expect(LatestRelease(tagName: "v1", notes: "## 新增\n\n- 甲").notesBlocks
+            == MarkdownDocument("## 新增\n\n- 甲").blocks)
+    }
+
+    @Test("「更多」入口与弹层标题（⚠️ 自拟：原型没有这颗按钮、也没有这张弹层）")
+    func notesEntryCopy() {
+        #expect(LatestRelease.notesButtonTitle == "更多")
+        #expect(LatestRelease.notesSheetTitle(tagName: "v2.1.0") == "版本说明 · v2.1.0")
+    }
+
     // MARK: - 许可证标签
 
     @Test("`spdx_id` 可用就用它；`NOASSERTION` 是哨兵值，要退到 `name`")

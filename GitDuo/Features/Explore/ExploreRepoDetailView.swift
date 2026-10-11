@@ -47,12 +47,18 @@ struct ExploreRepoDetailView: View {
     /// 本页的弹层路由。
     ///
     /// ⚠️ 用 `Identifiable` 枚举驱动 `.sheet(item:)`，**不用 `isPresented` 布尔量**：
-    /// 弹层将来多于一张时，两个布尔量同时为真会让"哪一张盖在上面"变成呈现顺序问题，
-    /// 而那种 bug 只在特定点击序列下出现。一个枚举天然只有一张。
+    /// 本页已有两张弹层（分支 / 版本说明），两个布尔量同时为真会让
+    /// "哪一张盖在上面"变成呈现顺序问题，而那种 bug 只在特定点击序列下出现。
+    /// 一个枚举天然只有一张。
     @State private var sheet: ExploreSheet?
 
     private enum ExploreSheet: String, Identifiable {
         case branch
+        /// 版本说明全文（`LatestRelease.notesBlocks`）—— 卡片那颗「更多」的落点。
+        ///
+        /// ⚠️ 2026-10-11 新增（原型里**没有**这张弹层）：正文从卡片挪到这里，
+        ///    卡片才不会被一段长说明撑爆。见 `LatestRelease.notesBlocks` 的说明。
+        case releaseNotes
 
         var id: String { rawValue }
     }
@@ -129,6 +135,20 @@ struct ExploreRepoDetailView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .task { await model.loadBranches() }
+
+            case .releaseNotes:
+                // ⚠️ 这一档**读的是弹层自己那一份**（`model.insights` 上的 `release`），
+                //    不另存一份「要展示的版本说明」到 `@State` —— 那会变成第二个真相源，
+                //    而下拉刷新（`model.refresh()`）会把它换成新的、旧的却还挂在弹层里。
+                //    取不到就什么都不画（正常到不了：`hasNotes` 为假时按钮就不给）。
+                if let release = model.insights.value?.release {
+                    ReleaseNotesSheet(release: release)
+                        // ⚠️ 这里是**读全文**的弹层 ⇒ 直接给 `.large`，
+                        //    别让它先只有半屏、还要用户自己往上拽（分支那张是选择列表，
+                        //    半屏反而更顺手，所以两张的档位有意不同）。
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                }
             }
         }
     }
@@ -246,42 +266,50 @@ struct ExploreRepoDetailView: View {
                 Spacer(minLength: 0)
             }
 
-            // 版本说明为空 ⇒ 整段不渲染（渲染一个空盒子更糟）。
-            if release.hasNotes, let notes = release.notes {
-                Text(notes)
-                    .font(Theme.Font.footnote)
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    .multilineTextAlignment(.leading)
-                    .padding(.top, 7)
-            }
-
+            // ⚠️ 正文**不在这里画**（2026-10-11 改口径）：原型 `10-explore-repo.js:46`
+            //    把整段说明铺在卡片正文里，于是一段几百字的 release note 会把这张卡
+            //    撑到占满整屏、把下面的语言构成 / 文件浏览全推走。
+            //    现在卡片里一个字都不画，只多一颗「更多」⇒ 点开弹层看全文
+            //    （`release.notesBlocks`，用 Markdown 渲染）。
+            //    `hasNotes` 为假 ⇒ **连按钮都不给**（没东西可看，别给一个点开是空的入口）。
             HStack(spacing: Theme.Spacing.s) {
                 releaseButton(ExploreRepoCopy.sourceCodeButton)
                 releaseButton(release.assetsButtonTitle)
+                if release.hasNotes {
+                    releaseChip(LatestRelease.notesButtonTitle) { sheet = .releaseNotes }
+                }
             }
             .padding(.top, Theme.Spacing.m)
         }
     }
 
-    /// 两个按钮都跳同一个网页端 Release 页。
+    /// 两颗下载按钮都跳同一个网页端 Release 页。
     ///
     /// ⚠️ **不假装能下载**：资产下载（鉴权 URL、断点续传、文件落盘）是另一个模块的事，
     /// 而"点了只弹一句提示"是 PRD §8.1 明令禁止的"停留在入口或提示"。
     /// 跳到真实页面至少让用户真的拿到东西 —— 与「置顶管理」同一处置模式（§9.1）。
     private func releaseButton(_ title: String) -> some View {
-        Button(title) {
+        releaseChip(title) {
             guard let url = URL(string: "https://github.com/\(fullName)/releases/latest") else { return }
             openURL(url)
         }
-        .font(Theme.Font.label)
-        .foregroundStyle(Theme.Palette.textPrimary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                .stroke(Theme.Palette.border, lineWidth: 1)
-        )
-        .buttonStyle(.plain)
+    }
+
+    /// 卡片底部那一排 chip 的**唯一形态**（描边 + 内边距 + 字色）—— 动作由调用方给。
+    ///
+    /// ⚠️ 三颗（下载源码 / 资产 / 更多）的外观**逐字相同**、只有动作不同。
+    /// 这正是"两份会各自漂移"的典型：外观收在一处，要改也只落在这里。
+    private func releaseChip(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .font(Theme.Font.label)
+            .foregroundStyle(Theme.Palette.textPrimary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .stroke(Theme.Palette.border, lineWidth: 1)
+            )
+            .buttonStyle(.plain)
     }
 
     // MARK: - ⑤ / ⑥ 文件浏览 · README
