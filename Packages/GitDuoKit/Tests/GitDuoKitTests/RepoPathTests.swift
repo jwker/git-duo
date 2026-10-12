@@ -86,4 +86,54 @@ struct RepoPathTests {
 
         #expect(c.raw == "a/b/c")
     }
+
+    // MARK: - 上传出口的落点（§5.8，2026-10-12）
+
+    /// 用户报回的原话：「添加或者上传文件的时候都是直接上传到了根目录，
+    /// 而不是上传到我打开的对应目录下」⇒ 这几条钉的就是"落点在当前目录"。
+    @Test("⚠️ 上传落点是**当前目录 + 文件名**（不是在仓库根）")
+    func uploadLandsInCurrentDirectory() {
+        let cases: [(RepoPath, String, String)] = [
+            (RepoPath.root, "IMG_1234.jpg", "IMG_1234.jpg"),
+            (RepoPath(path: "docs"), "IMG_1234.jpg", "docs/IMG_1234.jpg"),
+            (RepoPath(path: "docs/api"), "photo-20261012-083000.jpg", "docs/api/photo-20261012-083000.jpg"),
+            // trim 仍然生效（`normalizeUserInput` 那一份判据，与新建 / 重命名同源）。
+            (RepoPath(path: "docs"), " IMG_1234.jpg ", "docs/IMG_1234.jpg"),
+            // `.` 开头的隐藏文件是**合法条目**（同 `isValidComponent` 那条"不禁 `.` 开头"）。
+            (RepoPath(path: "docs"), ".gitignore", "docs/.gitignore"),
+        ]
+
+        for (directory, fileName, expected) in cases {
+            guard case let .acceptable(path) = RepoPath.resolveUpload(
+                directory: directory, fileName: fileName
+            ) else {
+                Issue.record("\(directory.raw) + \(fileName) 不该被拒")
+                continue
+            }
+            #expect(path.raw == expected)
+        }
+    }
+
+    @Test("⚠️ 上传那一格的 `fileName` **必须是一段**：`a/b.jpg` 不是文件名，宁可失败")
+    func uploadRejectsMultiLevelFileName() {
+        let docs = RepoPath(path: "docs")
+
+        // 正常路到不了这几档（文件 App 给的是 `lastPathComponent`、相册那条由
+        // `UploadFileName` 生成）—— 留着是因为"上游一定给对"是一句**假设**，
+        // 而它失效的方式（悄悄多建一层目录）正是那种看不出来的错。
+        #expect(RepoPath.resolveUpload(directory: docs, fileName: "") == .rejected(.empty))
+        #expect(RepoPath.resolveUpload(directory: docs, fileName: "  ") == .rejected(.empty))
+        #expect(RepoPath.resolveUpload(directory: docs, fileName: ".") == .rejected(.invalidComponent(".")))
+        #expect(RepoPath.resolveUpload(directory: docs, fileName: "..") == .rejected(.invalidComponent("..")))
+        // 多段报的是**整串**（问题出在"它不是一个名字"，不是其中哪一段）。
+        #expect(
+            RepoPath.resolveUpload(directory: docs, fileName: "a/b.jpg")
+                == .rejected(.invalidComponent("a/b.jpg"))
+        )
+        // 根目录下也一样拒（这条与"目录是哪一层"无关）。
+        #expect(
+            RepoPath.resolveUpload(directory: .root, fileName: "a/b.jpg")
+                == .rejected(.invalidComponent("a/b.jpg"))
+        )
+    }
 }

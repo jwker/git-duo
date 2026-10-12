@@ -41,6 +41,27 @@ public enum EditorCopy {
     /// 导航标题（新建模式）用的也是同一个常量 —— 见 `navigationTitle(mode:fileName:)`。
     public static let defaultNewFilePath = "NewFile.swift"
 
+    /// 在**某一层目录**里新建文件时，路径框该预填什么。
+    ///
+    /// ## ⚠️ 2026-10-12：加了目录前缀（用户报回）
+    ///
+    /// 用户原话：「在添加或者上传文件的时候都是直接上传到了根目录，而不是上传到我打开的
+    /// 对应目录下」。原先无论从哪一层点「＋ 添加 → 新建文件」，框里都只有 `NewFile.swift`
+    /// ⇒ 不改就直接提交，文件落在**仓库根**，而不是用户当时正看着的那一层。
+    ///
+    /// - 根目录（或"没有目录"这一档）⇒ 就是 `defaultNewFilePath`，与过去**逐字相同**；
+    /// - 子目录 ⇒ `{当前目录}/{defaultNewFilePath}`（如 `docs/NewFile.swift`）。
+    ///
+    /// ⚠️ **这不与第 28 条冲突**：那一条否决的是"预填一个**演示用的**多级路径"
+    ///（原型的 `GitDuo/Features/NewFile.swift` —— 那个目录是凭空编的）。这里的前缀是
+    /// **用户自己走进去的那一层**，不是编的。
+    ///
+    /// - Parameter directory: 当前打开的那一层目录；`nil` 与"根"同义。
+    public static func defaultNewFilePath(in directory: RepoPath?) -> String {
+        guard let directory, !directory.isRoot else { return defaultNewFilePath }
+        return "\(directory.raw)/\(defaultNewFilePath)"
+    }
+
     // MARK: - 动作与页脚（原型逐字）
 
     /// 提交按钮（原型逐字，含省略号）。

@@ -95,16 +95,18 @@ struct RouteView: View {
                 deleteFile: env.deleteFile,
                 toast: env.toast
             )
-        case let .editor(fullName, path, mode):
+        case let .editor(fullName, path, mode, directory):
             // PRD §4.6。**切片 8.4 起是真页面**（此前是骨架屏）。
             //
             // ⚠️ `path` 是 `String?`，`nil` = 新建模式（§8.2 正本）——
             //    这里转成 `RepoPath?` 而不是给个空路径：`RepoPath.root` 是一个**真实的
-            //    根目录路径**，而"新建文件"没有当前路径这回事，两者不能互相顶替。
+            //    根目录路径**，而"编辑哪个文件"与"建在哪一层目录"是两件事，两者不能互相顶替。
+            //    `directory` 只在新建模式有值（路径框的预填前缀，§4.6）。
             EditorView(
                 fullName: fullName,
                 mode: mode,
                 path: path.map { RepoPath(path: $0) },
+                directory: directory.map { RepoPath(path: $0) },
                 loader: env.fileContent,
                 detail: env.repoDetail,
                 memory: env.branchMemory,

@@ -376,8 +376,10 @@ struct FileView: View {
                 ) {
                     // §4.6 编辑模式：路由只带仓库全名与路径 ——
                     // "哪条分支"由编辑器页自己按 §9.4.1 解析（同本页，同一份判据）。
+                    // ⚠️ `directory: nil` —— 那一格只服务**新建模式**的预填落点（§5.8），
+                    //    编辑模式的路径就是 `path` 这一格，两者不互相顶替。
                     env.router.push(.editor(
-                        fullName: fullName, path: model.path.raw, mode: .edit
+                        fullName: fullName, path: model.path.raw, mode: .edit, directory: nil
                     ))
                 }
             }

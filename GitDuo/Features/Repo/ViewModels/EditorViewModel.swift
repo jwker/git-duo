@@ -40,7 +40,15 @@ final class EditorViewModel {
     /// 编辑模式那个文件（路由带进来的）；**新建模式为 `nil`**。
     let editingPath: RepoPath?
 
-    /// 新建模式的路径输入框 —— 预填 `EditorCopy.defaultNewFilePath`（§4.6）。
+    /// 新建模式要建在**哪一层目录**（路由带进来的）—— 只用于**预填**路径框。
+    ///
+    /// ⚠️ 它与 `editingPath` **各服务一个模式**，不共用一格：`nil` / 根都表示仓库根。
+    /// 2026-10-12 用户报回「添加 / 上传都落在根目录、而不是我打开的对应目录」后补上
+    /// —— 在此之前无论从哪一层进来，框里都只有 `NewFile.swift`。
+    /// ⚠️ 它是**预填**不是约束：用户可以把它改掉（§4.6 的路径框本来就是可改的）。
+    let directory: RepoPath?
+
+    /// 新建模式的路径输入框 —— 预填 `EditorCopy.defaultNewFilePath(in:)`（§4.6）。
     ///
     /// ⚠️ 它装的是**真值**不是占位符：用户不改就能直接提交（PRD §4.6 的更新）。
     var newFilePath: String
@@ -78,6 +86,7 @@ final class EditorViewModel {
         fullName: String,
         mode: EditorMode,
         path: RepoPath?,
+        directory: RepoPath?,
         loader: LoadFileContent,
         detail: LoadRepoDetail,
         memory: any BranchMemoryStore,
@@ -86,7 +95,8 @@ final class EditorViewModel {
         self.fullName = fullName
         self.mode = mode
         self.editingPath = path
-        self.newFilePath = EditorCopy.defaultNewFilePath
+        self.directory = directory
+        self.newFilePath = EditorCopy.defaultNewFilePath(in: directory)
         self.loader = loader
         self.detailLoader = detail
         self.memory = memory
@@ -162,10 +172,14 @@ final class EditorViewModel {
 
     /// 导航标题要的那个"文件名"。
     ///
-    /// ⚠️ 新建模式给的是**路径框的预填值**而不是 `editingPath`（它是 `nil`）——
+    /// ⚠️ 新建模式给的是**预填的那个文件名常量**而不是 `editingPath`（它是 `nil`）——
     /// 而 `EditorCopy.navigationTitle(mode:fileName:)` 在新建模式下会忽略这个参数、
     /// 直接返回同一个常量。这里给什么都不会错，但给"预填值"是为了
     /// 万一将来那条规则改了，两处仍然同源。
+    ///
+    /// ⚠️ 2026-10-12 起路径框的预填**可能带目录前缀**（`docs/NewFile.swift`），
+    /// 而标题**不跟着带** —— 标题是"这个文件叫什么"，前缀是"存在哪一层"，
+    /// 混进去会让标题变成一串路径（原型 `assert(topTitle()==='NewFile.swift')` 钉的就是前者）。
     var navigationFileName: String {
         editingPath?.displayName ?? EditorCopy.defaultNewFilePath
     }

@@ -64,7 +64,7 @@ struct RepoDetailView: View {
         case labelPicker
         /// §5.8 添加文件（三行出口）。
         case addFile
-        /// §5.8 后两个出口选中之后：§5.9 的提交弹层，落点是**仓库根 + 那个文件名**。
+        /// §5.9 提交弹层（§5.8 后两个出口选中之后）—— 落点是**当前打开的那一层目录 + 那个文件名**。
         case upload(UploadDraft)
 
         var id: String {
@@ -208,9 +208,14 @@ struct RepoDetailView: View {
                     onNewFile: {
                         sheet = nil
                         // 新建模式的路径由**编辑器里的输入框**定（§4.6），
-                        // 所以这里不带路径、不带文件名。
+                        // ⚠️ 但要把它**预填成"就在这一层目录里建"**（2026-10-12 用户报回
+                        //    「添加 / 上传都落在根目录、而不是我打开的对应目录」）——
+                        //    根目录时传 `nil`，编辑器那边与过去逐字相同。
                         env.router.push(.editor(
-                            fullName: fullName, path: nil, mode: .create
+                            fullName: fullName,
+                            path: nil,
+                            mode: .create,
+                            directory: model.tree.path.isRoot ? nil : model.tree.path.raw
                         ))
                     },
                     onPicked: { draft in
@@ -255,7 +260,10 @@ struct RepoDetailView: View {
             branch: model.tree.branch ?? "",
             // ⚠️ 上传出口**必须露出落点**：路径是 App 定的（§5.8 / 决策 #70②），
             //    不露出来用户就只能靠猜 —— 而"东西存到哪"是这一步唯一可能搞错的事。
-            destinationPath: RepoPath(path: draft.fileName),
+            //    ⚠️ 它与 `model.upload` 写下去的是**同一个方法**算出来的那一份
+            //   （`uploadDestination`）—— 两处各算一次的那天，说出来的和做出来的会不一样。
+            //    算不出来时给 `nil`：那一档提交必然失败，宁可**不显示**也不要显示一个假落点。
+            destinationPath: model.uploadDestination(for: draft.fileName),
             // ⚠️ 动过才非 nil（切片 8.7 / 8.8）—— 那一句 caption 就是"App 改了你选中的
             //    字节 / 甚至文件名"这件事的唯一出口（决策 #71⑤ · #72⑤）。
             adjustment: draft.adjustment,

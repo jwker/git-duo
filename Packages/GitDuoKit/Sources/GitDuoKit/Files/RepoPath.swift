@@ -136,6 +136,9 @@ public struct RepoPath: Sendable, Hashable {
     /// 分开写的那天，"`a//b` 算不算合法"会在两条通道上给出不同答案，
     /// 而那两条路的用户输入框长得一模一样。
     ///
+    /// ⚠️ **第三条通道 `resolveUpload`（2026-10-12 加）也走同一份**：它比这里多一条
+    /// "必须是单独一段"（那一格是**文件名**，不是路径）。
+    ///
     /// ⚠️ 客户端先拦的理由与重命名同源（详见 `resolveRenameDestination`）：
     /// 服务端对不合法的路径只回一个 422，而那句话读起来像"服务器坏了"。
     public static func resolveNewFile(input: String) -> NewFileDestination {
@@ -144,7 +147,46 @@ public struct RepoPath: Sendable, Hashable {
         return .acceptable(parsed.path)
     }
 
-    /// 用户输入的一串路径 → 规范化结果。**两条通道（新建 / 重命名）唯一的一处解析。**
+    // MARK: - 上传出口的落点（§5.8，2026-10-12）
+
+    /// 把「**当前目录** + 选中的文件名」解析成上传要写的路径（§5.8 的两个上传出口）。
+    ///
+    /// ## ⚠️ 它取代了原先的"恒落在仓库根"
+    ///
+    /// PRD §5.8 那张表 2026-10-08 写的是"**落在仓库根**"，而 2026-10-12 用户报回：
+    /// 「在添加或者上传文件的时候都是直接上传到了根目录，而不是上传到我打开的对应目录下」
+    /// ⇒ 落点改成**打开「＋ 添加」时所在的那一层目录**（`RepoPath.root` 时仍然是仓库根）。
+    ///
+    /// ## ⚠️ 两格各自校验，都不放松
+    ///
+    /// | 格 | 规矩 | 为什么 |
+    /// |---|---|---|
+    /// | `fileName` | trim 后非空、且**必须是单独一段**（`a/b.jpg` 不算文件名） | "文件名"这一格出现 `/` 说明上游给错了；顺着它建出一个多级路径，正是那种**界面看起来正常、路径不对**的错 |
+    /// | `directory` | 走 `appending`（它会再校验一次那一段） | 同上一条，两层都不依赖"上游一定对"这句假设 |
+    ///
+    /// ⚠️ 名字里带 `/` 的那一档**宁可失败**：`文件 App` 那条给的是 `lastPathComponent`、
+    /// 相册那条由 `UploadFileName` 生成 ⇒ 正常路上到不了，能到就说明是缺陷，
+    /// 而"操作失败 · 请重试"比"悄悄多建了一层目录"要容易发现。
+    ///
+    /// - Parameters:
+    ///   - directory: 当前打开的那一层目录（**可以是根**）。
+    ///   - fileName: 选中文件的文件名（**不含目录**）。
+    public static func resolveUpload(directory: RepoPath, fileName: String) -> NewFileDestination {
+        guard let parsed = normalizeUserInput(fileName) else { return .rejected(.empty) }
+        if let bad = parsed.badComponent { return .rejected(.invalidComponent(bad)) }
+        // 多段 ⇒ 把**整串**报回去（问题出在"它不是一个名字"这件事上，
+        // 而不是其中哪一段非法 —— 报最后一段会让人以为别的段都没事）。
+        guard parsed.path.components.count == 1 else {
+            return .rejected(.invalidComponent(parsed.path.raw))
+        }
+        guard let joined = directory.appending(parsed.path.raw) else {
+            return .rejected(.invalidComponent(parsed.path.raw))
+        }
+        return .acceptable(joined)
+    }
+
+    /// 用户输入的一串路径 → 规范化结果。**三条通道（新建 / 重命名 / 上传落点）
+    /// 唯一的一处解析。**
     ///
     /// - Returns: `nil` = 空（或全空白）。
     ///   `badComponent` 非 `nil` = 某一级不合法，那一段就是它；

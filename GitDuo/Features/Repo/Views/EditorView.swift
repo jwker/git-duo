@@ -51,6 +51,7 @@ struct EditorView: View {
         fullName: String,
         mode: EditorMode,
         path: RepoPath?,
+        directory: RepoPath?,
         loader: LoadFileContent,
         detail: LoadRepoDetail,
         memory: any BranchMemoryStore,
@@ -62,6 +63,7 @@ struct EditorView: View {
             fullName: fullName,
             mode: mode,
             path: path,
+            directory: directory,
             loader: loader,
             detail: detail,
             memory: memory,
@@ -130,7 +132,10 @@ struct EditorView: View {
         }
     }
 
-    /// 新建模式的路径输入框（预填 `EditorCopy.defaultNewFilePath`，**可改、含目录**）。
+    /// 新建模式的路径输入框（预填 `EditorCopy.defaultNewFilePath(in:)`，**可改、含目录**）。
+    ///
+    /// ⚠️ 2026-10-12 起预填**带当前目录前缀**（`docs/NewFile.swift`）—— 用户从哪一层
+    /// 点「＋ 添加」进来的，就在哪一层建（原先恒是仓库根，已登记为有意偏差）。
     ///
     /// ⚠️ 它与提交弹层里那一行只读的「将写入 `{path}`」**是两件事**：
     /// 这一行用户可以改；那一行是 App 已经定下来的落点（§5.8 的两个上传出口）。
@@ -251,6 +256,7 @@ struct EditorView: View {
             fullName: "my-git/gitduo",
             mode: .create,
             path: nil,
+            directory: RepoPath(path: "docs"),
             loader: environment.fileContent,
             detail: environment.repoDetail,
             memory: environment.branchMemory,

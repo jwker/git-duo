@@ -40,6 +40,32 @@ struct FileOperationCopyTests {
         #expect(EditorCopy.defaultNewFilePath == "NewFile.swift")
     }
 
+    /// 2026-10-12 用户报回：「添加或者上传文件的时候都是直接上传到了根目录，
+    /// 而不是上传到我打开的对应目录下」—— 新建文件那一条通道靠的就是这个预填前缀。
+    ///
+    /// ⚠️ 根目录下**逐字不变**（`NewFile.swift`）—— 偏差 28 那条"不许预填编出来的多级路径"
+    /// 仍然成立，这里加的是**用户自己走进去的那一层**。
+    @Test("⚠️ 新建模式的路径框预填**带当前目录前缀**（根目录下与过去逐字相同）")
+    func newFilePathPrefillCarriesCurrentDirectory() {
+        #expect(EditorCopy.defaultNewFilePath(in: nil) == "NewFile.swift")
+        #expect(EditorCopy.defaultNewFilePath(in: RepoPath.root) == "NewFile.swift")
+        #expect(EditorCopy.defaultNewFilePath(in: RepoPath(path: "docs")) == "docs/NewFile.swift")
+        #expect(
+            EditorCopy.defaultNewFilePath(in: RepoPath(path: "docs/api"))
+                == "docs/api/NewFile.swift"
+        )
+
+        // ⚠️ 拼出来的那一串**必须能过路径框自己那套判据** ——
+        // 否则用户"什么都不改直接提交"会被自己的预填值拦下。
+        guard case let .acceptable(prefilled) = RepoPath.resolveNewFile(
+            input: EditorCopy.defaultNewFilePath(in: RepoPath(path: "docs"))
+        ) else {
+            Issue.record("预填值本身必须是一个可提交的路径")
+            return
+        }
+        #expect(prefilled.raw == "docs/NewFile.swift")
+    }
+
     @Test("⚠️ 超过 1MB 时「编辑」不可点的那句话**不是**「不支持预览」那一句")
     func editTooLargeHintIsNotThePreviewHint() {
         #expect(!EditorCopy.editTooLargeHint.isEmpty)

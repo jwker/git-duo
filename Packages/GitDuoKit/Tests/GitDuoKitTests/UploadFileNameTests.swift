@@ -88,8 +88,9 @@ struct UploadFileNameTests {
         #expect(UploadFileName.replacingExtension(of: "shot.HEIC", with: "png") == "shot.png")
         // ⚠️ 名字里本来就有两个点：只换**最后**那一段（`archive.tar.gz` → `archive.tar.png`）。
         #expect(UploadFileName.replacingExtension(of: "archive.tar.gz", with: "png") == "archive.tar.png")
-        // ⚠️ 带目录时目录那段不许被碰 —— 上传出口落在仓库根，但同一个名字概念在
-        //    §5.16 重命名那条路上是带目录的，写死"整串替换"会在那一天安静地改错东西。
+        // ⚠️ 带目录时目录那段不许被碰 —— 上传出口这一格给的是**文件名**、本不该带目录，
+        //    但落点是"当前目录 + 这个名字"（`RepoPath.resolveUpload`），而 §5.16 重命名
+        //    那条路的名字概念是带目录的，写死"整串替换"会在那一天安静地改错东西。
         #expect(UploadFileName.replacingExtension(of: "docs/IMG_1234.HEIC", with: "jpg") == "docs/IMG_1234.jpg")
     }
 

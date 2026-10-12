@@ -35,7 +35,16 @@ enum Route: Hashable, Sendable {
     case repoDetail(fullName: String, section: RepoSection, path: String?)
     case exploreRepoDetail(fullName: String, path: String?)
     case fileView(fullName: String, path: String, readOnly: Bool)
-    case editor(fullName: String, path: String?, mode: EditorMode)
+    /// 编辑器页（§4.6）。
+    ///
+    /// ⚠️ `path` 与 `directory` **各服务一个模式，不能互相顶替**：
+    /// - `path` = **编辑模式**要打开的那个文件；新建模式恒 `nil`。
+    /// - `directory` = **新建模式**要建在**哪一层目录**（`nil` / 空 = 仓库根，§4.6）。
+    ///
+    /// 原先新建模式只带 `path: nil` ⇒ 路径框恒预填 `NewFile.swift`、文件恒落仓库根。
+    /// 2026-10-12 用户报回「添加 / 上传都落在根目录、而不是我打开的对应目录」后补上
+    /// `directory` —— 它只给路径框一个**预填前缀**（用户可以改掉），不是"锁死落点"。
+    case editor(fullName: String, path: String?, mode: EditorMode, directory: String?)
     case commitDetail(fullName: String, sha: String, readOnly: Bool)
     case branches(fullName: String)
     /// Issue 详情。

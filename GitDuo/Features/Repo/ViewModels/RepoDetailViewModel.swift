@@ -468,7 +468,25 @@ final class RepoDetailViewModel {
 
     // MARK: - 切片 8.4：上传文件 / 图片（§5.8 的后两个出口）
 
-    /// 把一份**已经在手上**的字节提交到仓库根（`sha` 恒为 `nil` —— 这是一次新建）。
+    /// §5.8 两个上传出口的落点 —— **当前打开的那一层目录 + 选中的文件名**。
+    ///
+    /// ## ⚠️ 只此一处算，提交弹层那行与真正 `PUT` 的路径都读它
+    ///
+    /// 两处各算一次的那天，露出来的落点与写下去的路径会不一样 —— 而"东西存到哪"
+    /// 正是这一步里用户唯一可能搞错的事（`RepoDetailView.uploadCommitSheet` 的说明）。
+    ///
+    /// - Returns: `nil` = 这个名字拼不进路径（服务端也会拒）⇒ 调用方据此**不显示落点**、
+    ///   也不该发请求。正常路上到不了：文件名来自系统选择器（文件 App 是
+    ///   `lastPathComponent`、相册由 `UploadFileName` 生成）。
+    func uploadDestination(for fileName: String) -> RepoPath? {
+        guard case let .acceptable(resolved) = RepoPath.resolveUpload(
+            directory: tree.path, fileName: fileName
+        ) else { return nil }
+        return resolved
+    }
+
+    /// 把一份**已经在手上**的字节提交到**当前打开的那一层目录**
+    ///（`sha` 恒为 `nil` —— 这是一次新建）。
     ///
     /// - Parameters:
     ///   - draft: 选中那一刻拿到的文件名与原始字节（`UploadDraft`，§5.8）。
@@ -494,12 +512,13 @@ final class RepoDetailViewModel {
         // 拿不到时说明目录还没加载出来，而那时也不该有「＋ 添加」可点。
         guard let branch = tree.branch else { return .rejected(ActionCopy.failed) }
 
-        // ⚠️ 文件名虽然来自系统选择器，仍然过一遍**与新建文件同一套**判据：
-        //    它是一串会变成路径的字节，而"界面看起来正常、路径不对"正是那套判据拦的东西。
-        let path: RepoPath
-        switch RepoPath.resolveNewFile(input: draft.fileName) {
-        case let .acceptable(resolved): path = resolved
-        case .rejected: return .rejected(ActionCopy.failed)
+        // ⚠️ 落点走 `uploadDestination`（**同一个方法**，提交弹层那行只读的「将写入 …」也读它）
+        //    —— 两处各拼一次的那天，露出来的落点与写下去的路径会不一样。
+        // ⚠️ 它内部仍是**与新建文件同一套**判据（`RepoPath.resolveUpload` 走
+        //    `normalizeUserInput`，只多一条"文件名必须是一段"）：文件名虽然来自系统选择器，
+        //    仍然要过一遍（"界面看起来正常、路径不对"正是那套判据拦的东西）。
+        guard let path = uploadDestination(for: draft.fileName) else {
+            return .rejected(ActionCopy.failed)
         }
 
         do {
