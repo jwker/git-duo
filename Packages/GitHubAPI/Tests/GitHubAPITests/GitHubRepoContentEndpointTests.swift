@@ -240,6 +240,43 @@ struct GitHubRepoContentEndpointTests {
         #expect(harness.lastRequest?.value(forHTTPHeaderField: "Content-Type") == nil)
     }
 
+    @Test("⚠️ raw 与 JSON 是同一 URL 的两种表示：JSON 那次的 ETag **不得**串到 raw 上")
+    func rawDoesNotReuseJSONCacheEntry() async throws {
+        let harness = StubURLProtocol.makeHarness()
+        let json = #"{"name":"logo.png","path":"logo.png","sha":"s","size":6,"type":"file","encoding":"base64","content":"iVBORw0KGgo="}"#
+        harness.stub(StubURLProtocol.Response.json(json, headers: ["ETag": "\"v1\""]))
+        let endpoint = makeEndpoint(harness: harness)
+
+        // ① 先用 JSON 表示取同一个路径（`LoadFileContent` 在"不知道 sha/size"时就是这么干的）。
+        _ = try await endpoint.contents(owner: "o", repo: "r", path: "logo.png")
+
+        // ② 再按 raw 表示取同一个路径。
+        harness.stub(StubURLProtocol.Response(
+            status: 200,
+            body: Data([0x89, 0x50, 0x4E, 0x47]),
+            headers: ["Content-Type": "application/octet-stream"]
+        ))
+        let data = try await endpoint.rawFile(owner: "o", repo: "r", path: "logo.png")
+
+        // 两条表示的缓存键若没分开，这一步会带上 ① 的 ETag ⇒ 服务端答 304
+        // ⇒ transport 把缓存里的 **JSON** 当文件字节返回（图片显示加载失败）。
+        #expect(harness.lastRequest?.value(forHTTPHeaderField: "If-None-Match") == nil)
+        #expect(data == Data([0x89, 0x50, 0x4E, 0x47]))
+    }
+
+    @Test("同一种表示的第二次请求照旧带 `If-None-Match`（修的是撞键，不是把条件请求关掉）")
+    func sameVariantStillRevalidates() async throws {
+        let harness = StubURLProtocol.makeHarness()
+        let json = #"{"name":"logo.png","path":"logo.png","sha":"s","size":6,"type":"file","encoding":"base64","content":"iVBORw0KGgo="}"#
+        harness.stub(StubURLProtocol.Response.json(json, headers: ["ETag": "\"v1\""]))
+        let endpoint = makeEndpoint(harness: harness)
+
+        _ = try await endpoint.contents(owner: "o", repo: "r", path: "logo.png")
+        _ = try await endpoint.contents(owner: "o", repo: "r", path: "logo.png")
+
+        #expect(harness.lastRequest?.value(forHTTPHeaderField: "If-None-Match") == "\"v1\"")
+    }
+
     // MARK: - README
 
     @Test("readme：带 ref、走裸内容媒体类型")

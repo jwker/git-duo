@@ -334,6 +334,10 @@ enum EncodedEntry {
 
     struct Metadata: Codable {
         let url: String
+        /// 表示变体（见 `CacheKey.variant`）。**可选**：这一版之前落盘的条目里没有它，
+        /// 解出来是 `nil` ⇒ 认成空串。要是不做成可选，旧缓存文件会**整份解不出来**
+        /// （`decode` 返回 `nil`），表现为"升级后所有缓存无声失效"。
+        let variant: String?
         let statusCode: Int
         let headers: [String: String]
         let etag: String?
@@ -343,6 +347,7 @@ enum EncodedEntry {
     static func encode(_ response: CachedHTTPResponse, key: CacheKey) -> Data? {
         let metadata = Metadata(
             url: key.url.absoluteString,
+            variant: key.variant.isEmpty ? nil : key.variant,
             statusCode: response.statusCode,
             headers: response.headers.rawValues,
             etag: response.etag,
@@ -368,7 +373,7 @@ enum EncodedEntry {
         let metadata = parsed.metadata
 
         return (
-            key: CacheKey(parsed.url),
+            key: CacheKey(parsed.url, variant: metadata.variant ?? ""),
             response: CachedHTTPResponse(
                 statusCode: metadata.statusCode,
                 headers: HTTPHeaders(metadata.headers),

@@ -233,7 +233,7 @@ public struct HTTPTransport: Sendable {
         cached: CachedHTTPResponse?
     ) async throws -> HTTPResponse {
         let headers = HTTPHeaders(response: http)
-        let key = CacheKey(request.url)
+        let key = cacheKey(for: request)
 
         // 304：服务端说"你那份还是最新的"。用本地副本，**不消耗配额**（§5.2）
         if http.statusCode == 304, let cached {
@@ -296,6 +296,28 @@ public struct HTTPTransport: Sendable {
         guard request.method == .get, request.cachesResponse, !request.forcesReload else {
             return nil
         }
-        return await cache.entry(for: CacheKey(request.url))
+        return await cache.entry(for: cacheKey(for: request))
+    }
+
+    /// 一次请求在缓存里的键（读与写**必须**用同一个 —— 分叉就是"写进去取不出来"）。
+    ///
+    /// ## ⚠️ 为什么键里要带 `Accept`（2026-10-12 修的真缺陷）
+    ///
+    /// `contents`（JSON 外壳）与 `rawFile`（裸字节）是**同一个 URL**
+    /// （`/repos/{o}/{r}/contents/{path}`）、只差一个 `Accept`。
+    /// 只按 URL 作键的话，先跑的那条会把后跑的那条**挡在 304 上**：
+    /// `rawFile` 会带着 JSON 那次的 ETag 去问，服务端答"没变"，于是
+    /// transport 把**缓存里的 JSON** 当文件字节交出去 ⇒ `UIImage(data:)` 为 nil。
+    /// 完整推理见 `CacheKey.variant`。
+    ///
+    /// ## 取的是**调用方显式给的** `Accept`
+    ///
+    /// 没给就说明走 transport 的默认 JSON 表示 ⇒ 变体为空 ⇒ 键与本条修复之前
+    /// **逐字相同**（已落盘的缓存不作废）。
+    /// 大小写不敏感：HTTP 头名大小写不敏感，而调用方有写 `Accept` 的、也有写 `accept` 的，
+    /// 按字面查会漏掉后者（漏掉的表现正是这个缺陷又回来了）。
+    private func cacheKey(for request: HTTPRequest) -> CacheKey {
+        let accept = request.headers.first { $0.key.lowercased() == "accept" }?.value
+        return CacheKey(request.url, variant: accept ?? "")
     }
 }

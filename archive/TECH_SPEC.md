@@ -834,6 +834,15 @@ enum GitHubError: Error {
 
 ⚠️ 注意：ETag 是**按 URL 维度的**，同一数据用不同参数（`?ref=`、`?state=`、`per_page=`）请求会拿到不同 ETag，缓存 key 必须包含完整查询串。
 
+⚠️⚠️ **2026-10-12 补：缓存 key 还必须包含「表示变体」—— 同一个 URL 在不同 `Accept` 下是两件不同的东西。**
+最典型的一对就在本仓库自己身上：`contents`（`Accept: application/vnd.github+json`，回 JSON 外壳）与
+`rawFile`（`Accept: application/vnd.github.raw`，回裸字节）**路径完全相同**，只差那一个头。
+键里不带它，两条表示会互相污染：先跑的那条把 ETag 写进缓存，后跑的那条带着**同一个 ETag** 去问，
+服务端答"没变"（304）⇒ transport 把**前一条的响应体**当前面这条交出去。
+症状很具体：**markdown 正文里的图片全部显示「图片加载失败」**，而且一旦发生就再也出不来
+（详见 `REVIEW-CHECKLIST` 第 59 条）。实现落点：`CacheKey.variant`（取**调用方显式给的** `Accept`；
+默认空串 ⇒ 只占一种表示的请求，键与从前**逐字相同**，升级不作废已落盘的缓存）。
+
 ### 5.3 图片与降采样
 
 - 头像与截图走 `AsyncImage`（iOS 27 已内置缓存）。

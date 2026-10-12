@@ -12,11 +12,37 @@ public struct CacheKey: Hashable, Sendable, CustomStringConvertible {
 
     public let url: URL
 
-    public init(_ url: URL) {
+    /// 同一个 URL 的**另一种表示**（目前只有一条通道用到：`Accept: application/vnd.github.raw`）。
+    ///
+    /// ## 为什么必须有（2026-10-12，修的真缺陷）
+    ///
+    /// `contents`（JSON 外壳）与 `rawFile`（裸字节）在数据层是**同一个 URL**
+    /// （`/repos/{o}/{r}/contents/{path}`），差别只在 `Accept` 头。
+    /// 键里不带它，两条表示会**互相污染**：
+    ///
+    /// 1. `contents` 先跑（JSON）⇒ 缓存写下 JSON 与它的 ETag；
+    /// 2. `rawFile` 随后请求同一 URL ⇒ **命中上面那一条** ⇒ 带上**同一个 ETag**
+    ///    ⇒ 服务端回 **304**（在它看来"你要的那份没变"）⇒ transport 把
+    ///    **缓存里的 JSON** 当响应体交出去；
+    /// 3. 拿"一张图"的代码得到一段 JSON 文本 ⇒ `UIImage(data:)` 为 `nil`。
+    ///
+    /// 症状：**md 正文里的图片全部显示「图片加载失败」**，而且**一旦发生就再也出不来**
+    /// —— 304 永远回那条 JSON。反过来（先 raw 后 JSON）则是"JSON 解析失败"。
+    ///
+    /// ## ⚠️ 默认 `""` 是有意保留的
+    ///
+    /// 绝大多数请求只有一种表示，它们的键**逐字未变**（`fileName` 也不变）
+    /// ⇒ 升级到这一版不会把已落盘的缓存整体作废。
+    public let variant: String
+
+    public init(_ url: URL, variant: String = "") {
         self.url = url
+        self.variant = variant
     }
 
-    public var description: String { url.absoluteString }
+    public var description: String {
+        variant.isEmpty ? url.absoluteString : "\(url.absoluteString) [\(variant)]"
+    }
 
     /// 磁盘文件名。
     ///
@@ -26,8 +52,11 @@ public struct CacheKey: Hashable, Sendable, CustomStringConvertible {
     ///
     /// internal 而非 private：测试要断言"不同 URL 不同名、同一 URL 稳定同名"。
     var fileName: String {
+        // ⚠️ 变体为空时哈希的输入**与原实现逐字一致**（见 `variant` 那条说明）——
+        //    这样"只有一种表示"的那些条目在升级后仍是同一个文件，缓存不作废。
+        let material = variant.isEmpty ? url.absoluteString : "\(variant)\n\(url.absoluteString)"
         // 局部 import：只有这里用到哈希，不必让整个包依赖 CryptoKit（系统框架，非第三方）
-        let digest = SHA256Digest.hex(of: Data(url.absoluteString.utf8))
+        let digest = SHA256Digest.hex(of: Data(material.utf8))
         return "\(digest).cache"
     }
 }

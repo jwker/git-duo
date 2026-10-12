@@ -344,4 +344,28 @@ struct HTTPResponseCacheTests {
         #expect(a.fileName != b.fileName)
         #expect(a.fileName == aAgain.fileName)
     }
+
+    @Test("⚠️ 同一 URL 的两种表示（variant 不同）**不共用**文件名")
+    func cacheKeyVariantsDoNotShareFileName() {
+        let url = URL(string: "https://api.github.com/repos/o/r/contents/logo.png")!
+
+        let json = CacheKey(url)
+        let raw = CacheKey(url, variant: "application/vnd.github.raw")
+
+        // 撞在一起的话，`rawFile` 会带着 JSON 那次的 ETag 去问、被答 304，
+        // 于是"取一张图"拿回来的是 JSON 文本（症状：图片全显示加载失败）。
+        #expect(json.fileName != raw.fileName)
+        #expect(json != raw)
+    }
+
+    @Test("⚠️ 变体为空时文件名与本条修复之前**逐字一致**（升级不作废已落盘的缓存）")
+    func emptyVariantKeepsLegacyFileName() {
+        let url = URL(string: "https://api.github.com/user")!
+        // 旧实现的哈希输入就是 `url.absoluteString` —— 这里显式钉住它，
+        // 将来谁再往哈希输入里加料，这条会红。
+        let legacy = "\(SHA256Digest.hex(of: Data(url.absoluteString.utf8))).cache"
+
+        #expect(CacheKey(url).fileName == legacy)
+        #expect(CacheKey(url, variant: "").fileName == legacy)
+    }
 }
