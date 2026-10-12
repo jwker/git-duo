@@ -402,7 +402,7 @@ struct RepoDetailView: View {
     /// ⚠️ 三块本体在 **`RepoTreeSection`（共享件）**里 —— §4.13 第 ⑤ / ⑥ 分区
     /// 渲染的是同一件事（原型这两处的 HTML 结构逐行对应）。
     /// 本页与它只有两处不同，都在下面这两个参数里：
-    /// 面包屑右侧多一个「＋ 添加」、点一行的落点是**可写**的那两条路由。
+    /// 面包屑右侧多一个「⋯」动作菜单（复制路径 / 添加文件）、点一行的落点是**可写**的那两条路由。
     ///
     /// ⚠️ `title: nil` —— §4.4 的这一块没有小节标题（身份由顶部的分段条表明），
     /// 而 §4.13 有 `文件浏览 · {path}`。
@@ -422,45 +422,58 @@ struct RepoDetailView: View {
             onTapBranch: { sheet = .branch },
             onSelectSegment: { index in navigate(toCrumb: index) }
         ) {
-            addFileButton
+            breadcrumbMenu
         }
     }
 
-    /// 「＋ 添加」—— **切片 8.4 起可点**，打开 §5.8 的添加文件弹层。
+    /// 面包屑右侧的动作位 —— **2026-10-12 起收成一颗「⋯」**（用户裁定，`REVIEW-CHECKLIST` 第 56 条）。
     ///
-    /// ⚠️ 它此前那套"画出但不可点"（`allowsHitTesting(false)` + 读屏 hint +
-    /// 一个真的什么都不做的闭包）连同 `RepoCopy.addFileUnavailableHint` 一起删掉了。
-    /// 留着那句 hint，"这三个出口还不能用"在代码里就仍然看起来成立 ——
-    /// 而它们现在**都能用**。
+    /// 它此前是一颗文字按钮（文案 `＋ 添加`）—— 那个动作连同新增的「复制路径」
+    /// 一起住进了系统原生 `Menu`。
     ///
-    /// ## ⚠️ 2026-10-11：删掉了那颗独立的 `plus` 图标（用户报回「有两个加号」）
+    /// ⚠️ **这是本项目第一处原生菜单**：其余弹层都是自绘 sheet
+    /// （`.presentationDetents([.medium])`），而一个只有两项的菜单做成半屏 sheet
+    /// 太重、观感也离原型更远 —— 用户在这两条之间选了原生 `Menu`。
     ///
-    /// 原型是 `I.plus` **配**全角 `＋` 文案（`GitHubIcon` 那条注释写了"两者都在"），
-    /// 照搬过来就是两个加号并排。保留**文案里**那一个 —— 它与「添加」二字
-    /// 同字体、同字号（都是 `footnote`，13pt），严格同大。
-    /// 已登记为有意偏差（`REVIEW-CHECKLIST` **第 52 条**）。
+    /// ⚠️ **菜单项写「添加文件」而不是「新建文件」**：它打开的是 `AddFileSheet`
+    /// 那张**三行**弹层（新建文件 / 上传文件 · 文件 App / 上传图片 · 相册），
+    /// 叫「新建文件」与它打开的东西对不上（文案见 `RepoCopy.addFileMenuAction`）。
     ///
-    /// ⚠️ 它此前那套"画出但不可点"（`allowsHitTesting(false)` + 读屏 hint +
-    /// 一个真的什么都不做的闭包）连同 `RepoCopy.addFileUnavailableHint` 一起删掉了。
-    /// 留着那句 hint，"这三个出口还不能用"在代码里就仍然看起来成立 ——
-    /// 而它们现在**都能用**。
-    private var addFileButton: some View {
-        Button {
-            sheet = .addFile
+    /// ⚠️ **代价如实说**：这个入口从**一键变两键**（用户知情并接受）。
+    ///
+    /// ⚠️ 形状（图标 13pt + `.padding(8)` ⇒ 约 29×29、圆角 `Radius.control`、
+    /// `surfaceSunken` 底）对着**它原来那颗「＋ 添加」的高度**拟 —— 那颗是
+    /// `footnote`(13) 加 `.padding(.vertical, 5)`。图标 13pt 与分支胶囊里那一颗
+    /// （`BreadcrumbBar` 内部同样写 `.system(size: 13)`）同字号。
+    ///
+    /// ⚠️ **未目视**：`Menu` 的 label 由系统接管，它会不会给这颗图标套上 tint
+    /// 或自带按钮样式，只有跑一次模拟器才知道 —— 下面那套显式 `foregroundStyle`
+    /// 是按"系统会尊重它"写的；真机上观感若不对，改的是这里、不是文案。
+    private var breadcrumbMenu: some View {
+        Menu {
+            Button {
+                model.copyCurrentPath()
+            } label: {
+                Label(RepoCopy.copyPathAction, systemImage: GitHubIcon.copy)
+            }
+
+            Button {
+                sheet = .addFile
+            } label: {
+                Label(RepoCopy.addFileMenuAction, systemImage: GitHubIcon.file)
+            }
         } label: {
-            Text(RepoCopy.addFileAction)
-                // 原型 `.btn{font-size:13.5px;font-weight:650}` ⇒ `footnote` + semibold。
-                .font(Theme.Font.footnote.weight(.semibold))
-                .foregroundStyle(Theme.Palette.textPrimary)
-                // 原型这一处覆写 `padding:5px 12px`。
-                .padding(.vertical, 5)
-                .padding(.horizontal, Theme.Spacing.m)
+            Image(systemName: GitHubIcon.ellipsis)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .padding(Theme.Spacing.s)
                 .background(
                     RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                         .fill(Theme.Palette.surfaceSunken)
                 )
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .accessibilityLabel(RepoCopy.breadcrumbMenuAccessibilityLabel)
     }
 
     /// 点面包屑的某一层 —— 原型是**推入一层新页面**（`navToSub`），不是原地替换。

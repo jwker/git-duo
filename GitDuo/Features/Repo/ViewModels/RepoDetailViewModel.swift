@@ -2,6 +2,7 @@ import Foundation
 import GitHubAPI
 import GitDuoDesign
 import GitDuoKit
+import UIKit
 
 /// 仓库详情页（**自己的仓库**，PRD §4.4）的状态。
 ///
@@ -222,6 +223,31 @@ final class RepoDetailViewModel {
     func select(section: RepoSection) async {
         self.section = section
         await loadCurrentSectionIfNeeded()
+    }
+
+    // MARK: - 复制路径（2026-10-12 新增，按用户要求）
+
+    /// 复制**当前这一层**的仓库内相对路径 —— 面包屑右侧「⋯」菜单里的第一项。
+    ///
+    /// ## ⚠️ 根目录复制的是**仓库全名**，不是空串
+    ///
+    /// 根目录没有"仓库内相对路径"（`RepoPath.root.raw` 就是空串），而复制一个空串
+    /// 对用户毫无用处。取仓库全名兜底 —— **这是用户裁定的**（`REVIEW-CHECKLIST` 第 56 条）。
+    /// 代价如实记着：两档复制出来的东西**形态不同**（一个是路径、一个是仓库名），
+    /// 粘到终端里根目录那一次是个无效路径。别把它当成设计本意。
+    ///
+    /// ⚠️ 零请求：路径就在 `tree.path` 上，复制是纯本地操作（同 `FileViewModel.copyRaw`）。
+    /// ⚠️ 它认的是 `tree.path`（当前目录页的路径）而**不是**路由上那一份 ——
+    /// 两者在正常路径下相同，但切分支 / 重取之后以会话里的为准。
+    ///
+    /// ⚠️ **要复制的那一串由 `RepoCopy.clipboardPath(for:fullName:)` 算**（含根目录那条兜底）——
+    /// 规则写在领域层才跑得进单测（`make test` 不编译 App target），
+    /// 本方法只负责"取路径 → 写剪贴板 → 弹提示"这三步。
+    func copyCurrentPath() {
+        UIPasteboard.general.string = RepoCopy.clipboardPath(
+            for: tree.path, fullName: fullName
+        )
+        toast.show(RepoCopy.pathCopiedToast)
     }
 
     // MARK: - Star

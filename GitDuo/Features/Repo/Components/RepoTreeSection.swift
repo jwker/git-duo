@@ -13,7 +13,7 @@ import SwiftUI
 ///
 /// | | §4.4（自己的仓库） | §4.13（他人仓库） |
 /// |---|---|---|
-/// | 面包屑右侧 | 「＋ 添加」 | **无** |
+/// | 面包屑右侧 | 「⋯」菜单（复制路径 / 添加文件） | **无** |
 /// | 分区标题 | **无**（顶部有分段条） | `文件浏览 · {path}` 与 `README.md` |
 /// | 点一行 | 进 `repoDetail` / `fileView(readOnly: false)` | 进 `exploreRepoDetail` / `fileView(readOnly: true)` |
 ///
@@ -260,7 +260,7 @@ struct RepoTreeSection<Trailing: View>: View {
 
 extension RepoTreeSection where Trailing == EmptyView {
 
-    /// 面包屑右侧没有动作位的那一种（§4.13 的他人仓库就没有「＋ 添加」）。
+    /// 面包屑右侧没有动作位的那一种（§4.13 的他人仓库就没有那个「⋯」菜单）。
     init(
         session: RepoTreeSession,
         title: String? = nil,

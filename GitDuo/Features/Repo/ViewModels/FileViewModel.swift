@@ -221,6 +221,44 @@ final class FileViewModel {
         return true
     }
 
+    // MARK: - 复制路径 / 复制文件名（2026-10-12 新增，按用户要求）
+
+    /// 复制**这个文件的仓库内相对路径**（含文件名）—— `crumb` 行那颗「⋯」的第一项。
+    ///
+    /// ⚠️ **与上面的 `copyRaw` 不是一回事**：那个复制**内容**（`Raw` 按钮，
+    /// 决策 #51 的两处例外之一），这个复制**路径**。两者同在这一屏上，
+    /// 所以文案与读屏标签都分开写（`FileCopy.copyPathAction` / `crumbMenuAccessibilityLabel`）。
+    ///
+    /// ⚠️ **原型这一屏没有这个按钮**（`REVIEW-CHECKLIST` 第 56 条：按用户要求新增）
+    /// ⇒ 它不来自原型的任何一处 `onclick`。
+    ///
+    /// ⚠️ **零请求**：路径就在 `path` 上，复制是纯本地操作（同 `copyRaw`）。
+    ///
+    /// ⚠️ 取 `path` 而**不是**路由上那一份：重命名之后这一页的路径会变
+    /// （§5.16「返回文件查看页（该页路径跟着变）」），要复制的必须是**当前**这个。
+    ///
+    /// ⚠️ 它给的是**整条**路径（`RepoPath.raw`）—— 只要名字的那一档见 `copyFileName()`。
+    func copyPath() {
+        UIPasteboard.general.string = path.raw
+        toast.show(FileCopy.pathCopiedToast)
+    }
+
+    /// 复制**这个文件的名字**（只有最后一段，不含目录）—— 菜单的第二项（2026-10-12 追加）。
+    ///
+    /// ⚠️ 与 `copyPath()` **必须给出不同的东西**：一个给
+    /// `Packages/GitDuoKit/Sources/RepoPath.swift`，一个只给 `RepoPath.swift`。
+    /// 两项住在同一个菜单里，写岔了不会有任何报错 —— 只有粘一次才知道。
+    ///
+    /// ⚠️ **不做根目录兜底**（与仓库页的 `RepoCopy.clipboardPath` 不同）：
+    /// 这一屏是**文件**页，`path` 必定有最后一段，`displayName` 不会是空串。
+    /// 抄那条兜底过来只会让"复制出一个仓库全名"这种事在这里也变成可能。
+    ///
+    /// ⚠️ **零请求**（同 `copyRaw` / `copyPath`），同样取 `path` 而不是路由上那一份。
+    func copyFileName() {
+        UIPasteboard.general.string = path.displayName
+        toast.show(FileCopy.fileNameCopiedToast)
+    }
+
     // MARK: - 重命名（§5.16、决策 #66）
 
     /// 提交重命名弹层里那串路径。**校验在这里做**（`RepoPath.resolveRenameDestination`），

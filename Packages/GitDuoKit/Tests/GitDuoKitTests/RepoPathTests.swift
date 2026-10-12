@@ -29,6 +29,25 @@ struct RepoPathTests {
         #expect(guide.lastComponent == "guide.md")
     }
 
+    /// ⚠️ `raw` 与 `displayName` 是**两样东西**，谁也不能顶替谁。
+    ///
+    /// 2026-10-12 加的那两个复制通道各取一个：`FileViewModel.copyPath()` 取 `raw`、
+    /// `copyFileName()` 取 `displayName`。两者要是一样，那颗「⋯」菜单的第二项
+    /// 就成了第一项的重复 —— 而这件事在**界面上看不出来**（两项都叫"复制"）。
+    @Test("⚠️ `raw` 是整条路径、`displayName` 只有最后一段 —— 不可互相顶替")
+    func rawAndDisplayNameAreDifferentThings() {
+        let file = RepoPath(path: "Packages/GitDuoKit/Sources/RepoPath.swift")
+
+        #expect(file.raw == "Packages/GitDuoKit/Sources/RepoPath.swift")
+        #expect(file.displayName == "RepoPath.swift")
+        #expect(file.raw != file.displayName)
+
+        // ⚠️ 单段的这一档两者恰好相等 —— 所以那条断言写在**有目录**的那一档上。
+        //    拿 `README.md` 当例子是钉不出任何东西的。
+        #expect(RepoPath(path: "README.md").raw == "README.md")
+        #expect(RepoPath(path: "README.md").displayName == "README.md")
+    }
+
     @Test("根路径：`components` 为空、`lastComponent` 为 `nil`")
     func rootIsEmpty() {
         #expect(RepoPath.root.isRoot)

@@ -219,10 +219,22 @@ struct FileView: View {
     /// |---|---|---|
     /// | 首段 | 分支胶囊（可点、带 `▾`） | **文件名**（加粗、不可点） |
     /// | 路径 | 仓库全名 / … / 当前层 | **无** |
-    /// | 右侧 | 「＋ 添加」 | **无** |
+    /// | 右侧 | 「⋯」菜单（复制路径 / 添加文件） | 「⋯」菜单（复制路径 / 复制文件名） |
     ///
     /// 合成一个控件就必须再加三个开关，而每个开关两档里总有一档是错的 ——
     /// 与 `SectionTabs` 不复用 `SegmentedBar` 是同一条理由。
+    ///
+    /// ## ⚠️ 右端那颗「⋯」是 **2026-10-12 加的**（按用户要求，第 56 条）
+    ///
+    /// 原型这一行**没有任何动作位**（`文件名 · 分支` 两个 `Text` 就完了）。
+    /// 加它的理由与仓库页面包屑上那一颗相同：让"当前在哪"这件事可以直接复制走。
+    /// 两处形状同一套（见下面 `crumbMenu`），**两处都用系统原生 `Menu`**。
+    ///
+    /// ⚠️ 它**当天就改过一次形状**：先落地的是一颗裸复制图标（只复制路径），
+    /// 用户随即要求「换成三个点，菜单两项：复制路径 / 复制文件名」⇒ 现在与仓库页
+    /// 那颗逐字同形。**没有留下"一颗图标按钮"的旧形态**。
+    ///
+    /// ⚠️ 它与同页的 `Raw`（复制**内容**）**不是一回事** —— 见 `FileCopy.copyPathAction`。
     ///
     /// ⚠️ 分支名 `lineLimit(1)`：分支名可以很长（`feature/客户XX-报价单改版`），
     /// 而文件名通常更长、更需要完整显示。
@@ -231,18 +243,30 @@ struct FileView: View {
         let display = model.path.displayName
 
         return HStack(spacing: 0) {
-            Text(display)
-                .font(Theme.Font.breadcrumb.weight(.semibold))
-                .foregroundStyle(Theme.Palette.accent)
+            // ⚠️ 这三段**单独包一层**、读屏合成都做在**这一层**上：
+            //    2026-10-12 加的动作位就在外层，若把 `.accessibilityElement(children: .ignore)`
+            //    留在最外面，那颗「⋯」会被一起合成掉 —— 读屏用户根本点不到它。
+            HStack(spacing: 0) {
+                Text(display)
+                    .font(Theme.Font.breadcrumb.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
 
-            Text(" · ")
-                .font(Theme.Font.breadcrumb)
-                .foregroundStyle(Theme.Palette.textSecondary)
+                Text(" · ")
+                    .font(Theme.Font.breadcrumb)
+                    .foregroundStyle(Theme.Palette.textSecondary)
 
-            Text(branch)
-                .font(Theme.Font.breadcrumb)
-                .foregroundStyle(Theme.Palette.textSecondary)
-                .lineLimit(1)
+                Text(branch)
+                    .font(Theme.Font.breadcrumb)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .lineLimit(1)
+            }
+            // 拼出来的那一串在读屏里是"文件名 空格 点 空格 分支"，粘在一起听不出层次。
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(display)，当前分支 \(branch)")
+
+            Spacer(minLength: Theme.Spacing.s)
+
+            crumbMenu
         }
         // 8 / 12：原型原值（`padding:8px 12px`）。
         .padding(.vertical, Theme.Spacing.s)
@@ -256,9 +280,51 @@ struct FileView: View {
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .stroke(Theme.Palette.borderSoft, lineWidth: 1)
         )
-        // 拼出来的那一串在读屏里是"文件名 空格 点 空格 分支"，粘在一起听不出层次。
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(display)，当前分支 \(branch)")
+    }
+
+    /// crumb 行右端那颗「⋯」（2026-10-12 新增，按用户要求 —— 第 56 条）。
+    ///
+    /// 菜单两项：`复制路径`（整条相对路径）/ `复制文件名`（只有最后一段）。
+    ///
+    /// ⚠️ 形状与仓库页面包屑那颗「⋯」**同一套**（13pt 图标 + `.padding(8)`、
+    /// `Radius.control`、`surfaceSunken` 底、`Menu` 的 label 直挂图标）：
+    /// 同一个动作在两个页面上要长得一样。**两处的差别只该是菜单项。**
+    ///
+    /// ⚠️ 与仓库页**有意不同的一处**：那边菜单里有「添加文件」（会弹一张 sheet），
+    /// 这边两项**都不离开本页**（纯本地复制 + 一条 toast）—— 所以这里不需要任何
+    /// `sheet` 状态。
+    ///
+    /// ⚠️ 它与 `noticeState` / `failureState` 那两档**无关** —— 那两档根本不画 crumb
+    /// （`content` 只在 `.content` 那一条里建它），所以"看不了的文件"上不会出现这颗菜单，
+    /// 也就没有"复制一个打不开的文件的路径"这种别扭事。
+    ///
+    /// ⚠️ **未目视**：`Menu` 的 label 由系统接管，它会不会给这颗图标套 tint
+    /// 或自带按钮样式，只有跑一次模拟器才知道（与仓库页那一颗同一条风险）。
+    private var crumbMenu: some View {
+        Menu {
+            Button {
+                model.copyPath()
+            } label: {
+                Label(FileCopy.copyPathAction, systemImage: GitHubIcon.copy)
+            }
+
+            Button {
+                model.copyFileName()
+            } label: {
+                Label(FileCopy.copyFileNameAction, systemImage: GitHubIcon.file)
+            }
+        } label: {
+            Image(systemName: GitHubIcon.ellipsis)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .padding(Theme.Spacing.s)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                        .fill(Theme.Palette.surfaceSunken)
+                )
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(FileCopy.crumbMenuAccessibilityLabel)
     }
 
     // MARK: - 三档结局
