@@ -34,6 +34,17 @@ import SwiftUI
 /// 共同原则是：**能不用新数字就不用，能用既有令牌就不新造颜色**。
 /// 原型是唯一可点验收依据，替它补一套它没写过的视觉，等于把验收对象换成了我的偏好。
 ///
+/// ## ⚠️ 图片是 **2026-10-12 新增**的（走查第 58 条）
+///
+/// 上面那份清单里原本还有第六处没写到的：**图片**。原型 `.markdown` 一族
+/// **连一条 `img` 规则都没有**（正文里一次都没画过图）
+/// ⇒ 它和上面五处一样是「规格未给」，处置与逐条理由写在
+/// `MarkdownImage`（版式 / 占位块 / 两条取图路）与 `MarkdownRun`（怎么切）里。
+///
+/// ⚠️ **当天改过一次口径**：第一版只在"整段只有这一张图"时才画，其余降级成可点的
+/// 「图片」二字 —— 用户报回"图还是没出来"之后改成**只要这一段里有图就画出来**
+/// （见 `spanContent`）。现在唯一仍降级的地方是**标题**里的图。
+///
 /// ## 两档版式（切片 7.4 新增）
 ///
 /// 原型有**两套** markdown 外观：
@@ -101,6 +112,19 @@ struct MarkdownBody: View {
     /// 版式（`.document` = 正文 / `.compact` = 评论正文）。
     let style: Style
 
+    /// **仓库内图片**的取数上下文（2026-10-12 新增，走查第 58 条）。
+    ///
+    /// ## 为什么调用方必须给（不给就少画一部分）
+    ///
+    /// 正文里那些相对地址的图（`../images/x.png`）**不发请求就画不出来**，
+    /// 而"去哪个仓库、哪个分支、以哪一层为基准"只有调用方知道
+    /// （本视图只拿到解析好的块）。详见 `MarkdownImageContext`。
+    ///
+    /// ⚠️ `nil` **不等于"没有图"**：仓库**外**的绝对地址（Issue / PR 评论、
+    /// Release 说明里那些 `https://user-images…`）**不依赖它**，照样会显示。
+    /// 所以 `CommentRow` / `ReleaseNotesSheet` 不传它是有意的，不是漏了。
+    let imageContext: MarkdownImageContext?
+
     /// ⚠️ `onOpenLink` 留在**最后一个参数位**是有意的：既有调用点（`RepoTreeSection`）
     /// 用的是**尾随闭包**写法 ——
     ///
@@ -108,17 +132,19 @@ struct MarkdownBody: View {
     /// MarkdownBody(blocks: readme.blocks) { url in … }
     /// ```
     ///
-    /// 尾随闭包要匹配到它。把带默认值的 `style` 排在它后面**实测仍能编译**
-    /// （Swift 会跳过末尾那个非闭包参数），但那条规则对读代码的人不显然 ——
-    /// 让"行为参数（闭包）留在最后一位"是这族签名一直以来的形状
+    /// 尾随闭包要匹配到它。把带默认值的 `style` / `imageContext` 排在它前面
+    /// **实测仍能编译**（Swift 会跳过末尾那个非闭包参数），但那条规则对读代码的人
+    /// 不显然 —— 让"行为参数（闭包）留在最后一位"是这族签名一直以来的形状
     /// （`CardBox` / `ActionButton` 也都是这么排的）。
     init(
         blocks: [MarkdownBlock],
         style: Style = .document,
+        imageContext: MarkdownImageContext? = nil,
         onOpenLink: ((URL) -> OpenURLAction.Result)? = nil
     ) {
         self.blocks = blocks
         self.style = style
+        self.imageContext = imageContext
         self.onOpenLink = onOpenLink
     }
 
@@ -212,7 +238,25 @@ struct MarkdownBody: View {
         case let .codeBlock(language, lines): codeBlock(language: language, lines: lines)
         case .divider: divider
         case let .table(table): tableView(table)
+        case let .image(url, alt): imageBlock(url: url, alt: alt)
         }
+    }
+
+    // MARK: - 图片
+
+    /// **独占一段**的图片（2026-10-12 新增，走查第 58 条）。
+    ///
+    /// ⚠️ 走到这里的图片**已经保证**是"这一段只有它"（`MarkdownParser.soleImage`
+    /// 那个提升判据），所以它可以独占一行、可以限宽 —— 而混在正文里的那一档
+    /// 到不了这里，它在 `attributed(_:base:)` 里被降级成链接。
+    ///
+    /// ⚠️ `imageContext` 为 `nil` 时它仍然会画（仓库外的绝对地址那一条路），
+    /// 只有"仓库内的相对地址"会落到占位块 —— 见 `MarkdownImage` 的两条路。
+    private func imageBlock(url: URL, alt: String) -> some View {
+        MarkdownImage(url: url, alt: alt, context: imageContext)
+            // 间距照原型 `.markdown pre{margin-bottom:10px}` 那一档：
+            // 图片与下面的块之间留出与代码块相同的距离，**不新造数字**。
+            .padding(.bottom, 10)
     }
 
     // MARK: - 标题
@@ -265,10 +309,7 @@ struct MarkdownBody: View {
     // MARK: - 段落
 
     private func paragraph(_ spans: [MarkdownSpan]) -> some View {
-        Text(attributed(spans, base: baseFont))
-            .font(baseFont)
-            .foregroundStyle(Theme.Palette.textPrimary)
-            .lineSpacing(lineSpacing)
+        spanContent(spans, base: baseFont, color: Theme.Palette.textPrimary)
             .frame(maxWidth: .infinity, alignment: .leading)
             // 原型 `p{margin-bottom:9px}` —— 4pt 阶里没有 9 这一档，写原值并注明出处
             // （沿 `CardBox` 的 horizontal:14、`CodeSurface` 的 11/13 同一做法）。
@@ -287,10 +328,7 @@ struct MarkdownBody: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             marker(ordered: ordered, number: number, checked: checked)
 
-            Text(attributed(spans, base: baseFont))
-                .font(baseFont)
-                .foregroundStyle(Theme.Palette.textPrimary)
-                .lineSpacing(lineSpacing)
+            spanContent(spans, base: baseFont, color: Theme.Palette.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         // 原型 `ul{margin-left:18px}`：顶层缩进 18。
@@ -355,10 +393,7 @@ struct MarkdownBody: View {
     /// 已登记待评审：若评审认为"引用就该和段落长得一样"，删掉竖条即可，
     /// 其余不动。
     private func quote(_ spans: [MarkdownSpan]) -> some View {
-        Text(attributed(spans, base: baseFont))
-            .font(baseFont)
-            .foregroundStyle(Theme.Palette.textSecondary)
-            .lineSpacing(lineSpacing)
+        spanContent(spans, base: baseFont, color: Theme.Palette.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 18 + Theme.Spacing.s)
             .overlay(alignment: .leading) {
@@ -461,12 +496,13 @@ struct MarkdownBody: View {
         alignments: [MarkdownTableAlignment],
         header: Bool
     ) -> some View {
-        Text(attributed(spans, base: header ? baseFont.weight(.bold) : baseFont))
-            .font(header ? baseFont.weight(.bold) : baseFont)
-            .foregroundStyle(Theme.Palette.textPrimary)
-            .lineSpacing(lineSpacing)
-            .frame(maxWidth: .infinity, alignment: Self.cellAlignment(alignments, column: column))
-            .padding(.vertical, Theme.Spacing.xs)
+        spanContent(
+            spans,
+            base: header ? baseFont.weight(.bold) : baseFont,
+            color: Theme.Palette.textPrimary
+        )
+        .frame(maxWidth: .infinity, alignment: Self.cellAlignment(alignments, column: column))
+        .padding(.vertical, Theme.Spacing.xs)
     }
 
     /// 第 `column` 列的对齐方向；缺对齐信息时回落为左对齐。
@@ -480,6 +516,71 @@ struct MarkdownBody: View {
         case .center: Alignment.center
         case .right: Alignment.trailing
         }
+    }
+
+    // MARK: - 行内片段 → 视图（含图片那一档）
+
+    /// 把一段行内片段渲染出来。
+    ///
+    /// ## 两条路
+    ///
+    /// - **这一段里没有图** ⇒ 一个 `Text`（与从前**逐字一致**）；
+    /// - **这一段里有图** ⇒ 按 `MarkdownInline.runs(of:)` 拆成"文字段 / 图 / 文字段"，
+    ///   竖着排下来 —— 图**自成一行**画在文字后面。
+    ///
+    /// ## ⚠️ 2026-10-12：这一段是**用户报回缺陷之后**重做的
+    ///
+    /// 上一版只在"整段只有这一张图"时才画（`MarkdownParser.soleImage` 那个提升），
+    /// 其余一律在 `attributed(_:base:)` 里**降级成可点的「图片」二字**。
+    /// 用户的实际写法掉进了后面那一档，看到的就是"图上没出来、只有一个能点的
+    /// 「图片」" —— 与"这一期不画图"没有区别（他的原话：「现在效果是用'图片'
+    /// 两个字占位，然后点击跳转到图片详情」）。
+    ///
+    /// 判据太窄是**我的**问题：`Text` 里插不进图，但"图与文字挤在同一行"只是
+    /// 一种**写法**，不是"画不出来"的理由。现在的规则只有一条：
+    /// **只要这一段里有图，图就画出来**（它自己占一行）。
+    ///
+    /// ## 代价（如实说）
+    ///
+    /// `看图 ![x](a.png) 这段` 会变成"一行文字 + 一张图 + 一行文字"，
+    /// 而**不是**"文字 图 文字"横着混流。真做成混流得自己实现换行 / 行距 /
+    /// 首行缩进 —— 这三件事现在全部由 `Text` 统一处理，拆开等于把正文的排版规则
+    /// 重做一遍（`MarkdownBlock.image` 那节写了同一条理由）。
+    ///
+    /// ## `color` / `base` 为什么要传进来
+    ///
+    /// 它们由调用方定（正文 / 引用 / 表格单元格 / 列表项的色与字号各不相同），
+    /// 而**行距**是这一层的（它跟着 `style` 走，见 `lineSpacing`）。
+    @ViewBuilder
+    private func spanContent(_ spans: [MarkdownSpan], base: Font, color: Color) -> some View {
+        let runs = MarkdownInline.runs(of: spans)
+
+        if runs.contains(where: \.isImage) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
+                    switch run {
+                    case let .text(spans):
+                        textRun(spans, base: base, color: color)
+
+                    case let .image(url, alt):
+                        // ⚠️ 这里**不加** `imageBlock` 那个 10pt 下边距 ——
+                        //    间距由上面 `VStack` 的 `spacing` 统一给。
+                        //    两处都给的话，图与下一格之间会是 8 + 10。
+                        MarkdownImage(url: url, alt: alt, context: imageContext)
+                    }
+                }
+            }
+        } else {
+            textRun(spans, base: base, color: color)
+        }
+    }
+
+    /// 一格文字（`.text` 那条路，也是"整段没有图"时唯一的那一格）。
+    private func textRun(_ spans: [MarkdownSpan], base: Font, color: Color) -> some View {
+        Text(attributed(spans, base: base))
+            .font(base)
+            .foregroundStyle(color)
+            .lineSpacing(lineSpacing)
     }
 
     // MARK: - 行内样式（领域层的 spans → `AttributedString`）
@@ -530,6 +631,22 @@ struct MarkdownBody: View {
 
             case let .link(url):
                 var piece = AttributedString(span.text)
+                piece.link = url
+                piece.foregroundColor = Theme.Palette.accent
+                result += piece
+
+            case let .image(url):
+                // ⚠️ **这一档在 2026-10-12 之后基本到不了**：段落 / 列表项 / 引用 /
+                //    表格单元格都改走 `spanContent`，那一条路会把图**真的画出来**。
+                //    这里留着兜的是**它之外**的调用点 —— 现在只有**标题**
+                //    （`heading` 仍用一个 `Text`：标题必须是**一行**，在里面塞一张图
+                //    连原型都没有依据）。
+                //
+                //    文字取 `alt`；`alt` 为空时用兜底那一句 —— 一个**看不见但能点**
+                //    的空白是最坏的结果（用户不知道那里有东西）。
+                var piece = AttributedString(
+                    span.text.isEmpty ? MarkdownCopy.inlineImageFallbackText : span.text
+                )
                 piece.link = url
                 piece.foregroundColor = Theme.Palette.accent
                 result += piece

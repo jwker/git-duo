@@ -110,6 +110,18 @@ final class AppEnvironment {
     /// 文件查看的取数 —— 决策 #54 的三档降级。
     let fileContent: LoadFileContent
 
+    /// markdown 正文里**仓库内图片**的取数与解码缓存
+    /// （2026-10-12 新增，走查第 58 条）。
+    ///
+    /// ⚠️ **必须是这一个实例**（随环境传给各处的 `MarkdownImageContext`）：
+    /// 每个视图各 `new` 一个的话，`NSCache` 等于没有 —— 而它要挡的正是
+    /// "滚动时每帧重新解码"那件事。
+    ///
+    /// ⚠️ 它**不发新的网络请求通道**：底层复用与 `fileContent` 同一个
+    /// `contentEndpoint`（`rawFile`），缓存与 ETag 条件请求都由 `HTTPTransport` 管
+    /// （见 `MarkdownImageStore` 的类型说明）。
+    let markdownImages: MarkdownImageStore
+
     /// 提交列表（分页）与提交详情（§4.4 分区四、§4.7）。
     let repoCommits: LoadRepoCommits
 
@@ -345,6 +357,8 @@ final class AppEnvironment {
             branches: branchEndpoint
         )
         self.fileContent = LoadFileContent(contents: contentEndpoint)
+        // ⚠️ 与上面共用**同一个** `contentEndpoint`（见 `markdownImages` 的类型说明）。
+        self.markdownImages = MarkdownImageStore(contents: contentEndpoint)
         self.repoCommits = LoadRepoCommits(source: commitEndpoint)
         self.branches = LoadBranches(source: branchEndpoint)
 

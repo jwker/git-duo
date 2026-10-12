@@ -181,7 +181,14 @@ public enum MarkdownParser {
                 paragraphLines.append(nextContent)
                 index += 1
             }
-            blocks.append(.paragraph(MarkdownInline.spans(paragraphLines.joined(separator: " "))))
+            let spans = MarkdownInline.spans(paragraphLines.joined(separator: " "))
+            // 整段就是一张图 ⇒ 提成**块级**图片（2026-10-12，走查第 58 条）。
+            // 混在文字里的仍留在段落、由视图降级成链接（见 `MarkdownBlock.image`）。
+            if let image = Self.soleImage(in: spans) {
+                blocks.append(image)
+            } else {
+                blocks.append(.paragraph(spans))
+            }
             indentStack.removeAll()
         }
 
@@ -203,6 +210,42 @@ public enum MarkdownParser {
             || content.hasPrefix(">")
             || htmlBlockStart(content)
             || listItem(content) != nil
+    }
+
+    // MARK: - 图片提升
+
+    /// 一段行内片段若**整段就是一张图**，把它提成块级图片；否则 `nil`。
+    ///
+    /// ## 判据（三条，都不是偏好）
+    ///
+    /// 1. 逐片段看：只有 `.image` 片段与**纯空白**片段允许出现；
+    /// 2. 一旦遇到任何别的东西（文字 / 粗体 / 链接 / 第二张图）⇒ **不提**，
+    ///    整段回落成普通段落。那是"图文混排"（`看图 ![x](a.png) 这段`），
+    ///    属行内档，由视图降级成链接 —— 理由见 `MarkdownBlock.image`。
+    /// 3. 纯空白片段**不参与判定**：`MarkdownInline` 不会产出空片段，
+    ///    但这条守着"将来某次改动让 flush 产出空串"的情况——
+    ///    那种改动不该让图片块静默消失。
+    ///
+    /// ⚠️ **第二张图会取消提升**，不取第一张：两张图并排要画的排版（一行两张、
+    /// 还是上下两张）**原型与 PRD 都没定义过**，与其猜一种，不如让它停在
+    /// "两段可点的替代文字"上 —— 那是明确的、可解释的降级。
+    static func soleImage(in spans: [MarkdownSpan]) -> MarkdownBlock? {
+        var found: (url: URL, alt: String)?
+
+        for span in spans {
+            switch span.style {
+            case let .image(url):
+                guard found == nil else { return nil }
+                found = (url, span.text)
+            case .text where span.text.trimmingCharacters(in: .whitespaces).isEmpty:
+                continue
+            default:
+                return nil
+            }
+        }
+
+        guard let found else { return nil }
+        return .image(url: found.url, alt: found.alt)
     }
 
     // MARK: - 表格判定
@@ -528,7 +571,25 @@ public enum MarkdownInline {
                 }
             }
 
-            // ④ 链接 `[文字](地址)`
+            // ④ 图片 `![替代文字](地址)`（2026-10-12 新增，走查第 58 条）。
+            //
+            // ⚠️ **必须排在链接之前**。图片比链接只多一个前导 `!`，而那个 `!`
+            //    在下面那条链接分支里是个**普通字符** ⇒ 先匹配链接的话，`!` 会进
+            //    buffer 跟着正文一起画出来（屏幕上变成"`!` + 图片的替代文字"，
+            //    看起来像用户在原文件里打错了一个标点 —— 而源文件是对的）。
+            if character == "!", index + 1 < characters.count, characters[index + 1] == "[" {
+                // ⚠️ **允许空 `alt`**（`![](a.png)` 是最常见的写法之一）：
+                //    与 HTML 那条老降级规矩（alt 为空则整张丢掉）有意不同 ——
+                //    那时候丢掉是对的（纯文字里没有落点），现在图是真的要画出来的。
+                if let image = parseLink(characters, at: index + 1, allowsEmptyLabel: true) {
+                    flush()
+                    result.append(MarkdownSpan(text: image.label, style: .image(image.url)))
+                    index = image.next
+                    continue
+                }
+            }
+
+            // ⑤ 链接 `[文字](地址)`
             if character == "[", let link = parseLink(characters, at: index) {
                 flush()
                 result.append(MarkdownSpan(text: link.label, style: .link(link.url)))
@@ -613,9 +674,23 @@ public enum MarkdownInline {
 
     /// 解析 `[文字](地址)`；不是合法链接时返回 `nil`（调用方当作普通字符处理）。
     ///
+    /// - Parameters:
+    ///   - characters: 整段字符数组。
+    ///   - start: **`[` 的下标**（图片那条路传的是 `!` 之后那一位）。
+    ///   - allowsEmptyLabel: 允不允许空的 `[...]`。**图片传 `true`、链接传 `false`** ——
+    ///     `![](a.png)` 是合法且常见的写法，而 `[](a.md)` 不是链接（一个没有文字的
+    ///     链接在界面上是一段看不见但能点的空白，比"不解析"糟得多）。
+    ///
     /// - Returns: 文字、地址（**已通过 `URL` 校验**，无效地址算"不是链接"）、下一个下标。
-    static func parseLink(_ characters: [Character], at start: Int) -> (label: String, url: URL, next: Int)? {
-        guard characters[start] == "[" else { return nil }
+    ///   ⚠️ 它同时服务链接与图片（2026-10-12）：两者除了那个前导 `!` 与空 label
+    ///   这两点之外**语法完全相同**，各写一份扫描逻辑迟早会在某一边漏掉一条边界
+    ///   （例如闭合括号的嵌套处理）。
+    static func parseLink(
+        _ characters: [Character],
+        at start: Int,
+        allowsEmptyLabel: Bool = false
+    ) -> (label: String, url: URL, next: Int)? {
+        guard start < characters.count, characters[start] == "[" else { return nil }
         guard let closingBracket = firstIndex(of: "]", in: characters, from: start + 1) else { return nil }
         let afterBracket = closingBracket + 1
         guard afterBracket < characters.count, characters[afterBracket] == "(" else { return nil }
@@ -623,7 +698,8 @@ public enum MarkdownInline {
 
         let label = String(characters[(start + 1)..<closingBracket])
         let address = String(characters[(afterBracket + 1)..<closingParen])
-        guard !label.isEmpty, !address.isEmpty else { return nil }
+        guard allowsEmptyLabel || !label.isEmpty else { return nil }
+        guard !address.isEmpty else { return nil }
         // ⚠️ 地址里不能有空格 —— `[a](b c)` 不是链接。
         //    `URL(string:)` 对空格是**宽容**的（它会自动百分号编码），
         //    所以这里必须自己拦，否则 `[点这里](参见 上文)` 会变成一个能点的链接。

@@ -27,12 +27,31 @@ public struct FileContent: Sendable {
     /// 观众看到的形态（决定视图画代码块还是图片，以及"不支持预览"的出口）。
     public let preview: FilePreviewKind
 
-    public init(path: RepoPath, blobSHA: String, size: Int, body: Body, preview: FilePreviewKind) {
+    /// 若这个文件是 markdown，这里带一份**已经解析好的**文档（渲染用）；否则 `nil`。
+    ///
+    /// ⚠️ **它是 `.md` 与"其余文本"在文件页唯一的形状差别**（2026-10-12 按用户要求新增，
+    /// `REVIEW-CHECKLIST` 第 57 条）。视图据此在 `CodeSurface`（代码块）与 `MarkdownBody`
+    /// （文档卡）之间分流 —— 两条都是既有件，本字段只是那个岔路口的开关。
+    ///
+    /// ⚠️ **解析在取数层做完**（`MarkdownFile.document(path:text:)`），不留给视图：
+    /// `MarkdownBody` 吃的是算好的块，在 `body` 里重扫全文会让每次重绘都重解析一遍
+    /// （`MarkdownDocument` 的类型说明）。图片与二进制档一律是 `nil`。
+    public let markdown: MarkdownDocument?
+
+    public init(
+        path: RepoPath,
+        blobSHA: String,
+        size: Int,
+        body: Body,
+        preview: FilePreviewKind,
+        markdown: MarkdownDocument?
+    ) {
         self.path = path
         self.blobSHA = blobSHA
         self.size = size
         self.body = body
         self.preview = preview
+        self.markdown = markdown
     }
 
     public enum Body: Sendable {

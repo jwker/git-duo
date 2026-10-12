@@ -161,7 +161,21 @@ struct RepoTreeSection<Trailing: View>: View {
             //    系统打不开一个没有 scheme 的地址 ⇒ 表现为"点了没反应"。
             //    判据（哪一档去哪儿）全在领域层的 `RepoLinkResolver`，这里只做分派 ——
             //    两页（§4.4 / §4.13）共用本件，接线也只有这一处。
-            MarkdownBody(blocks: readme.blocks) { url in
+            MarkdownBody(
+                blocks: readme.blocks,
+                // ⚠️ **图片也要接一次线**（2026-10-12，走查第 58 条）—— 与下面链接
+                //    那处同一套上下文：README 里的图同样是仓库内的相对地址
+                //    （`assets/hero.png`），而基准目录就是它所在的那一层。
+                //    ⚠️ `ref` 用 `page.branch`（这一页当前显示的那个分支）——
+                //    与 `LoadRepoTree` 取 README 时用的 ref 必须一致，
+                //    否则切分支之后正文换了、图还是旧分支的。
+                imageContext: MarkdownImageContext(
+                    fullName: session.fullName,
+                    ref: page.branch,
+                    baseDirectory: session.path,
+                    store: env.markdownImages
+                )
+            ) { url in
                 switch RepoLinkResolver.target(
                     for: url,
                     fullName: session.fullName,

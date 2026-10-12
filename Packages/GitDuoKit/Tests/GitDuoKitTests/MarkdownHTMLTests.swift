@@ -62,28 +62,27 @@ struct MarkdownHTMLTests {
 
     // MARK: - 图片
 
-    @Test("`<img src alt>` 退化成指向那张图的链接，文字取 `alt`")
-    func imageBecomesLink() throws {
+    @Test("`<img src alt>` 变成**图片块**，`alt` 进读屏（2026-10-12 起不再降级成链接）")
+    func imageBecomesImageBlock() throws {
         let source = try #require(URL(string: "assets/desktop-hero-zh.png"))
         #expect(blocks("<img src=\"assets/desktop-hero-zh.png\" alt=\"桌面端主图\" width=\"100%\">") == [
-            .paragraph([
-                MarkdownSpan(text: "桌面端主图", style: .link(source))
-            ])
+            .image(url: source, alt: "桌面端主图")
         ])
     }
 
-    @Test("没有 `alt` 的图片整张丢掉（不是留一个空链接）")
-    func imageWithoutAltIsDropped() {
-        #expect(blocks("<img src=\"assets/x.png\" width=\"96\">").isEmpty)
+    @Test("没有 `alt` 的图片**照样画**（老规矩\"整张丢掉\"已废 —— 那在纯文字里才成立）")
+    func imageWithoutAltIsKept() throws {
+        let source = try #require(URL(string: "assets/x.png"))
+        #expect(blocks("<img src=\"assets/x.png\" width=\"96\">") == [
+            .image(url: source, alt: "")
+        ])
     }
 
     @Test("属性值里的 `>` 不算标签收尾")
     func angleBracketInsideAttribute() throws {
         let source = try #require(URL(string: "x.png"))
         #expect(blocks("<img alt=\"a > b\" src=\"x.png\">") == [
-            .paragraph([
-                MarkdownSpan(text: "a > b", style: .link(source))
-            ])
+            .image(url: source, alt: "a > b")
         ])
     }
 

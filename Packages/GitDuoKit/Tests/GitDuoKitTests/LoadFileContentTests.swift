@@ -257,6 +257,51 @@ struct LoadFileContentTests {
         #expect(await source.contentsCalls.count == 1)
     }
 
+    // MARK: - markdown 文档（2026-10-12 新增，走查第 57 条）
+
+    @Test("⚠️ `.md` 小文本带上一份**解析好的**文档（文件页据此渲染 markdown）；非 md 不带")
+    func markdownTextCarriesDocument() async throws {
+        let text = "# 标题\n\n正文一段。"
+        let encoded = Data(text.utf8).base64EncodedString()
+
+        let markdownSource = ScriptedContentsSource(contents: payload(
+            "README.md", path: "README.md",
+            size: Data(text.utf8).count, encoding: "base64", content: encoded
+        ))
+        let mdOutcome = try await LoadFileContent(contents: markdownSource).load(
+            fullName: "octocat/hello", path: RepoPath(path: "README.md"), size: nil
+        )
+        let mdContent = try #require(mdOutcome.content)
+        #expect(mdContent.markdown != nil, "`.md` 要带文档，否则文件页仍把它画成代码块")
+
+        let swiftSource = ScriptedContentsSource(contents: payload(
+            "main.swift", path: "Sources/main.swift",
+            size: Data(text.utf8).count, encoding: "base64", content: encoded
+        ))
+        let swiftOutcome = try await LoadFileContent(contents: swiftSource).load(
+            fullName: "octocat/hello", path: RepoPath(path: "Sources/main.swift"), size: nil
+        )
+        let swiftContent = try #require(swiftOutcome.content)
+        #expect(swiftContent.markdown == nil, "非 md 不带文档 —— 视图要画代码块")
+    }
+
+    @Test("⚠️ `>1MB` 的 md（走 raw 的大文本档）**也**带文档 —— 用户裁定「一并渲染」")
+    func largeMarkdownAlsoCarriesDocument() async throws {
+        let text = "# 大文件\n\n" + String(repeating: "x", count: 200)
+        let source = ScriptedContentsSource(raw: Data(text.utf8))
+
+        let outcome = try await LoadFileContent(contents: source).load(
+            fullName: "octocat/hello", path: RepoPath(path: "docs/big.md"),
+            size: 2_000_000, blobSHA: "sha-big", ref: "main"
+        )
+
+        let content = try #require(outcome.content)
+        #expect(content.preview == .largeText)
+        // ⚠️ 大文本那一支不按 preview 分档，只看路径是不是 md（`MarkdownFile`）——
+        //    这一条钉的正是"别把 markdown 判据挂到 `.text` 那一档上"。
+        #expect(content.markdown != nil)
+    }
+
     @Test("⚠️ 服务端说「内容没给你」（`encoding: none`）⇒ 补一趟 raw，**别渲染成一页空白**（§9.5 实测形状）")
     func recoversFromOmittedContentViaRaw() async throws {
         let text = String(repeating: "z", count: 128)

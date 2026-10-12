@@ -2036,6 +2036,11 @@ GlassEffectContainer(spacing: 12) {
 > - **行内样式由视图层做**（领域层只出结构）：`.bold` / `.italic` 必须基于**本块的基准字号**派生（`base.weight(.bold)` / `base.italic()`）—— `AttributedString` 的 `.font` 是**整段替换**而不是叠一层，直接给 `.bold` 会让粗体那一小段退回系统默认字号。`.code` 用 `monospacedCode` + `codeInlineSurface`；`.link` 用 `accent` + **无下划线**（原型没有 `a` 规则，取本 App 既有链接语汇，与面包屑一致）。
 > - **代码块直接交给 `CodeSurface`**，语言由 `CodeLanguage.named(fence 的 info string)` 决定，**认不出来就是纯文本**（不去猜 —— 按错的规则着色比不着色更让人怀疑内容本身）。
 > - 列表项的缩进 = `18 × (depth + 1)`（原型 `ul{margin-left:18px}`）；**嵌套是「规格未给」**（原型没有嵌套列表），故只复用那一个 18、不引入第二个数值。任务列表勾选框只靠图形表达勾选态、**不加颜色区分**，且**必须给读屏标签**（`MarkdownCopy.checkboxLabel`）。
+> - ⚠️ **文件查看页（§4.5）自 2026-10-12 起也用它渲染 `.md` / `.markdown`**（走查**第 57 条**，用户要求新增 —— 此前该页所有文本一律走 `CodeSurface`）：判据收在领域层 `MarkdownFile`（→ `FileContent.markdown`，解析在取数层做一次），视图按它分流；链接接线与 README 分区**同一套**（`RepoLinkResolver`，基准目录 = **文件所在目录**）。口径见 `PRD §4.5` 第 2 条。
+> - ⚠️ **图片自 2026-10-12 起真的画出来**（走查**第 58 条**；起于用户报回「`![](../images/x.png)` 这样引入的图片没有显示出来」）。**解析侧**：`MarkdownInline` 认 `![alt](地址)`（`MarkdownSpan.Style.image`，**允许空 `alt`**），**独占一段**的被 `MarkdownParser.soleImage` 提成 `MarkdownBlock.image`。**渲染侧**：`MarkdownImage` 分两条路 —— **仓库内**（`RepoLinkResolver` 判档 → `MarkdownImageStore` → `rawFile`，带令牌、分支跟着当前选的那个；字节缓存与 304 条件请求由 `HTTPTransport` 的 `HTTPResponseCache` 承担，**不再叠一层**）与**仓库外的绝对地址**（`AsyncImage`，Issue / PR 评论里那种），取不到落占位块。
+>   ⚠️ **段里与文字混着的图由 `MarkdownInline.runs(of:)` 切成一格、同样画出来**（`MarkdownRun` + `MarkdownBody.spanContent`）：排成"文字 / 图 / 文字"的**竖排**，图自成一行。`runs` 放在领域层是因为 `make test` 不编译 App target —— 它错了的样子（图掉行 / 多一行空白）很容易被当成排版问题放过去。
+>   ⚠️ **当天改过一次口径**：第一版只在"整段只有这一张图"时才画，其余一律降级成一个可点的「图片」二字 ⇒ 用户报回「现在效果是用『图片』两个字占位，然后点击跳转到图片详情」。判据太窄是**实现侧的错**（"图与文字同行"是一种**写法**，不是画不出来的理由）。现在唯一仍降级的是**标题**里的图（`heading` 仍是一个 `Text`：标题必须一行）。
+>   ⚠️ 原型 `.markdown` 一族**连一条 `img` 规则都没有**（正文里一次都没画过图）⇒「图片 / 加载中 / 取不到」三档外观**全部是「规格未给」**，取法与逐条理由见走查第 58 条；本仓 `MarkdownHTML` 原先那条「图片这一期不画、`alt` 为空整张丢掉」的降级**到此为止**（见 §6.7 那张表已改写的行）。
 
 > ### 6.7 补记：内嵌 HTML 与链接落点（2026-10-07 目视发现后改口径）
 >
@@ -2056,7 +2061,7 @@ GlassEffectContainer(spacing: 12) {
 > |---|---|---|
 > | `<h1>`–`<h6>` | `#`–`######` | 标题本来就有块类型 |
 > | `<br>` | **空行** | `MarkdownSpan.Style` 里没有"段内换行"这一档；单个 `\n` 会被段落收集那支用空格接起来，等于 `<br>` 消失 |
-> | `<img src alt>` | `[alt](src)` | 图片这一期不画；退化成"指向那张图的链接"，点下去进文件查看页（那一页本来就会画图片）。`alt` 为空则整张丢掉 |
+> | `<img src alt>` | `![alt](src)` | **2026-10-12 起真的画出来**（走查第 58 条）：改写回图片语法 ⇒ **只要这一段里有图就画出来**（段里只有它 ⇒ `MarkdownBlock.image`；与文字同段 ⇒ 切成一格竖排，见 `MarkdownRun`）。⚠️ `alt` 缺失或为空**不再丢整张**（"纯文字里没有落点"那条理由在原图要画出来之后不成立了） |
 > | `<a href>` | `[文字](href)` | 复用行内链接；仓库内的相对地址再由 `RepoLinkResolver` 解析 |
 > | `<b>/<strong>/<i>/<em>` | `**` / `*` | 复用行内粗斜体 |
 > | `<details>/<summary>` | 正文照常、`<summary>` 变粗体段落 | 折叠语义不做（`open` 本来就是展开态） |

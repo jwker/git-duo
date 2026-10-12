@@ -186,13 +186,19 @@ public struct LoadFileContent: Sendable {
 
         case .image:
             return .content(FileContent(
-                path: path, blobSHA: sha, size: size, body: .image(bytes), preview: preview
+                path: path, blobSHA: sha, size: size, body: .image(bytes),
+                preview: preview, markdown: nil
             ))
 
         case .text, .largeText:
             guard let text = FileContentCodec.text(from: bytes) else { return .undecodable }
             return .content(FileContent(
-                path: path, blobSHA: sha, size: size, body: .text(text), preview: preview
+                path: path, blobSHA: sha, size: size, body: .text(text),
+                preview: preview,
+                // ⚠️ 大文本（`.largeText`，>1MB 走 raw）**也照样渲染** —— 用户裁定
+                //    ">1MB 的 md 一并渲染"（走查第 57 条）。所以这一支不按 preview 分档，
+                //    只看路径是不是 markdown（`MarkdownFile`）。
+                markdown: MarkdownFile.document(path: path, text: text)
             ))
         }
     }

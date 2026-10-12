@@ -123,11 +123,11 @@ struct FileContentCodecTests {
     func textIsNilForImages() {
         let text = FileContent(
             path: RepoPath(path: "a.swift"), blobSHA: "s", size: 3,
-            body: .text("abc"), preview: .text
+            body: .text("abc"), preview: .text, markdown: nil
         )
         let image = FileContent(
             path: RepoPath(path: "a.png"), blobSHA: "s", size: 3,
-            body: .image(Data([1, 2, 3])), preview: .image
+            body: .image(Data([1, 2, 3])), preview: .image, markdown: nil
         )
 
         #expect(text.text == "abc")

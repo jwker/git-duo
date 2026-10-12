@@ -24,7 +24,7 @@ import Foundation
 /// |---|---|---|
 /// | `<h1>`–`<h6>` | `#`–`######` | 标题本来就有块类型 |
 /// | `<br>` | **空行** | `MarkdownSpan` 里没有"换行"这一档（`AGENTS.md §3` 的登记一起看） |
-/// | `<img src alt>` | `[alt](src)` | 图片这一期不画；退化成"指向那张图的链接"，点下去进文件查看页（那一页本来就会画图片）。`alt` 为空则整张丢掉 |
+/// | `<img src alt>` | `![alt](src)` | **2026-10-12 起真的画出来**（走查第 58 条）：改写回图片语法，独占一段的会被提成块级图片（`MarkdownBlock.image`）。⚠️ `alt` 缺失或为空**不再丢整张**（老规矩 `[alt](src)` 那套已废） |
 /// | `<a href>` | `[文字](href)` | 复用行内链接；仓库内的相对地址由 `RepoLinkResolver` 再解析 |
 /// | `<table>` / `<tr>` / `<td>` / `<th>` | **GFM 表格**（表头 + 分隔行 + 数据行） | 已有表格块类型（`TECH_SPEC §11.1`「表格（GFM）已支持」）；`<th>` / `<thead>` 判为表头，**全 `<td>` 时首行兜底为表头**（GFM 表格必须有表头） |
 /// | 其余标签 | 只去标签、留文字 | 最保守的一档 |
@@ -310,12 +310,16 @@ public enum MarkdownHTML {
             }
 
         case "img":
-            // 见类型说明那一行：图片退化成指向它的链接，文字取 `alt`。
-            // `alt` 为空时**整张丢掉** —— 一枚没有替代文字的图在纯文字里没有落点。
+            // 2026-10-12：**不再降级成链接**，改写回图片语法
+            //（走查第 58 条 —— 「图片这一期不画」那条有意裁剪到这一天为止）。
+            //
+            // ⚠️ `alt` 允许缺失或为空：老规矩是"alt 为空则整张丢掉"，
+            //    而那在**纯文字**里是对的（没有替代文字的图没有落点）；
+            //    现在图是真的要画出来的，缺 alt 只该丢读屏标签、不该丢那张图。
+            //    见 `MarkdownSpan.Style.image` 与 `MarkdownBlock.image`。
             let attributes = attributes(in: body)
-            if let source = attributes["src"], !source.isEmpty,
-               let alt = attributes["alt"], !alt.isEmpty {
-                out += "[\(alt)](\(source))"
+            if let source = attributes["src"], !source.isEmpty {
+                out += "![\(attributes["alt"] ?? "")](\(source))"
             }
 
         default:

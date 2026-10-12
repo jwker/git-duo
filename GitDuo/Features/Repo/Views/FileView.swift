@@ -10,10 +10,20 @@ import UIKit
 ///
 /// | 结局 | 界面 |
 /// |---|---|
-/// | `.content(.text)` | `CodeSurface` 代码块（按扩展名着色，认不出语言 ⇒ 纯文本） |
+/// | `.content(.text)` | `CodeSurface` 代码块（按扩展名着色，认不出语言 ⇒ 纯文本）；**`.md` / `.markdown` 例外 —— 渲染成 markdown** |
 /// | `.content(.image)` | 图片（原始比例、限宽） |
 /// | `.unsupported(reason)` | 「无法预览」+ **跳网页端出口**（**没下载**） |
 /// | `.undecodable` | 「编码不认识」+ 跳网页端出口（**下载了**） |
+///
+/// ## ⚠️ `.md` / `.markdown` 走 markdown 渲染是 **2026-10-12 用户要求新增的**（第 57 条）
+///
+/// 起初**所有文本都走代码块**，`.md` 也不例外 —— 而那是**照原型与 PRD 做的**：
+/// 原型 `SCR.fileView` 的正文写死成一个代码块、演示数据是 Swift 文件
+/// （**一次都没展示过"打开一个 `.md`"**），`PRD §4.5` 第 2 条也只写「代码块」。
+/// 用户报回「md 没有进行格式渲染」⇒ 这是**加了一件原型从来没有的东西**，登记在第 57 条。
+///
+/// 分岔**不在这一层**：`FileContent.markdown` 非空就走 `MarkdownBody`，
+/// 而"哪种扩展名算 markdown"的判据在领域层 `MarkdownFile`（有单测）。
 ///
 /// 后两者合成一块的后果写在 `FileViewOutcome` 的类型说明里：文案总有一边是假话。
 /// 所以本视图里那两块虽然**共用同一套版式**（`noticeState`），
@@ -364,24 +374,31 @@ struct FileView: View {
         }
     }
 
-    /// 正文：代码块或图片。
+    /// 正文：代码块、markdown 文档或图片。
     @ViewBuilder
     private func contentSurface(_ file: FileContent) -> some View {
         switch file.body {
         case let .text(text):
-            CodeSurface(lines: CodeHighlighting.lines(
-                // ⚠️ `FileContent.lines(of:)` 而不是 `split(separator:)`：
-                //    后者会吃掉空行 ⇒ **行号全错位**（领域层有单测钉住这条）。
-                FileContent.lines(of: text),
-                // 语言按**当前路径的扩展名**认。原型这一屏是硬编码的 Swift 演示数据，
-                // 认不出的语言由 `CodeSurface` 走纯文本降级（不去猜，见 `CodeLanguage.named`）。
-                // ⚠️ 取 `file.path`（这一份内容自己的路径）而不是 `model.path`：
-                //    重命名之后两者会短暂不同 —— 内容还没重取，而路径已经换新了。
-                language: CodeLanguage.named(FilePreviewKind.extensionOf(file.path.displayName))
-            ))
-            // 只读浏览里"把这一段复制走"是正常需求，而原型的 `<pre>` 本来就是可选的
-            // （浏览器默认行为）⇒ 取原型。`DiffCard` 里 PRD §4.7 有明写，这一页没有。
-            .textSelection(.enabled)
+            // ⚠️ 只有 `.md` / `.markdown` 会拿到一份解析好的文档（判据在领域层
+            //    `MarkdownFile`）—— 其余文本仍是代码块。两条都是既有件，
+            //    本岔路口只决定画哪一个（走查第 57 条）。
+            if let document = file.markdown {
+                markdownSurface(document, at: file.path)
+            } else {
+                CodeSurface(lines: CodeHighlighting.lines(
+                    // ⚠️ `FileContent.lines(of:)` 而不是 `split(separator:)`：
+                    //    后者会吃掉空行 ⇒ **行号全错位**（领域层有单测钉住这条）。
+                    FileContent.lines(of: text),
+                    // 语言按**当前路径的扩展名**认。原型这一屏是硬编码的 Swift 演示数据，
+                    // 认不出的语言由 `CodeSurface` 走纯文本降级（不去猜，见 `CodeLanguage.named`）。
+                    // ⚠️ 取 `file.path`（这一份内容自己的路径）而不是 `model.path`：
+                    //    重命名之后两者会短暂不同 —— 内容还没重取，而路径已经换新了。
+                    language: CodeLanguage.named(FilePreviewKind.extensionOf(file.path.displayName))
+                ))
+                // 只读浏览里"把这一段复制走"是正常需求，而原型的 `<pre>` 本来就是可选的
+                // （浏览器默认行为）⇒ 取原型。`DiffCard` 里 PRD §4.7 有明写，这一页没有。
+                .textSelection(.enabled)
+            }
 
         case let .image(data):
             if let image = UIImage(data: data) {
@@ -392,6 +409,76 @@ struct FileView: View {
                 noticeState(hint: FileCopy.undecodableTextHint)
             }
         }
+    }
+
+    /// md 正文：与 README / Issue 正文**同一套**渲染（`MarkdownBody` 的 `.document` 档
+    /// —— 白底卡片 + 16 内边距 + 15pt 正文），所以同一份 README 在仓库页的卡片里
+    /// 与在文件页点开之后长得一样。
+    ///
+    /// ⚠️ **走到这里的路径必然是 `.md` / `.markdown`**（`file.markdown` 非空），
+    /// 判据在领域层 `MarkdownFile`，本视图不再判一次。
+    ///
+    /// ⚠️ 链接要**在这里接一次线**（与 `RepoTreeSection` 的 README 分区同一套）：
+    /// md 里大量链接是仓库内的相对地址（`[中文](README_zh.md)`），而系统打不开
+    /// 一个没有 scheme 的地址 ⇒ 表现为"点了没反应"。判据（哪一档去哪儿）
+    /// 全在领域层的 `RepoLinkResolver`，这里只做分派。
+    ///
+    /// ⚠️ 基准目录是**这个文件所在的目录**（不是文件自己的路径）——
+    /// 相对链接以它为基准。取 `at:` 传进来的 `file.path`（这一份内容自己的路径），
+    /// 与上面认语言那一处同源（重命名后两者短暂不同）。
+    private func markdownSurface(_ document: MarkdownDocument, at path: RepoPath) -> some View {
+        MarkdownBody(
+            blocks: document.blocks,
+            // ⚠️ **图片要在这里接一次线**（2026-10-12，走查第 58 条）：md 里的图
+            //    大多是**仓库内的相对地址**（`../images/x.png`），不发请求画不出来，
+            //    而"去哪个仓库、哪个分支取"只有这一层知道。基准目录与链接那处同源
+            //    （文件所在目录）。
+            //    ⚠️ `ref` 取 `model.branch`（这一页自己解析出来的那个），不是路由上的 ——
+            //    §8.2 的路由不带分支，与 `FileViewModel` 那条说明同源。
+            imageContext: MarkdownImageContext(
+                fullName: fullName,
+                ref: model.branch,
+                baseDirectory: path.deletingLastComponent(),
+                store: env.markdownImages
+            )
+        ) { url in
+            switch RepoLinkResolver.target(
+                for: url,
+                fullName: fullName,
+                baseDirectory: path.deletingLastComponent()
+            ) {
+            case let .file(linked):
+                // ⚠️ `readOnly` 沿用本页的 —— 同一条仓库浏览链上权限不变
+                //    （他人仓库里点开的 md 里再点一个文件，仍是只读浏览）。
+                env.router.push(.fileView(
+                    fullName: fullName, path: linked.raw, readOnly: readOnly
+                ))
+                return .handled
+
+            case let .directory(linked):
+                // 自己的仓库进可写的代码分区（§4.4）、他人仓库进只读的探索详情（§4.13）。
+                let destination: String? = linked.isRoot ? nil : linked.raw
+                if readOnly {
+                    env.router.push(.exploreRepoDetail(fullName: fullName, path: destination))
+                } else {
+                    env.router.push(.repoDetail(
+                        fullName: fullName, section: .code, path: destination
+                    ))
+                }
+                return .handled
+
+            case .external:
+                // 外部地址必须落到系统，否则 md 里所有外链会一起静默失效。
+                return .systemAction
+
+            case .anchor, .unresolved:
+                // 两档都**没有落点**（页内锚点这一版不做；相对地址跳出仓库根时猜不出
+                // 它想去哪儿）。`.discarded` 是"我们要过它、并决定不跳"，比 `.handled` 诚实。
+                return .discarded
+            }
+        }
+        // 与代码块那一档相同：只读浏览里"把这一段复制走"是正常需求。
+        .textSelection(.enabled)
     }
 
     /// 图片：**原始比例、限宽、不放大**。

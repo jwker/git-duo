@@ -80,7 +80,9 @@ public enum RepoFileMapper {
                 // 会不一样，而界面上那句 `{大小}` 应当与服务端一致
                 size: dto.size,
                 body: .image(bytes),
-                preview: preview
+                preview: preview,
+                // 图片没有 markdown 一回事（`MarkdownFile` 只认 .md / .markdown）。
+                markdown: nil
             )
 
         case .text, .largeText:
@@ -90,7 +92,10 @@ public enum RepoFileMapper {
                 blobSHA: dto.sha,
                 size: dto.size,
                 body: .text(text),
-                preview: preview
+                preview: preview,
+                // ⚠️ 只有 `.md` / `.markdown` 会在这里拿到一份文档；其余文本是 `nil`
+                //    ⇒ 视图仍走代码块（`MarkdownFile` 的说明、走查第 57 条）。
+                markdown: MarkdownFile.document(path: RepoPath(path: dto.path), text: text)
             )
         }
     }

@@ -101,6 +101,23 @@ public enum GitHubIcon {
     /// 面包屑条里比竖排三点更平衡。
     public static let ellipsis = "ellipsis"
 
+    // MARK: - markdown 图片（2026-10-12 新增，走查第 58 条）
+
+    /// **图片** —— markdown 正文里那张图**正在取**时的占位图标。
+    ///
+    /// ⚠️ 与上面两个同属"原型里没有"：原型 `styles/04-screens.css` 的 `.markdown`
+    /// 一族**连一条 `img` 规则都没有**（正文里一次都没画过图）⇒ 这个字形取自
+    /// SF Symbols 里最直白的一支。
+    ///
+    /// ⚠️ 它只出现在**占位块**上 —— 真图不配任何图标。
+    public static let image = "photo"
+
+    /// **图片取不到** —— 占位块上那个警示图标。
+    ///
+    /// ⚠️ 与 `image` **有意分开**：加载中与加载失败是两件事，共用一个图标会让
+    /// "等一下就好"和"这条路走不通了"长得一模一样。
+    public static let imageFailure = "exclamationmark.triangle"
+
     // ⚠️ **有意没有** `history` / `more` / `openInBrowser` 三个常量。
     //    切片 6.4 起草时曾按"每个操作按钮配一个图标"补过它们，落地时发现
     //    `SCR.fileView` 的 `历史` / `更多` 与那两处"跳网页端"的出口**都是纯文字**

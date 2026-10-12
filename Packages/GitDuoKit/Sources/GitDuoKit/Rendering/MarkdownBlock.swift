@@ -45,6 +45,21 @@ public struct MarkdownSpan: Equatable, Hashable, Sendable {
         /// （退回普通文本），视图拿到的永远是一个能打开的地址。
         case link(URL)
 
+        /// 图片（**行内**的那一档，2026-10-12 新增 —— 走查第 58 条）。
+        ///
+        /// ⚠️ **独立成段的图片不走这里** —— 那一种在 `MarkdownParser` 里被提成
+        /// `MarkdownBlock.image`（块级、间距按代码块那一档）。留下这一档是给
+        /// **混在文字里**的图片（`看图 ![x](a.png) 这里`），而它在视图层由
+        /// `MarkdownInline.runs(of:)` 切成独立的一格、**同样真的画出来**
+        /// （`MarkdownBody.spanContent`）—— 只是"图与文字同一行"会排成
+        /// "文字 / 图 / 文字"的竖排，不做横排混流。
+        ///
+        /// ⚠️ `text` 是 `alt`（替代文字），**允许为空** —— 这与 HTML 那条降级的
+        /// 老规矩（alt 为空则整张丢掉）有意不同：那时候丢掉是对的（纯文字里没有落点），
+        /// 现在图是真的要画出来的，一张没有 alt 的图不该因此消失。
+        /// 地址同样带 `URL`，无效地址在解析阶段就被退回普通文本。
+        case image(URL)
+
         /// 解析样式时用的**标记符号**，供 `plainText` 与调试。
         ///
         /// 它不进界面 —— 存在只是为了在断言里区分"这段是粗体"与"这段是纯文本"时
@@ -52,7 +67,7 @@ public struct MarkdownSpan: Equatable, Hashable, Sendable {
         public var isEmphasized: Bool {
             switch self {
             case .bold, .italic: true
-            case .text, .code, .link: false
+            case .text, .code, .link, .image: false
             }
         }
     }
@@ -151,6 +166,27 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
     /// GFM 表格（`MarkdownTable`）。
     case table(MarkdownTable)
 
+    /// 图片（**独占一段**的那一档，2026-10-12 新增 —— 走查第 58 条）。
+    ///
+    /// ## 为什么是块、不是又一个 `MarkdownSpan.Style`
+    ///
+    /// 图片在 markdown 语法里是**行内**元素（`MarkdownSpan.Style.image` 就是它），
+    /// 但真画出来时它占满一整行、要限宽、要有加载占位 —— 这些都不是"文字的一段"
+    /// 能表达的东西。所以**独占一段的图片被提成块**（`MarkdownParser` 里那一步）。
+    ///
+    /// ⚠️ **提到块上只是"间距"的差别，不是"画不画"的差别**：混在文字里的图由
+    /// `MarkdownInline.runs(of:)` 切成独立的一格、照样画得出来
+    /// （`MarkdownBody.spanContent`）；这一档额外拿到的是**块与块之间**那档间距
+    /// （原型 `.markdown pre{margin-bottom:10px}`），以及"这一段只有它"的排版自由。
+    ///
+    /// ⚠️ **为什么不把混排也做成"文字 图 文字"横着排**：`Text` 里插不进一张图，
+    /// 真做混流就得自己实现换行 / 行距 / 首行缩进 —— 这三件事现在全部由 `Text`
+    /// 统一处理，拆开等于把正文的排版规则重做一遍。代价是"图与文字同行"时图会
+    /// 掉到自己那一行 —— 登记在 `TECH_SPEC §11.1`。
+    ///
+    /// - `alt`: 替代文字，**可以为空**（读屏标签与加载失败时的说明都用它）。
+    case image(url: URL, alt: String)
+
     /// 这段块是不是空的（**不渲染任何东西**）。
     ///
     /// 空白块要能被识别出来：列表之间、代码块之后常常夹着空行，
@@ -159,16 +195,38 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
     public var isEmpty: Bool {
         switch self {
         case let .heading(_, spans), let .paragraph(spans), let .quote(spans):
-            spans.allSatisfy { $0.text.isEmpty }
+            !Self.hasContent(spans)
         case let .listItem(_, _, _, _, spans):
-            spans.allSatisfy { $0.text.isEmpty }
+            !Self.hasContent(spans)
         case let .codeBlock(_, lines):
             lines.allSatisfy { $0.isEmpty }
         case let .table(table):
             table.rows.isEmpty
-              && table.header.allSatisfy { $0.allSatisfy { $0.text.isEmpty } }
+              && !Self.hasContent(table.header.flatMap { $0 })
+        case let .image(url, _):
+            // ⚠️ **地址为空才算空**，`alt` 空不算 —— 一张没有替代文字的图仍然要画。
+            url.absoluteString.isEmpty
         case .divider:
             false
+        }
+    }
+
+    /// 一组行内片段里有没有**能显示出来的东西**。
+    ///
+    /// ## ⚠️ 为什么不能只看 `text` 空不空（2026-10-12 修）
+    ///
+    /// 图片片段**可以有空的 `text`**（`![](a.png)` 的替代文字就是空的），
+    /// 而它**仍然是一张要画出来的图**（视图层给它兜底文字，见
+    /// `MarkdownSpan.Style.image`）。
+    ///
+    /// 按"文字非空"判的后果很隐蔽：`> ![](a.png)` 与 `- ![](a.png)`
+    /// 会被上面 `isEmpty` 判成空块、被 `MarkdownParser` 的
+    /// `filter { !$0.isEmpty }` **静默丢掉** —— 屏幕上表现为"引用里 / 列表项里
+    /// 那张图不见了"，而没有任何一处会报错。
+    private static func hasContent(_ spans: [MarkdownSpan]) -> Bool {
+        spans.contains { span in
+            if case .image = span.style { return true }
+            return !span.text.isEmpty
         }
     }
 }
