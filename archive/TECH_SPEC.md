@@ -1667,6 +1667,18 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
 （`ContributionGrid.monthLabels`）。⚠️ 表头行与网格**必须共用同一个 `step`**（11 + 2.5），
 否则标签会逐列漂移 —— 所以两处都从 `ContributionHeatmap` 的那一套纯函数取值，不各算一遍。
 
+⚠️ **日子的年份先裁过一遍**（2026-10-12 加，用户走查**第 60 条**）：服务端**按周**返回、
+且**不补周**（*range comes back exactly as requested, without padding to whole weeks*），
+而窗口起点是按**本机日历**算的 1/1 零点、再由 `GitHubViewerActivityEndpoint.dateTime` 按 **GMT**
+序列化发出去 ⇒ 首周可能带回一个**上一年 12 月**的日子（东八区：`2025-12-31T16:00:00Z`）。
+它会让第 0 列挂出「12月」、第 1 列挂「1月」，而两列只差 **13.5pt**、「12月」约 **23pt** ⇒ **两个字叠上**。
+裁剪在 `ProfileMapper.grid(_:year:)` 里按 `ContributionYear.datePrefix` 做（**零填充**的四位年 + `-`），
+⚠️ **必须裁在算 `firstRow` 之前** —— 裁完"第一天"换人了，行号要跟着重算，否则整张图**上下错位一格**。
+⚠️ 这是**有意偏差第 60 条**，不是"表头规则改了"：「哪一列该挂」这条规则**一个字没动**，
+上游少一天、标签自然就对。
+⚠️ **没坐实的那一环**：服务端到底按哪个时区切日 —— 本机验不了，所以**没有**改成"把窗口起点按 UTC 日历算"
+（那要先坐实它，且会推翻 `ContributionYear` 那句"`calendar` 必须带时区"）。按前缀裁**不依赖**那个判断。
+
 **我的 Star 页（`.stars`，PRD §4.18）**
 
 - 数据源 `GET /user/starred` —— **复用切片 3 就有的 `listStarred`**（§4.6.1），不新写端点。

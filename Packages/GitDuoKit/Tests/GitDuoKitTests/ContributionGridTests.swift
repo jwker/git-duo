@@ -252,10 +252,19 @@ struct ContributionGridMapperTests {
         )
     }
 
+    /// 本套件造的日历日期都在 `2026-` 里 ⇒ 固定取 2026 这一档
+    /// （对这些数据**逐字无操作** —— 裁剪只认年份前缀，见 `ContributionYear.datePrefix`）。
+    ///
+    /// ⚠️ 名字不能就叫 `grid`：好几条用例是 `let grid = …`，而 Swift 会把同一声明里的
+    /// 那个名字解析成**正在声明的局部变量**，于是 `let grid = grid(dto)` 编译不过。
+    private func makeGrid(_ dto: ViewerActivityDTO) -> ContributionGrid {
+        ProfileMapper().grid(dto, year: ContributionYear(year: 2026))
+    }
+
     @Test("⚠️ 一整年 = **53 列 × 7 行**，前面空 4 格、后面空 2 格（坐标就是这个）")
     func fullYearIsFiftyThreeColumns() {
         let dto = calendar(firstRow: 4, totalDays: 365)
-        let grid = ProfileMapper().grid(dto)
+        let grid = makeGrid(dto)
 
         #expect(grid.columnCount == 53)
         #expect(grid.columns.allSatisfy { $0.count == 7 })
@@ -272,9 +281,9 @@ struct ContributionGridMapperTests {
         // 官方注释只举例"1 is Monday"，没写死区间是 0…6 还是 1…7。
         // 布局算的是**相对差**，所以换一套约定必须得到同一张图 ——
         // 这条断言就是"我们没有偷偷依赖某个约定"的证据。
-        let first = ProfileMapper().grid(calendar(firstRow: 4, totalDays: 365))
-        let shifted = ProfileMapper().grid(calendar(firstRow: 4, totalDays: 365, weekdayOffset: 1))
-        let shiftedMore = ProfileMapper().grid(
+        let first = makeGrid(calendar(firstRow: 4, totalDays: 365))
+        let shifted = makeGrid(calendar(firstRow: 4, totalDays: 365, weekdayOffset: 1))
+        let shiftedMore = makeGrid(
             calendar(firstRow: 4, totalDays: 365, weekdayOffset: 100)
         )
 
@@ -287,7 +296,7 @@ struct ContributionGridMapperTests {
         // 这里刻意给一个与格子求和毫无关系的数。自己求和的话，
         // 显示出来的数会随"这次取回了多少格"而变 —— 而这两者本该是同一件事。
         let dto = calendar(firstRow: 4, totalDays: 365, total: 9_999)
-        let grid = ProfileMapper().grid(dto)
+        let grid = makeGrid(dto)
 
         #expect(grid.totalContributions == 9_999)
         #expect(grid.dayCount == 365)
@@ -296,7 +305,7 @@ struct ContributionGridMapperTests {
     @Test("`date` 原样保留服务端那串 `yyyy-MM-dd`（不转 `Date`，也就不必替它选时区）")
     func dateIsKeptVerbatim() {
         let dto = calendar(firstRow: 0, totalDays: 7)
-        let grid = ProfileMapper().grid(dto)
+        let grid = makeGrid(dto)
 
         #expect(grid.days.map(\.date) == ["2026-0000", "2026-0001", "2026-0002", "2026-0003",
                                           "2026-0004", "2026-0005", "2026-0006"])
@@ -321,7 +330,7 @@ struct ContributionGridMapperTests {
             repositories: TotalCountDTO(totalCount: 0)
         )
 
-        let grid = ProfileMapper().grid(dto)
+        let grid = makeGrid(dto)
 
         #expect(grid.days.count == 1)
         #expect(grid.days[0].level == .firstQuartile)
@@ -337,7 +346,7 @@ struct ContributionGridMapperTests {
             repositories: TotalCountDTO(totalCount: 0)
         )
 
-        let grid = ProfileMapper().grid(dto)
+        let grid = makeGrid(dto)
 
         #expect(grid.isEmpty)
         #expect(grid.columnCount == 0)
@@ -593,5 +602,140 @@ struct ContributionMonthLabelTests {
         #expect(
             zip(grid.monthLabels, grid.monthLabels.dropFirst()).allSatisfy { $1.column - $0.column >= 4 }
         )
+    }
+}
+
+/// 跨年裁剪 —— 服务端按周返回，而窗口起点是按本机日历算的 1/1 零点
+/// （用户走查**第 60 条**、`ContributionYear.datePrefix`）。
+///
+/// ## 这一套守的是什么
+///
+/// 用户报回「**12月和1月的坐标值贴在一起**」。机制是：首列里混进一个上一年的 12 月日子
+/// ⇒ `monthLabels` 在首列挂「12月」、在第 1 列挂「1月」，而两列只差 **13.5pt**
+/// （`ContributionHeatmap` 的 `step = 11 + 2.5`）而「12月」约 **23pt** ⇒ **两个字叠上**。
+///
+/// ⚠️ 那个混进来的日子**不是服务端塞的**（它不补周：*range comes back exactly as
+/// requested, without padding to whole weeks*），而是**我们窗口起点要来的**：
+/// 起点按本机日历取 1/1 零点、再按 GMT 写出去，对东八区来说正是 `2025-12-31T16:00:00Z`。
+///
+/// ⇒ 两条断言：**那一天被裁掉**（表头只剩 1 月），且**同年的日子一格都没挪位**。
+/// 后者才是"裁剪"与"整张图错位"的分界 —— 错位的热力图看起来一样正常，
+/// 只是每一天都不在它该在的位置（最难自查的一类错）。
+@Suite("热力图 · 跨年裁剪（走查第 60 条）")
+struct ContributionYearTrimTests {
+
+    /// 走查第 60 条那个真实形状：**首列混进上一年的 12 月**。
+    ///
+    /// 造 2025-12-31（周三）→ 2026-01-24：首周是"尾巴"（只有 12/31 + 1/1 + 1/2 + 1/3 四天
+    /// —— 服务端不给窗口外的日子），之后三个整周（至少一个满 7 天的周给 `firstRow` 当基准）。
+    ///
+    /// `weekday` 取 `0` = 周日，基准是 2025-12-28（周日）⇒ 12/31 = 3、1/1 = 4。
+    private func calendarCrossingNewYear(total: Int = 999) -> ViewerActivityDTO {
+        var dates = ["2025-12-31", "2026-01-01", "2026-01-02", "2026-01-03"]
+        var weekdays = [3, 4, 5, 6]
+        for index in 0..<21 {
+            dates.append(String(format: "2026-01-%02d", 4 + index))
+            weekdays.append(index % 7)
+        }
+
+        var weeks: [ContributionCalendarWeekDTO] = []
+        var cursor = 0
+        var length = 4                      // 首周只有 4 天
+        while cursor < dates.count {
+            let end = min(cursor + length, dates.count)
+            let slice = (cursor..<end).map { index in
+                ContributionCalendarDayDTO(
+                    date: dates[index],
+                    contributionCount: 1,
+                    contributionLevel: "FIRST_QUARTILE",
+                    weekday: weekdays[index]
+                )
+            }
+            weeks.append(
+                ContributionCalendarWeekDTO(contributionDays: slice, firstDay: slice[0].date)
+            )
+            cursor = end
+            length = 7
+        }
+
+        return ViewerActivityDTO(
+            contributionsCollection: .init(
+                contributionCalendar: .init(totalContributions: total, weeks: weeks)
+            ),
+            starredRepositories: TotalCountDTO(totalCount: 0),
+            repositories: TotalCountDTO(totalCount: 0)
+        )
+    }
+
+    @Test("⚠️ 首列混进上一年 12 月 ⇒ **裁掉**：表头不再多出一个「12月」")
+    func daysOutsideTheYearAreTrimmed() {
+        let grid = ProfileMapper().grid(
+            calendarCrossingNewYear(),
+            year: ContributionYear(year: 2026)
+        )
+
+        #expect(grid.days.count == 24, "25 天里裁掉 12/31 那一天")
+        #expect(grid.days.first?.date == "2026-01-01")
+        #expect(grid.days.allSatisfy { $0.date.hasPrefix("2026-") })
+
+        // 用户看到的那一幕的反面：只剩 1 月、且落在第 0 列
+        //（裁之前是「12月」在第 0 列、「1月」在第 1 列，两个标签叠在一起）。
+        #expect(grid.monthLabels == [MonthLabel(column: 0, month: 1)])
+    }
+
+    @Test("⚠️ 裁剪**只把上一年那几格挖空**，同年的日子一格都没挪位")
+    func trimmingOnlyBlanksTheForeignCells() {
+        let grid = ProfileMapper().grid(
+            calendarCrossingNewYear(),
+            year: ContributionYear(year: 2026)
+        )
+
+        // 12/31 本来占第 0 列第 3 行；裁掉之后那一格是补位，而 1/1 仍在**它真实该在的
+        // 第 0 列第 4 行** —— `firstRow` 是拿裁剪后的第一天重算的（3 → 4）。
+        // 漏掉这一步的表现就是整张图上下错位一格。
+        #expect(grid.columns[0][3] == nil, "上一年那一格被挖空")
+        #expect(grid.columns[0][4]?.date == "2026-01-01")
+        #expect(grid.columns[0][5]?.date == "2026-01-02")
+        #expect(grid.columns[0][6]?.date == "2026-01-03")
+
+        // 下一列照常从周日起（1/4 是周日）—— 列与列的对齐没有被裁剪打乱。
+        #expect(grid.columns[1][0]?.date == "2026-01-04")
+        #expect(grid.columns[1][6]?.date == "2026-01-10")
+    }
+
+    @Test("⚠️ **同年内**的日子一天都不裁（裁了会让最后一列凭空短一截）")
+    func sameYearDaysAreNeverTrimmed() {
+        let grid = ProfileMapper().grid(
+            calendarCrossingNewYear(),
+            year: ContributionYear(year: 2026)
+        )
+
+        // 裁剪只认年份前缀 ⇒ 它治的是"跨年"，不是"窗口"。1/24 之后那几天属于 2026，
+        // 照旧画出来（真实数据里它们是"今天之后"的空日子，服务端按周返回会带上）。
+        #expect(grid.days.last?.date == "2026-01-24")
+        #expect(!grid.isEmpty)
+    }
+
+    @Test("⚠️ 整份数据都不属于这一年 ⇒ 一张**空网格**（不崩、也不把别年的日子画进来）")
+    func fullyTrimmedYieldsEmptyGrid() {
+        let grid = ProfileMapper().grid(
+            calendarCrossingNewYear(),
+            year: ContributionYear(year: 2024)
+        )
+
+        #expect(grid.isEmpty)
+        #expect(grid.columnCount == 0)
+        // ⚠️ 总数照抄服务端的（既有口径：它不是把格子加起来的）⇒ 这一档下会出现
+        //    "空格子 + 非零总数"。它只在服务端整份数据都跨年时才到得了，
+        //    而这比"把别的年份的日子画进这一年"要好（走查第 60 条已登记）。
+        #expect(grid.totalContributions == 999)
+    }
+
+    @Test("⚠️ 前缀是**零填充**的四位年 —— 与服务端 `yyyy-MM-dd` 逐字对得上")
+    func datePrefixIsZeroPadded() {
+        #expect(ContributionYear(year: 2026).datePrefix == "2026-")
+        // 不零填充的话这里会是 `"999-"`，于是那一年的图**整张是空的**，
+        // 而症状看起来像"数据没取到"、不像"前缀写错了"。
+        #expect(ContributionYear(year: 999).datePrefix == "0999-")
     }
 }

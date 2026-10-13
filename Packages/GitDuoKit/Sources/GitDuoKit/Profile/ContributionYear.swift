@@ -46,6 +46,36 @@ public struct ContributionYear: Sendable, Hashable, Identifiable {
     /// 免得"菜单标题"与"a11y 标签"两处各拼一遍。
     public var label: String { ProfileCopy.yearLabel(year) }
 
+    /// 该年日子的**字符串前缀**（`"2026-"`）—— 把服务端给的 `yyyy-MM-dd` 裁到这一年
+    /// （2026-10-12 加，用户走查**第 60 条**）。
+    ///
+    /// ## 它治什么
+    ///
+    /// 服务端**按周**返回 `contributionDays`，而本类型的窗口起点是"1/1 零点"按**本机日历**
+    /// 算的、再由数据层按 **GMT** 序列化（`GitHubViewerActivityEndpoint.dateTime`）
+    /// ⇒ 对 UTC 东侧来说那串落到**上一年 12/31**（东八区：`2025-12-31T16:00:00Z`）。
+    /// 服务端若按它自己的口径切日，首周就会带回一个**不属于这一年**的日子。
+    ///
+    /// 那个日子会把月份表头带歪：`ContributionGrid.monthLabels` 的规则是"每个月挂在
+    /// **它第一次出现的那一列**"，于是第 0 列挂「12月」、第 1 列挂「1月」，而两列只差
+    /// **13.5pt**（`ContributionHeatmap` 的 `step = 11 + 2.5`）而「12月」约 **23pt**
+    /// ⇒ **两个字叠在一起**（用户就是这么发现的：*12月和1月的坐标值贴在一起*）。
+    ///
+    /// ## ⚠️ 为什么是"按年份前缀裁"而不是"把窗口起点摆到 UTC 日历"
+    ///
+    /// 因为**后者要先坐实"服务端到底按哪个时区切日"**，而那件事在本机验不了
+    /// （令牌在 Keychain 里、`gh` 未授权，而匿名的 `/users/{u}/contributions` 只认年份粒度、
+    /// 会忽略 `from`/`to` 的细粒度 ⇒ 问不出边界落在哪一天）。
+    /// 按前缀裁**不依赖那个判断**：无论服务端怎么切，网格里只剩这一年的日子，表头自然是 1…12。
+    /// 代价如实登记在走查第 60 条：服务端的 `totalContributions` 仍可能含着那个跨年的日子。
+    ///
+    /// ## ⚠️ 必须**零填充**（`%04d`）
+    ///
+    /// 服务端那串是零填充的四位年（`yyyy-MM-dd`），前缀必须逐字对得上 ——
+    /// 写成 `"\(year)-"` 的话 999 年那种会得到 `"999-"`、**永远匹配不上**，
+    /// 而症状是"某一年的热力图整张是空的"，看起来像数据没取到。
+    public var datePrefix: String { String(format: "%04d-", year) }
+
     public init(year: Int) {
         self.year = year
     }
@@ -107,6 +137,12 @@ public struct ContributionYearBoard: Sendable {
     ///
     /// ⚠️ 兜底：起点算不出来（畸形日历）时退化成"整年 = 现在这一刻"，
     /// 而不是崩掉或返回一个 0 长度的区间 —— 调用方拿到的是一个**一定能用**的窗口。
+    ///
+    /// ⚠️ **这里只管"请求哪个区间"，管不到"服务端实际回了哪几天"**：上面那条"起点按本机
+    /// 日历算"会让东八区请求到的 `from` 落在**上一年 12/31**（`16:00:00Z`），而服务端按周
+    /// 返回、不补周 ⇒ 首周就可能带回那个日子。**它由映射层按年份前缀裁掉**
+    /// （`ContributionYear.datePrefix`、`ProfileMapper.grid(_:year:)`，走查第 60 条），
+    /// 不在这里改 —— 那要先坐实服务端按哪个时区切日，而按前缀裁不依赖那个判断。
     public func interval(of year: ContributionYear) -> DateInterval {
         let instant = now()
         guard let start = calendar.date(from: DateComponents(year: year.year, month: 1, day: 1)),

@@ -76,7 +76,10 @@ public struct LoadProfileOverview: Sendable {
         return ProfileOverview(
             year: year,
             identity: profileDTO.map { mapper.profile($0) },
-            grid: activityDTO.map { mapper.grid($0) },
+            // ⚠️ 把 `year` 一起交给映射层：服务端按周返回、首周可能带着上一年 12 月的
+            //    日子，要按年份前缀裁掉（走查第 60 条，`ProfileMapper.grid(_:year:)`）。
+            //    这正是"菜单里写着 2025、取的却是 2024"那类错误的第二道防线。
+            grid: activityDTO.map { mapper.grid($0, year: year) },
             // ⚠️ 三个数**各取各的来源**：仓库 / Star 来自 GraphQL（没拿到就是 `nil`），
             //    Follower 来自 `GET /user`（与 GraphQL 那一发完全无关）。
             stats: mapper.stats(

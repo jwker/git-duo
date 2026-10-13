@@ -72,9 +72,35 @@ public struct ProfileMapper: Sendable {
     /// 所以这里**算相对量**：找一个"满 7 天"的周，它的第一天必然是周起点；
     /// 第一天的行号 = `(第一天的 weekday − 那个周起点的 weekday) mod 7`。
     /// 无论服务端用什么编号约定，这个差都成立。
-    public func grid(_ dto: ViewerActivityDTO) -> ContributionGrid {
+    ///
+    /// ## ⚠️ 第二处难点：**先裁到这一年，再算行号**
+    ///
+    /// 服务端按周返回、且不补周（*range comes back exactly as requested, without
+    /// padding to whole weeks*），而窗口起点是按本机日历算的 1/1 零点、按 GMT 发出去
+    /// ⇒ 首周可能带回一个**上一年 12 月**的日子（见 `ContributionYear.datePrefix`，
+    /// 用户走查**第 60 条**）。这里把它按年份前缀裁掉。
+    ///
+    /// ⚠️ **两件事的顺序不能反**：裁完之后"第一天"换人了（12/31 换成了 1/1），
+    /// 行号必须跟着重算。反过来做（先算 `firstRow` 再裁）的表现是**整张图上下错位一格** ——
+    /// 而错位的热力图看起来一样正常，只是每一天都不在它该在的位置。
+    ///
+    /// ⚠️ 裁剪**只认年份前缀**，所以它同时治两头：往年的窗口（`2025-01-01 → 12-31`）末周
+    /// 若带回下一年 1 月那几天，也一样被裁掉（否则表头会多出一个「1月」）。
+    /// 而**同年内、窗口之后**的那些空日子照常画出来 —— 它们不是"别的年份的日子"，
+    /// 裁了反而会让最后一列凭空短一截。
+    ///
+    /// ⚠️ 极端情形：整份数据都不属于这一年（服务端回了别的一年）⇒ 得到一张**空网格**，
+    /// 而 `totalContributions` 仍是服务端那个数（既有口径：它不是把格子加起来的）。
+    /// "空格子 + 非零总数"这个组合不好看，但它比"把别的年份的日子画进这一年"要好。
+    ///
+    /// - Parameter year: 这一格图属于哪一年。
+    ///   ⚠️ **不是可选** —— 裁剪必须知道年份，而这正是"右上写着 2025、图是 2026"
+    ///   那类错误唯一的防线（同 `LoadProfileOverview.load(year:)` 的口径）。
+    public func grid(_ dto: ViewerActivityDTO, year: ContributionYear) -> ContributionGrid {
         let calendar = dto.contributionsCollection.contributionCalendar
-        let rawDays = calendar.weeks.flatMap(\.contributionDays)
+        let rawDays = calendar.weeks
+            .flatMap(\.contributionDays)
+            .filter { $0.date.hasPrefix(year.datePrefix) }
 
         let days = rawDays.map { day in
             ContributionDay(
@@ -99,6 +125,9 @@ public struct ProfileMapper: Sendable {
     }
 
     /// 第一天落在第几行（`0` = 首行）。见 `grid(_:)` 的说明。
+    ///
+    /// ⚠️ `firstDay` 要传**裁剪之后**的那一天（不是服务端回的原始首日）——
+    /// 上一年那几天被裁掉后，"第一天"换人了，行号得跟着重算。传错了的表现是整张图错位一格。
     ///
     /// 找不到"满 7 天的周"时回落成 `0`（= 假定第一列从周起点开始）。
     /// 这个分支在真实数据上到不了 —— 一年的窗口有 52 个以上满周；
