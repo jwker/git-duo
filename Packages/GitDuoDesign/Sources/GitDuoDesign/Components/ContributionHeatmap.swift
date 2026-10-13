@@ -147,6 +147,12 @@ public struct ContributionHeatmap: View {
     /// 否则会出现"写着 2025、画的是 2026"（`ProfileOverview.year` 的说明）。
     public let selectedYear: Int
 
+    /// 有一次取数在途（切年份 / 重试 / 下拉刷新）—— 透给 `HeatmapHeader` 那枚小转圈。
+    ///
+    /// ⚠️ **它不影响网格那一块**：在途时**不换骨架、也不盖一层**（§8.5"下拉刷新不遮挡
+    /// 已有内容"）—— 画的仍是上一次拿到的那一年，转圈只交代"还有一次没回来"。
+    public let isLoading: Bool
+
     /// 切换器的读屏标签（`ProfileCopy.heatmapYearAccessibilityLabel(year:)`）。
     public let yearAccessibilityLabel: String
 
@@ -160,6 +166,7 @@ public struct ContributionHeatmap: View {
         yearTitle: String,
         yearOptions: [HeatmapYear],
         selectedYear: Int,
+        isLoading: Bool,
         yearAccessibilityLabel: String,
         onSelectYear: @escaping (Int) -> Void
     ) {
@@ -169,6 +176,7 @@ public struct ContributionHeatmap: View {
         self.yearTitle = yearTitle
         self.yearOptions = yearOptions
         self.selectedYear = selectedYear
+        self.isLoading = isLoading
         self.yearAccessibilityLabel = yearAccessibilityLabel
         self.onSelectYear = onSelectYear
     }
@@ -181,6 +189,7 @@ public struct ContributionHeatmap: View {
                     yearTitle: yearTitle,
                     yearOptions: yearOptions,
                     selectedYear: selectedYear,
+                    isLoading: isLoading,
                     yearAccessibilityLabel: yearAccessibilityLabel,
                     onSelectYear: onSelectYear
                 )
@@ -335,6 +344,7 @@ public struct ContributionHeatmap: View {
             yearTitle: "2026 年",
             yearOptions: years,
             selectedYear: 2026,
+            isLoading: false,
             yearAccessibilityLabel: "切换年份，当前 2026 年",
             onSelectYear: { _ in }
         )
@@ -347,6 +357,7 @@ public struct ContributionHeatmap: View {
             yearTitle: "2026 年",
             yearOptions: years,
             selectedYear: 2026,
+            isLoading: false,
             yearAccessibilityLabel: "切换年份，当前 2026 年",
             onSelectYear: { _ in }
         )
@@ -359,6 +370,7 @@ public struct ContributionHeatmap: View {
             yearTitle: "2026 年",
             yearOptions: years,
             selectedYear: 2026,
+            isLoading: false,
             yearAccessibilityLabel: "切换年份，当前 2026 年",
             onSelectYear: { _ in }
         )

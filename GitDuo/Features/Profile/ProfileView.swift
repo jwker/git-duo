@@ -131,6 +131,12 @@ struct ProfileView: View {
                     yearTitle: overview.year.label,
                     yearOptions: yearOptions,
                     selectedYear: overview.year.year,
+                    // 在途（切年份 / 重试 / 下拉刷新）⇒ 年份标签左边那枚小转圈
+                    // （2026-10-12 加，走查第 61 条的后半：那半个往返本来是**没有任何
+                    // 反馈**的，用户看不出自己是点上了还是点空了）。
+                    // ⚠️ 已有内容时**不换骨架**（§8.5"不遮挡已有内容"）：在途那一段画的
+                    //    仍是上一次拿到的那一年，转圈只交代"还有一次没回来"。
+                    isLoading: model.isLoading,
                     yearAccessibilityLabel: ProfileCopy.heatmapYearAccessibilityLabel(
                         year: overview.year.year
                     ),
@@ -150,6 +156,9 @@ struct ProfileView: View {
                             yearTitle: overview.year.label,
                             yearOptions: yearOptions,
                             selectedYear: overview.year.year,
+                            // 失败态**同样要有在途反馈**：按了下面那行「重试」之后，
+                            // 这一行本来也是"按了没动静"的（同第 61 条后半的理由）。
+                            isLoading: model.isLoading,
                             yearAccessibilityLabel: ProfileCopy.heatmapYearAccessibilityLabel(
                                 year: overview.year.year
                             ),
@@ -186,10 +195,13 @@ struct ProfileView: View {
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 头部那行：左边「1,024 次贡献」、右边年份切换器（`2026 年` + 小箭头）。
+            // ⚠️ 宽度那 68 里含**在途指示器那一小块恒定槽位**（`HeatmapHeader.loadingSlot`
+            //    + 一个 `xs`）—— 它是恒占位的，所以骨架也得把它算进去，否则首帧与内容
+            //    在这一行上差 16pt（§8.5 那条"骨架尺寸要匹配"）。
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
                 SkeletonBar(height: 13, width: 104)
                 Spacer(minLength: 0)
-                SkeletonBar(height: 11, width: 48)
+                SkeletonBar(height: 11, width: 68)
             }
             .padding(.bottom, 10)
 
