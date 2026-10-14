@@ -181,11 +181,15 @@ struct FileOperationCopyTests {
         #expect(FileCopy.renameDestinationExistsHint == "该路径上已有文件")
     }
 
-    // MARK: - 文件操作的三个弹层（§5.15–§5.17）
+    // MARK: - 文件操作菜单与两张确认弹层（§5.15–§5.17）
 
-    @Test("§5.15 菜单：标题带文件名，两行是「重命名 / 删除文件」")
-    func fileOperationsSheetCopy() {
-        #expect(FileCopy.fileOperationsSheetTitle(fileName: "main.swift") == "文件操作 · main.swift")
+    /// ⚠️ **2026-10-13 起中间那张「文件操作」弹层没有了**（走查第 62 条）：
+    /// 用户要求"把底部操作按钮都放进「⋯」菜单"⇒ 这两项成了**右上角那颗菜单里的两项**，
+    /// 点一下直接换成各自的确认层 ⇒ `FileCopy.fileOperationsSheetTitle` 与整个
+    /// `FileOperationsSheet.swift` 一并删除（那张弹层没有别的消费者）。
+    /// **两行文案一个字没动** —— 改的是它们在哪儿出现，不是它们说什么。
+    @Test("§5.15 菜单两项是「重命名 / 删除文件」（2026-10-13 起住在右上角那颗「⋯」里）")
+    func fileOperationsMenuCopy() {
         #expect(FileCopy.renameAction == "重命名")
         #expect(FileCopy.deleteAction == "删除文件")
         #expect(FileCopy.cancelAction == "取消")

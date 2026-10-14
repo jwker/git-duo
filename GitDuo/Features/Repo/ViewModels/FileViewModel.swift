@@ -37,7 +37,7 @@ final class FileViewModel {
 
     private(set) var outcome: LoadState<FileViewOutcome> = .idle
 
-    /// 本次取数实际用的分支 —— 面包屑显示它、`Raw` 之外的网页端出口也用它。
+    /// 本次取数实际用的分支 —— 面包屑显示它，网页端出口（`webURL`）也用它。
     private(set) var branch: String?
 
     /// 有写操作（重命名 / 删除）在途 ⇒ 弹层里的确认按钮转圈、再点也没有第二次（§8.5「操作类」）。
@@ -46,22 +46,23 @@ final class FileViewModel {
     /// 允许并发只会造出"一边在改名、一边在删除同一个路径"这种没人能说清的结果。
     private(set) var isWorking = false
 
-    /// 当前呈现的弹层（§5.15–§5.17 三张）。
+    /// 当前呈现的弹层（§5.16 / §5.17 两张）。
     ///
-    /// ⚠️ **一个 `Identifiable` 枚举，不是三个布尔量**（同 `BranchesViewModel` /
-    /// `RepoDetailView` 的说明）：文件操作菜单里的两个动作各自要**换成**另一张弹层
-    /// （§5.16 / §5.17），用布尔量表达就是"关一张、开一张"，而它中间的那一帧是空屏。
+    /// ⚠️ **2026-10-13 起少了 `.operations`**（走查第 62 条）：那张「文件操作」弹层
+    /// 与它的中间一跳整个撤掉了 —— 重命名 / 删除现在是右上角「⋯」菜单里的两项，
+    /// 点一下**直接**换成各自的确认层（`FileOperationsSheet` 文件已删）。
+    ///
+    /// ⚠️ **仍然是一个 `Identifiable` 枚举，不是两个布尔量**：两张确认层由菜单里
+    /// 两个不同的项触发，用布尔量表达就是"关一张、开一张"，而它中间的那一帧是空屏。
     var sheet: SheetRoute?
 
     /// 本页的弹层路由。
     enum SheetRoute: Identifiable, Hashable, Sendable {
-        case operations
         case rename
         case delete
 
         var id: String {
             switch self {
-            case .operations: "operations"
             case .rename: "rename"
             case .delete: "delete"
             }
@@ -86,7 +87,10 @@ final class FileViewModel {
     /// 而这一页本来就只是"某个路径的内容"，路由上那一份是**进来时**的参数。
     private(set) var path: RepoPath
 
-    /// 只读（他人仓库）—— 决定按钮行画哪一组（§4.5 的权限差异表）。
+    /// 只读（他人仓库）—— 决定右上角那颗「⋯」菜单里画哪几项（§4.5 的权限差异表）。
+    ///
+    /// ⚠️ **2026-10-13 起它管的是菜单项，不再是"按钮行画哪一组"**（走查第 62 条）：
+    /// 只读档的菜单里只剩 `复制路径` / `复制文件名` /（有文本正文时的）`复制原文`。
     let readOnly: Bool
 
     /// 目录行带的元数据。`nil` = 调用方不知道（从提交详情点进来时就是这样）。
@@ -202,9 +206,13 @@ final class FileViewModel {
         return fallback
     }
 
-    // MARK: - Raw（决策 #51 两处例外之一）
+    // MARK: - 复制原文（决策 #51 两处例外之一）
 
     /// 复制原文到剪贴板。**零请求** —— 正文已经在手上。
+    ///
+    /// ⚠️ 它在菜单里叫 **`复制原文`**（2026-10-13 改，走查第 62 条）：原型那颗按钮的
+    /// 逐字是裸 `Raw`，而它在菜单里要跟 `复制路径` / `复制文件名` 并排 ——
+    /// 三个"复制"里混一个英文单词，读起来是两套语言（`FileCopy.rawAction` 里有原委）。
     ///
     /// - Returns: 是否复制成功。三种情况各有各的提示，且**成功那句是原型的原话**
     ///   （`已复制 Raw 内容`）。
@@ -223,11 +231,11 @@ final class FileViewModel {
 
     // MARK: - 复制路径 / 复制文件名（2026-10-12 新增，按用户要求）
 
-    /// 复制**这个文件的仓库内相对路径**（含文件名）—— `crumb` 行那颗「⋯」的第一项。
+    /// 复制**这个文件的仓库内相对路径**（含文件名）—— 右上角「⋯」菜单的第一项。
     ///
-    /// ⚠️ **与上面的 `copyRaw` 不是一回事**：那个复制**内容**（`Raw` 按钮，
+    /// ⚠️ **与上面的 `copyRaw` 不是一回事**：那个复制**内容**（`复制原文`，
     /// 决策 #51 的两处例外之一），这个复制**路径**。两者同在这一屏上，
-    /// 所以文案与读屏标签都分开写（`FileCopy.copyPathAction` / `crumbMenuAccessibilityLabel`）。
+    /// 所以文案与读屏标签都分开写（`FileCopy.copyPathAction` / `operationsMenuAccessibilityLabel`）。
     ///
     /// ⚠️ **原型这一屏没有这个按钮**（`REVIEW-CHECKLIST` 第 56 条：按用户要求新增）
     /// ⇒ 它不来自原型的任何一处 `onclick`。
@@ -393,7 +401,22 @@ final class FileViewModel {
 
     // MARK: - 派生
 
-    /// `Raw` 按钮出不出现 —— 图片与不支持预览的文件**没有"原文"可复制**（§4.5）。
+    /// 这一屏**拿到了内容**（`FileViewOutcome.content` 非空）。
+    ///
+    /// ⚠️ **2026-10-13 新增（走查第 62 条）**，它只服务一件事：右上角那颗「⋯」菜单里
+    /// `编辑` / `重命名` / `删除文件` 三项出不出现。
+    ///
+    /// 为什么需要它：旧实现里这三颗按钮长在**操作行**上，而那条行只画在 `.content`
+    /// 那一条里（`FileView.fileBody`）—— 骨架 / 失败 / 「无法预览」/「编码不认识」
+    /// 四档**根本没有它**。而工具栏按钮挂在 `body` 上、四种状态下都画得出来 ⇒
+    /// 不加这道判据，一个二进制文件的菜单里会冒出一颗能点的「编辑」，
+    /// 点进去必然落到"这不是文本"那个失败态（而用户一路点下来一件事都没做错）。
+    ///
+    /// ⚠️ 与它对照的是 `复制路径` / `复制文件名` —— 那两项**恒有**：
+    /// 它们只用 `path`（路由上就有），与这一屏取没取到内容无关。
+    var hasContent: Bool { outcome.value?.content != nil }
+
+    /// `复制原文` 出不出现 —— 图片与不支持预览的文件**没有"原文"可复制**（§4.5）。
     var canCopyRaw: Bool { outcome.value?.content?.text != nil }
 
     /// 「编辑」不可点时那句读屏提示；`nil` = 可以点。
@@ -402,8 +425,14 @@ final class FileViewModel {
     /// 两档各有各的说法：超过 1MB 是"太大"（决策 #54 的边界、偏差 32），
     /// 图片是"它根本不是文本"。
     ///
-    /// ⚠️ **没有内容时返回的也是 `nil`**（= "可点"），而那一档操作行根本不画
-    /// （`FileView` 类型说明第 1 条）⇒ 两处调用点都在 `fileBody` 里、拿到的必定有内容。
+    /// ⚠️ **2026-10-13 起它的落点变了**（走查第 62 条）：那颗「编辑」按钮从底部操作行
+    /// 搬进了右上角菜单，而菜单里只能用**系统灰**（`.disabled`）表达"当前不适用"
+    /// ⇒ 这句话现在是那颗**灰项**的 `accessibilityHint`（不再是"画出来但按不动"那颗
+    /// 假按钮的 hint，`allowsHitTesting` 那套随之撤掉）。
+    ///
+    /// ⚠️ **没有内容时返回的也是 `nil`**（= "可点"）—— 所以菜单里那道闸门要
+    /// `hasContent` 与它**两个一起**判（`operationsMenu` 里就是这么写的）：
+    /// 只看本属性的话，"看不了的文件"会拿到一颗能点的「编辑」。
     var editHint: String? {
         guard let content = outcome.value?.content else { return nil }
         return EditorCopy.editHint(for: content.preview)

@@ -34,19 +34,48 @@ import UIKit
 /// 见 `FileViewModel` 的类型说明。视图这里只把解析出来的分支画在面包屑上，
 /// **不参与**"该用哪条 ref"的判定。
 ///
-/// ## ⚠️ 操作行的四个按钮从切片 8.4 起**各自不同**
+/// ## ⚠️ 操作按钮 2026-10-13 起收进**右上角那颗「⋯」菜单**（走查第 62 条）
 ///
-/// | 按钮 | 8.4 之后 |
-/// |---|---|
-/// | `编辑` | **真做** —— 推入编辑器（§4.6 编辑模式）；**超过 1MB 的文本**与**图片**上不可点 |
-/// | `历史` | 仍不可点（它指向"这个文件的提交历史"这一独立页面，PRD §4.5 标 ⏳） |
-/// | `Raw` | 真做（决策 #51 的两处例外之一：复制原文，**零请求**） |
-/// | `更多` | **真做** —— 打开 §5.15 文件操作菜单（重命名 / 删除） |
-/// | `⑂ Fork 后可编辑` | 仍不可点（他人仓库那一档，Fork 本身没做） |
+/// 此前是正文下方一条居中的操作行（原型 `SCR.fileView` 的
+/// `.row{justify-content:center;gap:10px;margin-top:14px}`）。用户要求
+/// 「把底部的操作按钮都放入『...』的按钮打开的菜单中，并且这个『...』按钮放到右上角，
+/// 就像其他页面的搜索按钮的位置」⇒ 现在走 **`ToolbarItem(placement: .topBarTrailing)`
+/// + 系统原生 `Menu`** —— 与首页 / 探索 / 仓库三页右上角那颗搜索按钮**同一个位置、
+/// 同一套控件**（UIKit 里那颗叫 `UIBarButtonItem`，带菜单的就是 `UIMenu`）。
 ///
-/// ⚠️ 「不可点」一律是 `allowsHitTesting(false)` + 读屏 hint，**不是** `.disabled`
-/// —— 后者会变灰、看起来像"暂时不可用"，而那三个是"这一版就不做"。
-/// 8.4 之后仍然不可点的只剩 `历史` / `Fork` 两颗。
+/// ⚠️ **原型这一屏仍是底部一行**（`历史` / `Raw` / `更多` 三颗都在那儿）⇒
+/// 这一处**有意偏离原型**，逐条登记在第 62 条。
+///
+/// | 菜单项 | 什么时候出现 | 做什么 |
+/// |---|---|---|
+/// | `编辑` | 自己的仓库**且这一屏拿到了内容** | 推入编辑器（§4.6 编辑模式） |
+/// | `重命名` | 自己的仓库**且有内容** | 打开 §5.16 |
+/// | `复制路径` / `复制文件名` | **总是出现**（只要在文件页） | 本地复制，零请求（2026-10-12 新增，第 56 条） |
+/// | `复制原文` | 正文是**文本**时（`model.canCopyRaw`） | 决策 #51 的两处例外之一，零请求 |
+/// | `删除文件` | 自己的仓库**且有内容** | 打开 §5.17（**危险色**） |
+///
+/// ### ⚠️ 两件"这一版就不做"的**从界面上撤下了**（用户 2026-10-13 裁定）
+///
+/// `历史`（PRD §4.5 标 ⏳）与**他人仓库**那颗 `⑂ Fork 后可编辑`。原实现把它们
+/// 「画出来但不可点」（决策 #51 的形态），而**菜单里放一颗点不动的项**只表达得出
+/// "暂时不可用" —— 与"这一版压根不做"分不开。用户在"照常可点但点了给说明 / 由系统灰掉 /
+/// 不放进菜单"三档里选了**不放进菜单** ⇒ 界面上一处都不再提示这两个入口存在。
+///
+/// ⚠️ **代价如实登记**：`FileCopy` 里 `historyAction` / `historyUnavailableHint` /
+/// `forkToEditAction` / `forkToEditUnavailableHint` 四个常量与它们的读屏 hint **一并删除**
+/// （失去唯一消费端的常量留着，只会让下一个读的人先去判断"它是不是还在用" ——
+/// 同 `GitHubIcon` 那条"有意没有"的处置）。
+///
+/// ### ⚠️ 唯一保留的"不可点"是「编辑」那两档（图片 / >1MB 的文本）
+///
+/// 它与上面那两件**性质不同**：功能**已经实现**，只是**这个文件不适用**
+/// （编辑器是文本编辑器；>1MB 走不了 `PUT contents`）。菜单里的项只能靠系统灰
+/// （`.disabled`）表达"当前不适用"，这与决策 #51「不用灰」在字面上分岔 ——
+/// 那条的理由是"灰色像暂时坏了"，而这里"不适用"**正是**要说的意思。
+/// 那句"为什么"仍然只有一个落点：`EditorCopy.editHint(for:)`，挂在这颗项的读屏 hint 上。
+///
+/// ⚠️ **与「复制原文」的处置有意不同**，别对齐：`复制原文` 在图片 / 二进制上是**整项不出现**
+/// （那种文件连"原文"这个东西都没有，谈不上"不适用"），而这是**项目既有**的写法。
 ///
 /// ## ⚠️ 「编辑」不可点的那两档，理由是**不同的两句话**
 ///
@@ -59,9 +88,12 @@ import UIKit
 ///
 /// ## ⚠️ 两处「规格未给，待评审」（本片新增，已登记）
 ///
-/// 1. **操作行与页脚只在"看得了"时出现**。PRD §4.5 的权限差异表是按"能看的文件"
-///    写的，没有覆盖"看不了"的两档；而 `编辑` 一个 App 根本显示不出来的文件是没有
-///    意义的。所以那两档只给网页端出口 —— 那正是 PRD §4.5 为它们规定的动作。
+/// 1. **页脚只在"看得了"时出现**。PRD §4.5 的权限差异表是按"能看的文件"写的，
+///    没有覆盖"看不了"的两档 —— 那两档只给网页端出口，那正是 PRD §4.5
+///    为它们规定的动作。
+///    ⚠️ **2026-10-13 起这一条只管页脚了**（第 62 条）：操作行搬进了右上角那颗「⋯」，
+///    而**菜单在四种状态下都画得出来** ⇒ 里面的项改由 `model.hasContent` 逐项把关
+///    （见 `operationsMenu`），不再靠"整块不画"。
 /// 2. 图片字节解不成图片时（扩展名说 png、字节不是 png）落到 `.undecodable` 那块，
 ///    而那句 `undecodableTextHint` 的措辞是"无法显示为**文本**"。这一档在服务端
 ///    行为正常时到不了（`LoadFileContent` 只在扩展名说它是图片时才走图片通道）。
@@ -135,16 +167,26 @@ struct FileView: View {
         //    而路由上那一份是**进来时**的参数、不会跟着动。
         .navigationTitle(model.path.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        // 右上角那颗「⋯」—— 与首页 / 探索 / 仓库三页那颗搜索按钮**同一个位置、同一套控件**
+        // （`ToolbarItem(placement: .topBarTrailing)`），差别只在 label 是个 `Menu`
+        // 而不是一个 `Button`（2026-10-13 用户要求把底部操作行搬进来，第 62 条）。
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                operationsMenu
+            }
+        }
         .refreshable { await model.refresh() }
         .task { await model.start() }
-        // 三张弹层由一个枚举驱动（同 `BranchesView`）—— 文件操作菜单里的两个动作
-        // 各自要**换成**另一张弹层，用布尔量表达就是"关一张、开一张"，而它中间的一帧是空屏。
+        // 两张弹层由一个枚举驱动（同 `BranchesView`）—— 菜单里那两项各自要**换成**
+        // 一张确认层，用布尔量表达就是"关一张、开一张"，而它中间的一帧是空屏。
+        // ⚠️ **2026-10-13 起是三张变两张**：中间那张「文件操作」弹层撤掉了（第 62 条），
+        //    重命名 / 删除现在是菜单里直接可点的两项。
         .sheet(item: $model.sheet, onDismiss: handleSheetDismissal) { route in
             presented(route)
                 // ⚠️ 原型所有弹层都是**内容高度**（`.sheet{bottom:10px}` 自适应），
                 //    而本仓从切片 1 起统一用 `.medium`（`ClearRecentSheet` 那张
                 //    "标题 + 说明 + 两个整宽按钮"的卡片就是先例）。
-                //    这一片三张都小，`.medium` 会留下半屏空白 —— 属既有偏差的延续，
+                //    这两张都小，`.medium` 会留下半屏空白 —— 属既有偏差的延续，
                 //    已登记到逐屏对照 21 里一起看（收口要一套"内容高度"约定，不由本片拍板）。
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
@@ -166,15 +208,8 @@ struct FileView: View {
     @ViewBuilder
     private func presented(_ route: FileViewModel.SheetRoute) -> some View {
         switch route {
-        case .operations:
-            FileOperationsSheet(
-                fileName: model.path.displayName,
-                // 两个动作各自把 `sheet` 换成另一张 —— **不经过 nil**
-                // （见 `FileOperationsSheet` 的说明：关一次再开一次会在中间空一帧）。
-                onRename: { model.sheet = .rename },
-                onDelete: { model.sheet = .delete }
-            )
-
+        // ⚠️ **没有 `.operations` 了**（2026-10-13，第 62 条）：那张中间弹层撤掉，
+        //    菜单里点「重命名」/「删除文件」直接落到下面这两张确认层中的一张。
         case .rename:
             RenameFileSheet(source: model.path, isWorking: model.isWorking) { input in
                 await model.rename(input: input)
@@ -229,22 +264,21 @@ struct FileView: View {
     /// |---|---|---|
     /// | 首段 | 分支胶囊（可点、带 `▾`） | **文件名**（加粗、不可点） |
     /// | 路径 | 仓库全名 / … / 当前层 | **无** |
-    /// | 右侧 | 「⋯」菜单（复制路径 / 添加文件） | 「⋯」菜单（复制路径 / 复制文件名） |
+    /// | 右侧 | 「⋯」菜单（复制路径 / 添加文件） | **无**（2026-10-13 起撤下，第 62 条） |
     ///
     /// 合成一个控件就必须再加三个开关，而每个开关两档里总有一档是错的 ——
     /// 与 `SectionTabs` 不复用 `SegmentedBar` 是同一条理由。
     ///
-    /// ## ⚠️ 右端那颗「⋯」是 **2026-10-12 加的**（按用户要求，第 56 条）
+    /// ## ⚠️ 右端那颗「⋯」只活了 2026-10-12 一天（第 56 条 → 第 62 条）
     ///
-    /// 原型这一行**没有任何动作位**（`文件名 · 分支` 两个 `Text` 就完了）。
-    /// 加它的理由与仓库页面包屑上那一颗相同：让"当前在哪"这件事可以直接复制走。
-    /// 两处形状同一套（见下面 `crumbMenu`），**两处都用系统原生 `Menu`**。
+    /// 那天按用户要求在这一行右端加了一颗「⋯」（菜单两项 = `复制路径` / `复制文件名`，
+    /// 与仓库页面包屑那颗逐字同形）。**次日用户要求把底部操作行也收进「⋯」、
+    /// 并把它摆到右上角** ⇒ 一屏两颗同名图标（一颗管路径、一颗管操作）没有道理，
+    /// 用户裁定**并进右上角那颗**、这一行回到原型原样（`文件名 · 分支` 两个 `Text`）。
     ///
-    /// ⚠️ 它**当天就改过一次形状**：先落地的是一颗裸复制图标（只复制路径），
-    /// 用户随即要求「换成三个点，菜单两项：复制路径 / 复制文件名」⇒ 现在与仓库页
-    /// 那颗逐字同形。**没有留下"一颗图标按钮"的旧形态**。
-    ///
-    /// ⚠️ 它与同页的 `Raw`（复制**内容**）**不是一回事** —— 见 `FileCopy.copyPathAction`。
+    /// ⚠️ 所以这一行现在是**逐字回到原型**的：没有动作位、没有 `Spacer`、
+    /// 读屏合成直接做在最外层（不再需要"单独包一层"那个规避 —— 那个规避是为了
+    /// 别把外层那颗按钮一起合成掉，现在外层没有按钮了）。
     ///
     /// ⚠️ 分支名 `lineLimit(1)`：分支名可以很长（`feature/客户XX-报价单改版`），
     /// 而文件名通常更长、更需要完整显示。
@@ -253,31 +287,22 @@ struct FileView: View {
         let display = model.path.displayName
 
         return HStack(spacing: 0) {
-            // ⚠️ 这三段**单独包一层**、读屏合成都做在**这一层**上：
-            //    2026-10-12 加的动作位就在外层，若把 `.accessibilityElement(children: .ignore)`
-            //    留在最外面，那颗「⋯」会被一起合成掉 —— 读屏用户根本点不到它。
-            HStack(spacing: 0) {
-                Text(display)
-                    .font(Theme.Font.breadcrumb.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
+            Text(display)
+                .font(Theme.Font.breadcrumb.weight(.semibold))
+                .foregroundStyle(Theme.Palette.accent)
 
-                Text(" · ")
-                    .font(Theme.Font.breadcrumb)
-                    .foregroundStyle(Theme.Palette.textSecondary)
+            Text(" · ")
+                .font(Theme.Font.breadcrumb)
+                .foregroundStyle(Theme.Palette.textSecondary)
 
-                Text(branch)
-                    .font(Theme.Font.breadcrumb)
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    .lineLimit(1)
-            }
-            // 拼出来的那一串在读屏里是"文件名 空格 点 空格 分支"，粘在一起听不出层次。
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(display)，当前分支 \(branch)")
-
-            Spacer(minLength: Theme.Spacing.s)
-
-            crumbMenu
+            Text(branch)
+                .font(Theme.Font.breadcrumb)
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .lineLimit(1)
         }
+        // 拼出来的那一串在读屏里是"文件名 空格 点 空格 分支"，粘在一起听不出层次。
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(display)，当前分支 \(branch)")
         // 8 / 12：原型原值（`padding:8px 12px`）。
         .padding(.vertical, Theme.Spacing.s)
         .padding(.horizontal, Theme.Spacing.m)
@@ -292,26 +317,72 @@ struct FileView: View {
         )
     }
 
-    /// crumb 行右端那颗「⋯」（2026-10-12 新增，按用户要求 —— 第 56 条）。
+    // MARK: - 操作菜单（右上角 · 2026-10-13 新增，走查第 62 条）
+
+    /// 右上角那颗「⋯」—— 原来那条底部操作行**整个搬进来了**。
     ///
-    /// 菜单两项：`复制路径`（整条相对路径）/ `复制文件名`（只有最后一段）。
+    /// ## ⚠️ 位置与控件都是**照抄另外三个根页**的
     ///
-    /// ⚠️ 形状与仓库页面包屑那颗「⋯」**同一套**（13pt 图标 + `.padding(8)`、
-    /// `Radius.control`、`surfaceSunken` 底、`Menu` 的 label 直挂图标）：
-    /// 同一个动作在两个页面上要长得一样。**两处的差别只该是菜单项。**
+    /// `HomeView` / `ExploreView` / `ReposView` 三处右上角都有一颗
+    /// `ToolbarItem(placement: .topBarTrailing)` 的搜索按钮（`env.router.push(.search)`）。
+    /// 这里用的是**同一个位置**，label 从 `Button` 换成一个 `Menu`
+    /// —— SwiftUI 会把它渲染成系统的菜单按钮（UIKit 的 `UIBarButtonItem` + `UIMenu`），
+    /// **不用自己画底色 / 圆角 / 尺寸**（那正是 `crumbMenu` 当初要手画的原因：
+    /// 它长在内容区里，系统不管它）。
     ///
-    /// ⚠️ 与仓库页**有意不同的一处**：那边菜单里有「添加文件」（会弹一张 sheet），
-    /// 这边两项**都不离开本页**（纯本地复制 + 一条 toast）—— 所以这里不需要任何
-    /// `sheet` 状态。
+    /// ## ⚠️ 六项的出现条件是**按"这一档能不能做"分的**，不是按仓库归属一刀切
     ///
-    /// ⚠️ 它与 `noticeState` / `failureState` 那两档**无关** —— 那两档根本不画 crumb
-    /// （`content` 只在 `.content` 那一条里建它），所以"看不了的文件"上不会出现这颗菜单，
-    /// 也就没有"复制一个打不开的文件的路径"这种别扭事。
+    /// | 项 | 条件 | 为什么 |
+    /// |---|---|---|
+    /// | `编辑` | 自己的仓库 **且有内容** | 图片 / >1MB 那两档**画成灰项**（见下） |
+    /// | `重命名` | 自己的仓库 **且有内容** | 那条写通道要取 sha；看都看不了的文件谈不上 |
+    /// | `复制路径` / `复制文件名` | **恒有** | 只用 `path`（路由上就有），与内容无关 |
+    /// | `复制原文` | `model.canCopyRaw` | 图片 / 二进制没有"原文" —— 与旧操作行同一判据 |
+    /// | `删除文件` | 自己的仓库 **且有内容** | 同 `重命名` |
     ///
-    /// ⚠️ **未目视**：`Menu` 的 label 由系统接管，它会不会给这颗图标套 tint
-    /// 或自带按钮样式，只有跑一次模拟器才知道（与仓库页那一颗同一条风险）。
-    private var crumbMenu: some View {
+    /// ⚠️ **"有内容"这一条是必须的**：旧实现里整条操作行只画在 `.content` 那一条
+    /// （`fileBody`）里 —— 骨架 / 失败 / 「无法预览」/「编码不认识」四档根本没有它。
+    /// 而工具栏按钮**四种状态下都画得出来**（它挂在 `body` 上，不在 `content` 里）
+    /// ⇒ 少了这道判据，一个二进制文件的菜单里会出现一颗能点的「编辑」，
+    /// 点进去必然落到"这不是文本"那个失败态（用户一路点下来一件事都没做错）。
+    /// 判据落在 `FileViewModel.hasContent` 一处。
+    ///
+    /// ## ⚠️ 「编辑」那两档用 `.disabled` —— 与决策 #51 字面分岔（见类型说明）
+    ///
+    /// 菜单项只能靠**系统灰**表达"当前不适用"，而灰项的读屏**也**点不动
+    /// ⇒ 旧实现那条"闭包必须是真的什么都不做"的告诫在这里不适用
+    /// （`allowsHitTesting` 那套是防"读屏能激活一个假按钮"的）。
+    /// 那句"为什么"经 `accessibilityHint` 挂在**这一项自己**身上。
+    ///
+    /// ⚠️ **未目视**（同第 56 条那条）：`Menu` 的 label、灰项与**危险色**的实际观感
+    /// 都由系统接管，只有跑一次模拟器才知道 —— 尤其"危险色出现在系统菜单里"
+    /// 在本项目是第一次（此前危险色只出现在自绘的 `ActionButton` / `SheetRow` 上）。
+    private var operationsMenu: some View {
         Menu {
+            if !readOnly, model.hasContent {
+                Button {
+                    // §4.6 编辑模式：路由只带仓库全名与路径 ——
+                    // "哪条分支"由编辑器页自己按 §9.4.1 解析（同本页，同一份判据）。
+                    // ⚠️ `directory: nil` —— 那一格只服务**新建模式**的预填落点（§5.8）。
+                    env.router.push(.editor(
+                        fullName: fullName, path: model.path.raw, mode: .edit, directory: nil
+                    ))
+                } label: {
+                    Label(FileCopy.editAction, systemImage: GitHubIcon.edit)
+                }
+                // 图片 / >1MB 的文本：这一档编辑不了，两句话都收在 `EditorCopy.editHint`。
+                .disabled(model.editHint != nil)
+                .accessibilityHint(model.editHint ?? "")
+
+                Button {
+                    model.sheet = .rename
+                } label: {
+                    Label(FileCopy.renameAction, systemImage: GitHubIcon.pencil)
+                }
+            }
+
+            // ⚠️ 这两项**不吃** `hasContent`：路径在路由上就有，骨架屏上也复制得走
+            //    —— 而它们正是"看不了的文件"上唯一还能用的两件（第 56 条新增的那两项）。
             Button {
                 model.copyPath()
             } label: {
@@ -323,18 +394,28 @@ struct FileView: View {
             } label: {
                 Label(FileCopy.copyFileNameAction, systemImage: GitHubIcon.file)
             }
+
+            // 图片与不支持预览的文件没有"原文"可复制 ⇒ 这一项**不出现**（§4.5）。
+            if model.canCopyRaw {
+                Button {
+                    model.copyRaw()
+                } label: {
+                    Label(FileCopy.rawAction, systemImage: GitHubIcon.raw)
+                }
+            }
+
+            if !readOnly, model.hasContent {
+                // 危险色 + 排在最后：它是这一屏唯一**不可逆**的动作。
+                Button(role: .destructive) {
+                    model.sheet = .delete
+                } label: {
+                    Label(FileCopy.deleteAction, systemImage: GitHubIcon.trash)
+                }
+            }
         } label: {
             Image(systemName: GitHubIcon.ellipsis)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.Palette.textSecondary)
-                .padding(Theme.Spacing.s)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                        .fill(Theme.Palette.surfaceSunken)
-                )
-                .contentShape(Rectangle())
         }
-        .accessibilityLabel(FileCopy.crumbMenuAccessibilityLabel)
+        .accessibilityLabel(FileCopy.operationsMenuAccessibilityLabel)
     }
 
     // MARK: - 三档结局
@@ -361,15 +442,18 @@ struct FileView: View {
 
     // MARK: - 可以看的那一档
 
+    /// 正文 + 页脚说明。
+    ///
+    /// ⚠️ **2026-10-13 起这里没有操作行了**（第 62 条）：那四颗按钮搬到了右上角那颗「⋯」里
+    /// ⇒ 正文下面直接就是页脚。原型那两处外边距（`margin-top:14px` 的操作行、
+    /// `margin-top:10px` 的页脚）因此少了一处，**保留页脚那 10**（它量的是"正文到页脚"，
+    /// 与操作行在不在无关）。
     @ViewBuilder
     private func fileBody(_ file: FileContent) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             contentSurface(file)
 
-            // 原型 `margin-top:14px`（14 不在 4pt 阶里 ⇒ 写原值并注明出处）。
-            actionRow.padding(.top, 14)
-
-            // 原型 `margin-top:10px`（同上）。
+            // 原型 `margin-top:10px`（10 不在 4pt 阶里 ⇒ 写原值并注明出处）。
             footer.padding(.top, 10)
         }
     }
@@ -503,98 +587,13 @@ struct FileView: View {
             )
     }
 
-    // MARK: - 操作行（原型 `justify-content:center;gap:10px`）
-
-    private var actionRow: some View {
-        HStack(spacing: 10) {
-            if readOnly {
-                // 原型的这两个按钮横向内边距是 22（`padding:9px 22px`，覆写了 `.btn` 的 16）。
-                stubAction(FileCopy.forkToEditAction,
-                           hint: FileCopy.forkToEditUnavailableHint,
-                           horizontalPadding: 22)
-            } else if let hint = model.editHint {
-                // ⚠️ 「编辑」**画出来但不可点**的那两档（超过 1MB 的文本 / 图片）。
-                //    形态与真按钮逐字相同（同一个 `ActionButton` + `.primary` + 22），
-                //    差别只在按不动 —— 这正是决策 #51 要的效果："不冒充成品"。
-                stubAction(FileCopy.editAction,
-                           style: .primary,
-                           hint: hint,
-                           horizontalPadding: 22)
-            } else {
-                ActionButton(
-                    title: FileCopy.editAction,
-                    style: .primary,
-                    horizontalPadding: 22,
-                    fillsWidth: false
-                ) {
-                    // §4.6 编辑模式：路由只带仓库全名与路径 ——
-                    // "哪条分支"由编辑器页自己按 §9.4.1 解析（同本页，同一份判据）。
-                    // ⚠️ `directory: nil` —— 那一格只服务**新建模式**的预填落点（§5.8），
-                    //    编辑模式的路径就是 `path` 这一格，两者不互相顶替。
-                    env.router.push(.editor(
-                        fullName: fullName, path: model.path.raw, mode: .edit, directory: nil
-                    ))
-                }
-            }
-
-            stubAction(FileCopy.historyAction, hint: FileCopy.historyUnavailableHint)
-
-            // ⚠️ `Raw` **当真做**（决策 #51 的两处例外之一）。
-            //    图片与不支持预览的文件没有"原文可复制" ⇒ 那个按钮**不出现**（§4.5）。
-            if model.canCopyRaw {
-                ActionButton(
-                    title: FileCopy.rawAction,
-                    style: .ghost,
-                    fillsWidth: false
-                ) {
-                    model.copyRaw()
-                }
-            }
-
-            if !readOnly {
-                // §5.15 文件操作菜单（重命名 / 删除）。⚠️ 它**只把弹层换出来**，
-                //    两个动作各自的确认层是另外两张（§5.16 / §5.17）。
-                ActionButton(
-                    title: FileCopy.moreAction,
-                    style: .ghost,
-                    fillsWidth: false
-                ) {
-                    model.sheet = .operations
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    /// 「画出来但这一版不做」的按钮（决策 #51）。
-    ///
-    /// ⚠️ 逐字与真按钮一致（同一个 `ActionButton`），差别只在**按不动** ——
-    /// 这正是决策 #51 要的效果："形态与原型一致，但不冒充成品"。
-    ///
-    /// ⚠️ 闭包必须是**真的什么都不做**：`allowsHitTesting(false)` 挡的是触摸，
-    /// 而读屏的激活动作绕过命中测试 ⇒ 给一个会弹 toast 的闭包，
-    /// 读屏用户就真的点得动这个"不可点"的按钮（`UserProfileSheet` 的同一处置）。
-    private func stubAction(
-        _ title: String,
-        style: ActionButton.Style = .ghost,
-        hint: String,
-        horizontalPadding: CGFloat = 16
-    ) -> some View {
-        ActionButton(
-            title: title,
-            style: style,
-            horizontalPadding: horizontalPadding,
-            fillsWidth: false,
-            action: {}
-        )
-        .allowsHitTesting(false)
-        // 一颗按不动的按钮在读屏里就是个"按钮"，去掉那个 trait 才知道它其实是文字。
-        .accessibilityRemoveTraits(.isButton)
-        // hint 说清"为什么点不了"，而不是只说"不可用"。
-        .accessibilityHint(hint)
-    }
+    // MARK: - 页脚
 
     /// 页脚说明（原型 `.t3` 居中）。
+    ///
+    /// ⚠️ 它是这一屏**唯一**留下的一行正文外的东西（操作行 2026-10-13 搬进了右上角菜单，
+    /// 第 62 条）。留在原地的理由：它说的是"保存之后会发生什么"（一次 commit /
+    /// 提交面板能选什么），而那件事发生在**编辑器**里 —— 与操作入口摆在哪儿无关。
     private var footer: some View {
         Text(readOnly ? FileCopy.readOnlyFooter : FileCopy.ownFooter)
             .font(Theme.Font.caption)
