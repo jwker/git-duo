@@ -1,10 +1,19 @@
 /* ══ GitDuo 2.0 原型 · 14 · 渲染外壳（screenHTML / paintTab / paintTabbar / 分段切换） ══ */
 /* ============================================================ painting */
-const backBtn = `<button class="back" onclick="pop()">${svg(I.back)}返回</button>`;
+const backBtn = `<button class="back" onclick="backOrPop()">${svg(I.back)}返回</button>`;
+/* 导航栏右侧的动作位。`SCR.<屏>.action` 可选（字符串或 `p => 字符串`）—— 不写就没有。
+   ⚠️ 2026-10-14 新增：代码页那颗「⋯」从**面包屑右侧**搬到了导航栏右上角
+      （用户要求与文件页统一）⇒ 外壳需要长出一个右侧槽。
+   ⚠️ 目前**只有代码页**用它。别的屏若要加，直接给那份 `SCR` 定义一个 `action` 就行。 */
+function navAction(scr, params){
+  if(!scr.action) return '';
+  const html = typeof scr.action === 'function' ? scr.action(params) : scr.action;
+  return html || '';
+}
 function screenHTML(entry, pos){
   const scr = SCR[entry.id];
   if(!scr) throw new Error('unknown screen: '+entry.id);
-  const head = scr.large ? '' : `<div class="navbar">${backBtn}<div class="ntitle">${scr.inline?scr.inline(entry.params):''}</div></div>`;
+  const head = scr.large ? '' : `<div class="navbar">${backBtn}<div class="ntitle">${scr.inline?scr.inline(entry.params):''}</div>${navAction(scr, entry.params)}</div>`;
   const cls = scr.large ? 'screen '+pos : 'screen pushed '+pos;
   const body = scr.large ? `<div class="tabpage">${scr.render(entry.params)}</div>` : scr.render(entry.params);
   return `<div class="${cls}">${head}${body}</div>`;
@@ -32,30 +41,10 @@ function segPick(btn){
   [...btn.parentElement.children].forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
 }
-function switchRepoSeg(btn, seg){
-  const st = stacks[active];
-  const entry = st[st.length-1];
-  entry.params.seg = seg;
-  document.getElementById('repoSegBody').innerHTML = repoSeg(seg, entry.params);
-  [...document.getElementById('repoSegTabs').querySelectorAll('button')].forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-}
 function switchPrSeg(btn, seg){
   document.getElementById('prSegBody').innerHTML = prSeg(seg);
   [...btn.parentElement.querySelectorAll('button')].forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
-}
-function navToSub(sub){
-  const st=stacks[active];
-  for(let i=st.length-1;i>=1;i--){
-    const e=st[i];
-    if(e.id==='repoDetail' && (e.params.sub||'')===sub){ st.length=i+1; paintTab(); return; }
-  }
-  const idx=st.map(e=>e.id).lastIndexOf('repoDetail');
-  if(idx>=1){
-    st.length=idx+1;
-    push('repoDetail',{repo:st[idx].params.repo,seg:'code',sub:sub||undefined});
-  }
 }
 function toggleStar(){
   const b=document.getElementById('starBtn');

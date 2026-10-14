@@ -502,7 +502,7 @@ struct FileView: View {
     /// ⚠️ **走到这里的路径必然是 `.md` / `.markdown`**（`file.markdown` 非空），
     /// 判据在领域层 `MarkdownFile`，本视图不再判一次。
     ///
-    /// ⚠️ 链接要**在这里接一次线**（与 `RepoTreeSection` 的 README 分区同一套）：
+    /// ⚠️ 链接要**在这里接一次线**（与 `RepoReadmeSection` 的 README 正文同一套）：
     /// md 里大量链接是仓库内的相对地址（`[中文](README_zh.md)`），而系统打不开
     /// 一个没有 scheme 的地址 ⇒ 表现为"点了没反应"。判据（哪一档去哪儿）
     /// 全在领域层的 `RepoLinkResolver`，这里只做分派。
@@ -540,15 +540,17 @@ struct FileView: View {
                 return .handled
 
             case let .directory(linked):
-                // 自己的仓库进可写的代码分区（§4.4）、他人仓库进只读的探索详情（§4.13）。
-                let destination: String? = linked.isRoot ? nil : linked.raw
-                if readOnly {
-                    env.router.push(.exploreRepoDetail(fullName: fullName, path: destination))
-                } else {
-                    env.router.push(.repoDetail(
-                        fullName: fullName, section: .code, path: destination
-                    ))
-                }
+                // ⚠️ **两档都进同一个代码页**（2026-10-14 起）—— 可写性由 `readOnly` 表达，
+                //    它带着**起始层**（`linked`）：用户点的是"某个目录"，期望的是打开它，
+                //    而不是回到仓库根再自己找一遍。
+                //
+                // ⚠️ 这里是全仓**唯一**会带 `path` 进代码页的地方（其余入口都是根目录）——
+                //    这也是 `Route.repoCode` 为什么还留着一个 `path` 参数的全部理由。
+                env.router.push(.repoCode(
+                    fullName: fullName,
+                    readOnly: readOnly,
+                    path: linked.isRoot ? nil : linked.raw
+                ))
                 return .handled
 
             case .external:

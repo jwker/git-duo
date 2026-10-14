@@ -104,8 +104,19 @@ final class AppEnvironment {
     /// 仓库详情页进页取数（头部 + Star 基准，PRD §4.4）。
     let repoDetail: LoadRepoDetail
 
-    /// 代码浏览的取数 —— 目录 + README + **两段式分支解析**（§9.4.1、决策 #55）。
+    /// 代码浏览的取数 —— 目录 + **两段式分支解析**（§9.4.1、决策 #55）。
+    ///
+    /// ⚠️ **2026-10-14 起它不再取 README**（README 搬去了两个首页，见 `repoReadme`）——
+    /// 这一条链于是只剩"某条分支下某个目录的清单"这一件事。
     let repoTree: LoadRepoTree
+
+    /// 仓库级 README 的取数（§4.4 / §4.13 两个首页各画一份）。
+    ///
+    /// ⚠️ **与 `repoTree` 分开是一个有意决定，不是顺手拆的**：README 原先寄生在目录取数里
+    /// ⇒ 想画它的页面必须先有一个目录会话（连带分支列表 / 分支记忆 / 两段式解析）。
+    /// 两个首页都已经有头部在手（`defaultBranch` 就在里面）⇒ 它只需要一次请求。
+    /// 反过来，把这一条并回 `repoTree` 会让首页为了看一段 README 去取一次根目录清单。
+    let repoReadme: LoadRepoReadme
 
     /// 文件查看的取数 —— 决策 #54 的三档降级。
     let fileContent: LoadFileContent
@@ -356,6 +367,9 @@ final class AppEnvironment {
             contents: contentEndpoint,
             branches: branchEndpoint
         )
+        // ⚠️ 与 `repoTree` / `fileContent` / `markdownImages` 共用**同一个** `contentEndpoint`：
+        //    分开 new 不报错，但缓存会分成几份、配额各算各的（见 `repoTree` 那处的同一条说明）。
+        self.repoReadme = LoadRepoReadme(contents: contentEndpoint)
         self.fileContent = LoadFileContent(contents: contentEndpoint)
         // ⚠️ 与上面共用**同一个** `contentEndpoint`（见 `markdownImages` 的类型说明）。
         self.markdownImages = MarkdownImageStore(contents: contentEndpoint)
@@ -505,6 +519,72 @@ final class AppEnvironment {
     func handleCallback(_ url: URL) async {
         apply(await authCoordinator.completeAuthorization(callbackURL: url))
     }
+
+    // MARK: - 调试登录（仅 Debug 编译）
+
+    #if DEBUG
+    /// **只在这个 Debug 构建里存在**的"用一枚 Personal Access Token 直接进主界面"。
+    ///
+    /// ## 它为什么存在
+    ///
+    /// 真机 / 模拟器上做**目视验收**时，走一次完整 OAuth 要"开系统浏览器 → 在网页上确认授权 →
+    /// 等回跳"，一轮几十秒；而验收一趟往往要登录 / 登出好几次。这是一个**省时间**的口子，
+    /// **不是**一条新的登录方式 —— 详见下面三条"它为什么不是另一条路径"。
+    ///
+    /// ## 它为什么不是另一条认证路径（三条）
+    ///
+    /// ① 令牌**仍然写进同一个 `tokenStore`（Keychain）**，写的也是同一个 `StoredToken` 形状；
+    ///    登录名照旧来自 `GET /user`（**不是**让调用方随手编一个）。
+    /// ② 因此**下一次冷启动走的是真实登录那条路** —— `bootstrap()` → `authCoordinator.restore()`
+    ///    读 Keychain 放行。App 不会停在一个"真实登录到不了"的状态里。
+    /// ③ **先验令牌、再落盘**（`GET /user` 跑通才 `save`）：不验就写，写进去的是一枚注定 401 的
+    ///    令牌，之后每个页面各自报错 —— 那时候看到的现象是"App 坏了"，而不是"令牌填错了"。
+    ///
+    /// ## 两个"看起来不对但其实是对的"
+    ///
+    /// - `refreshToken` 传**空串**、两个过期时刻都取 `.distantFuture`：PAT 不过期，而
+    ///   `restore()` 只在 `needsRefresh` 时才去刷新 ⇒ 那个空 refresh token **永远不会被用到**。
+    ///   若令牌真被吊销（数据层收到 401），它会调 `forceRefreshAccessToken()` → 刷新失败
+    ///   → 踢回登录页 —— 与真实会话的表现**同一条**。
+    /// - 从这个会话**退出登录**时，提示会落在"未能在 GitHub 侧撤销"那一档：`signOut()` 拿这枚
+    ///   PAT 去调 `/applications/{client_id}/grant`，而 PAT 不属于本 App ⇒ 撤销必然失败。
+    ///   这是**预期行为**，不是 bug（本地凭据一样被清干净，§3.6 的语义不变）。
+    ///
+    /// ⚠️ Release 里这段**根本不存在**（`#if DEBUG` 编译期裁掉）⇒ 没有一个"忘了关的开关"。
+    func debugSignIn(withToken token: String) async {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            notice = .error("调试登录：令牌为空")
+            return
+        }
+
+        notice = nil
+        authState = .authenticating
+
+        do {
+            // 见 ③：验证与"取登录名"是同一次请求。
+            let user = try await GitHubUserEndpoint(client: restClient)
+                .fetchAuthenticatedUser(accessToken: trimmed)
+            try tokenStore.save(StoredToken(
+                accessToken: trimmed,
+                refreshToken: "",
+                accessTokenExpiry: .distantFuture,
+                refreshTokenExpiry: .distantFuture,
+                login: user.login
+            ))
+            authState = .authenticated(login: user.login)
+            // 与真实登录**同一条**收尾：可写范围属于"这个账号"，换一个令牌就得重新查
+            // （见 `apply(_:)` 里那段说明——漏掉它，页面会按上一个令牌的授权范围画按钮）。
+            Task {
+                await starWriteScope.clear()
+                _ = await starWriteScope.current()
+            }
+        } catch {
+            authState = .unauthenticated
+            notice = .error("调试登录失败：\(error)")
+        }
+    }
+    #endif
 
     /// 把编排层的结局落到 UI 状态。
     private func apply(_ outcome: AuthCoordinator.AuthorizationOutcome) {

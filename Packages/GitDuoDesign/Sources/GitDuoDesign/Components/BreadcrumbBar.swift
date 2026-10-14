@@ -11,7 +11,18 @@ import SwiftUI
 ///              cursor:pointer;font-size:12px;white-space:nowrap}
 /// ```
 ///
-/// 形状：`[分支胶囊] · 仓库全名 / 中间层 / **当前层**` +（可选）右侧动作位。
+/// 形状：`[分支胶囊] · 仓库全名 / 中间层 / **当前层**`。
+///
+/// ## ⚠️ 2026-10-14：右端那个动作位**删了**
+///
+/// 它原来有一个 `trailing` 槽，唯一的生产调用方是 `RepoTreeSection`（面包屑右侧那颗
+/// 「⋯」）。用户当天要求把那颗搬到**导航栏右上角**（与文件页统一）⇒ 这条链上的
+/// `trailing` 一起删除（`RepoTreeSection` 的同名参数、以及这里的便利 init 与
+/// `#Preview` 里那段演示）。留着一个没有生产调用方的槽，只会让下一个读的人
+/// 先去判断"它是不是还在用"。
+///
+/// ⚠️ 原型现在仍然是带按钮的形态（`codeBodyHTML` 里 `margin-left:auto` 的「＋ 添加」），
+/// 同步时一起改了 —— 这里记的是"设计件这一侧不再表达它"。
 ///
 /// ## ⚠️ 它只收基础类型（判据 #43）
 ///
@@ -21,12 +32,12 @@ import SwiftUI
 ///
 /// ## ⚠️ 路径段是**字符串数组**，第 0 段就是仓库全名
 ///
-/// 原型把仓库名当作路径的第一段（`navToSub('')` 回到根目录）。
+/// 原型把仓库名当作路径的第一段（`codeGo('')` 回到根目录）。
 /// 所以根目录下 `path.count == 1`，此时那一段既是首段也是当前层 ——
 /// **它不该是可点的**（点了原地不动）。
 ///
 /// ⚠️ **有意偏差（已登记）**：原型在根目录仍然把仓库名画成蓝色可点链接
-/// （`<span class="crumb-link" onclick="navToSub('')">`），
+/// （`<span class="crumb-link" onclick="codeGo('')">`），
 /// 而 PRD §4.4 明写「当前层加粗不可点」。取 PRD ——
 /// 原型那一处是"忘了给根目录换成 `<b>`"，不是"根目录就该可点"：
 /// 点它不会发生任何事，而一颗按下去没反应的链接比不画链接更糟。
@@ -40,7 +51,7 @@ import SwiftUI
 /// ## 它是内容层
 ///
 /// **实色，不加 Liquid Glass**（§10.2）。
-public struct BreadcrumbBar<Trailing: View>: View {
+public struct BreadcrumbBar: View {
 
     public let branch: String
 
@@ -54,20 +65,16 @@ public struct BreadcrumbBar<Trailing: View>: View {
     /// 点某个中间层。参数是 `path` 的下标。`nil` ⇒ 全部路径段不可点。
     public let onSelectSegment: ((Int) -> Void)?
 
-    private let trailing: Trailing
-
     public init(
         branch: String,
         path: [String],
         onTapBranch: (() -> Void)? = nil,
-        onSelectSegment: ((Int) -> Void)? = nil,
-        @ViewBuilder trailing: () -> Trailing
+        onSelectSegment: ((Int) -> Void)? = nil
     ) {
         self.branch = branch
         self.path = path
         self.onTapBranch = onTapBranch
         self.onSelectSegment = onSelectSegment
-        self.trailing = trailing()
     }
 
     public var body: some View {
@@ -86,11 +93,6 @@ public struct BreadcrumbBar<Trailing: View>: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if Trailing.self != EmptyView.self {
-                // 右侧动作位（原型 `margin-left:auto` 的「＋ 添加」）。
-                trailing.padding(.leading, Theme.Spacing.s)
-            }
         }
         // 8 / 12：原型原值（`padding:8px 12px`）。
         .padding(.vertical, Theme.Spacing.s)
@@ -164,25 +166,6 @@ public struct BreadcrumbBar<Trailing: View>: View {
     }
 }
 
-extension BreadcrumbBar where Trailing == EmptyView {
-
-    /// 不带右侧动作位的那一种（探索页的面包屑原型就没有按钮）。
-    public init(
-        branch: String,
-        path: [String],
-        onTapBranch: (() -> Void)? = nil,
-        onSelectSegment: ((Int) -> Void)? = nil
-    ) {
-        self.init(
-            branch: branch,
-            path: path,
-            onTapBranch: onTapBranch,
-            onSelectSegment: onSelectSegment,
-            trailing: { EmptyView() }
-        )
-    }
-}
-
 #Preview {
     VStack(spacing: Theme.Spacing.m) {
         BreadcrumbBar(
@@ -190,17 +173,7 @@ extension BreadcrumbBar where Trailing == EmptyView {
             path: ["my-git/gitduo", "Packages", "GitDuoKit", "Sources"],
             onTapBranch: {},
             onSelectSegment: { _ in }
-        ) {
-            Text("＋ 添加")
-                .font(Theme.Font.label)
-                .foregroundStyle(Theme.Palette.textPrimary)
-                .padding(.vertical, 5)
-                .padding(.horizontal, Theme.Spacing.m)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                        .fill(Theme.Palette.surfaceSunken)
-                )
-        }
+        )
 
         // 根目录：只有一段 ⇒ 它既是首段也是当前层，加粗不可点。
         BreadcrumbBar(branch: "main", path: ["my-git/gitduo"], onSelectSegment: { _ in })

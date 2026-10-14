@@ -51,7 +51,7 @@ public struct IssueRow: Sendable, Hashable, Identifiable {
     /// | 仓库详情 Issues 段（§4.4 分区二） | 显示（PRD 结构行明写「标签胶囊」） |
     ///
     /// ⚠️ 原型 §4.4 的卡片上**确实有一枚胶囊，但它不是标签**：是评论数，
-    /// 而且用的是绿色 `StatusPill(.open)` 那一种（`05-repo.js:127` 的 `i.c`）——
+    /// 而且用的是绿色 `StatusPill(.open)` 那一种（`05-repo.js:243` 的 `i.c`）——
     /// 照抄会得到"一枚看起来像状态胶囊的东西里写着 3"。
     /// 用户裁定：按 PRD 的「标签胶囊」画**真实标签**（`LabelPill` + 标签自己的颜色），
     /// 不照原型的形状。已登记为**有意偏差**（原型 ↔ PRD 冲突，取 PRD）。
@@ -87,7 +87,7 @@ public struct IssueRow: Sendable, Hashable, Identifiable {
 
     /// 卡片副标题：`#42 · 2 小时前 · 3 条评论 · 由 reviewer-a 创建`。
     ///
-    /// 逐字对齐原型（`10-explore-repo.js:124` 的 `#${i.n} · ${i.d} · 由 ${i.u} 创建`，
+    /// 逐字对齐原型（`10-explore-repo.js:106` 的 `#${i.n} · ${i.d} · 由 ${i.u} 创建`，
     /// 其中 `i.d` 是 `'2 小时前 · 3 条评论'` 这样一个**已拼好的串**）。
     /// 两处与原型不同，都是"遇到原型没覆盖的情形时不要编"：
     /// - **0 条评论不写那一段**（原型的数据里 0 评论就只写时间），
@@ -298,7 +298,7 @@ public enum RepoIssuesSectionCopy {
 
     // MARK: - 分段条
 
-    /// 第一格：`开放 (N)`（原型 `05-repo.js:118` 逐字，含括号前的空格）。
+    /// 第一格：`开放 (N)`（原型 `05-repo.js:234` 逐字，含括号前的空格）。
     ///
     /// ## ⚠️ `loadedCount` 是**可空**的，而这不是多此一举
     ///
@@ -343,7 +343,7 @@ public enum RepoIssuesSectionCopy {
 
     // MARK: - 入口
 
-    /// 列表底部的「＋ 新建 Issue」（原型 `05-repo.js:129` 逐字，**全角 `＋`**）。
+    /// 列表底部的「＋ 新建 Issue」（原型 `05-repo.js:245` 逐字，**全角 `＋`**）。
     ///
     /// ⚠️ 图标（`svg(I.plus)`）**不在这个常量里** —— 它是一枚图形而不是一个字，
     /// 由视图与文案一起排（同 `PullCopy.mergeAction` 的处置）。

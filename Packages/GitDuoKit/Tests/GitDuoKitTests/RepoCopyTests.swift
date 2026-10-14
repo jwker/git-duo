@@ -61,4 +61,23 @@ struct RepoCopyTests {
         #expect(RepoCopy.copyPathAction == FileCopy.copyPathAction)
         #expect(RepoCopy.pathCopiedToast == FileCopy.pathCopiedToast)
     }
+
+    /// `2026-10-14`：那颗「⋯」从**面包屑右侧**搬到了**导航栏右上角**
+    /// （用户要求与文件页统一），名字与值跟着改。
+    ///
+    /// ⚠️ 这条钉的是**改名的方向**：原名 `breadcrumbMenuAccessibilityLabel`
+    /// （"路径操作菜单"）描述的是它当时所在的**位置**与**内容**，
+    /// 两样都变了 —— 名字不改的话，下一个读代码的人会按"它在面包屑上"去理解。
+    @Test("「⋯」的读屏标签：说**目录**操作，且不等于菜单里任何一项的动作名")
+    func menuLabelIsAboutTheMenu() {
+        let items = [RepoCopy.copyPathAction, RepoCopy.addFileMenuAction]
+
+        #expect(RepoCopy.operationsMenuAccessibilityLabel == "目录操作菜单")
+        #expect(!items.contains(RepoCopy.operationsMenuAccessibilityLabel))
+
+        // 它说目录、文件页那颗说文件 —— 两颗菜单位置与控件逐字相同，
+        // 读屏里若读成同一句，用户在两页之间就分不出自己站在哪一页。
+        #expect(RepoCopy.operationsMenuAccessibilityLabel
+                != FileCopy.operationsMenuAccessibilityLabel)
+    }
 }

@@ -3,23 +3,36 @@ import GitDuoDesign
 import GitDuoKit
 import SwiftUI
 
-/// **目录浏览分区** —— 面包屑 + 文件行 + README 三块（原型 `05-repo.js` 的代码分区
-/// 与 `10-explore-repo.js` 的 `exploreTree`）。
+/// **目录浏览分区** —— 面包屑 + 文件行（原型 `05-repo.js` 的 `codeBodyHTML`）。
 ///
-/// ## 为什么它是一件共享件
+/// ## ⚠️ 2026-10-14：它从"两页各一份"收成**只有一个调用方**（走查第 63 条）
 ///
-/// §4.4「代码」分区与 §4.13 第 ⑤ / ⑥ 分区渲染的是**同一件事**：一条面包屑、
-/// 一列目录条目、一份 README。原型这两处的 HTML 结构逐行对应，差别只有两处：
+/// 此前 §4.4「代码」分区与 §4.13 第 ⑤ / ⑥ 分区各渲染一份；现在两处都收进了
+/// **同一个代码页**（`RepoCodeView`，只读态由 `readOnly` 决定）⇒ 本件不再需要协调
+/// "两页长得不一样"。原型侧同步改了：`exploreTree` 删除，两档共用 `SCR.repoCode`。
 ///
-/// | | §4.4（自己的仓库） | §4.13（他人仓库） |
-/// |---|---|---|
-/// | 面包屑右侧 | 「⋯」菜单（复制路径 / 添加文件） | **无** |
-/// | 分区标题 | **无**（顶部有分段条） | `文件浏览 · {path}` 与 `README.md` |
-/// | 点一行 | 进 `repoDetail` / `fileView(readOnly: false)` | 进 `exploreRepoDetail` / `fileView(readOnly: true)` |
+/// ## ⚠️ 同日：README 那一块**搬走了**（用户要求 README 进仓库首页）
 ///
-/// 前两处由参数表达（`title` / `trailing`），第三处由两个闭包表达。
-/// 三处之外的一切（间距、字号、空目录那一句、README 的渲染）只有这一份 ——
-/// 抄一份的话，"把空目录的灰字改成居中"这种改动只会落到其中一页。
+/// 它原先长在本分区里（"面包屑 + 文件行 + README"三块）—— 现在 README 画在
+/// **两个首页**上（`RepoReadmeSection`，§4.4 四行入口之下 / §4.13 入口行之后）。
+/// ⇒ 本件只剩**面包屑 + 文件行**两件事，形状反而更贴合"目录浏览"这个名字。
+/// 连带：`LoadRepoTree` 不再取 README、`RepoTreePage.readme` 字段退役。
+///
+/// ## ⚠️ 同日再收一次：`title` 与 `trailing` 两个参数**一起删了**（用户裁定）
+///
+/// 收了唯一调用方之后，这两个参数都成了死参数：
+///
+/// | 参数 | 什么时候变死的 |
+/// |---|---|
+/// | `title`（分区标题）| 代码页**不画**分区标题（那正是它省下空间的地方之一）⇒ 收进唯一调用方那一刻起就没人传 |
+/// | `trailing`（面包屑右侧动作位）| 2026-10-14 那颗「⋯」搬到了**导航栏右上角**（用户要求与文件页统一）⇒ 两个档都不再传 |
+///
+/// 两个都删掉之后，本件**不再需要泛型参数**（原来那个 `<Trailing: View>` 只服务
+/// `trailing`），成了一个普通 `struct`。留着它们等于"给下一个读的人一道判断题：
+/// 这两个参数到底还有没有在用" —— 同 `FileCopy` 那次"失去唯一消费端的常量一并删除"。
+///
+/// ⚠️ 若哪天又要把它当**通用分区**用（比如在仓库首页内嵌一段目录浏览），
+/// 那时再加回需要的参数 —— 而不是现在留两个没人传的开口。
 ///
 /// ## 判据 #43：它留 Feature（不进设计包）
 ///
@@ -33,13 +46,9 @@ import SwiftUI
 /// 所以它们的处置（出一句提示 + 跳网页端）收在本件里，`onOpen*` 两个闭包
 /// **只会收到目录与文件** ⇒ 调用方不必再判一次 `kind`，
 /// 也就不会出现"两页各判一次、其中一页漏判"。
-struct RepoTreeSection<Trailing: View>: View {
+struct RepoTreeSection: View {
 
     let session: RepoTreeSession
-
-    /// 分区标题。`nil` = 不画（§4.4 靠顶部的分段条表明身份）。
-    /// §4.13 传 `文件浏览 · {path}`。
-    let title: String?
 
     /// 点一个目录 —— 参数是目标路径，调用方负责推入。
     let onOpenDirectory: (RepoPath) -> Void
@@ -52,27 +61,21 @@ struct RepoTreeSection<Trailing: View>: View {
     /// 点面包屑上某一层。参数是 `path` 的下标（**第 0 段是仓库全名**）。
     let onSelectSegment: (Int) -> Void
 
-    private let trailing: Trailing
-
     @Environment(\.openURL) private var openURL
     @Environment(AppEnvironment.self) private var env
 
     init(
         session: RepoTreeSession,
-        title: String? = nil,
         onOpenDirectory: @escaping (RepoPath) -> Void,
         onOpenFile: @escaping (RepoPath) -> Void,
         onTapBranch: @escaping () -> Void,
-        onSelectSegment: @escaping (Int) -> Void,
-        @ViewBuilder trailing: () -> Trailing
+        onSelectSegment: @escaping (Int) -> Void
     ) {
         self.session = session
-        self.title = title
         self.onOpenDirectory = onOpenDirectory
         self.onOpenFile = onOpenFile
         self.onTapBranch = onTapBranch
         self.onSelectSegment = onSelectSegment
-        self.trailing = trailing()
     }
 
     var body: some View {
@@ -82,9 +85,6 @@ struct RepoTreeSection<Trailing: View>: View {
 
         case .content:
             if let page = session.page.value {
-                if let title {
-                    SectionHeader(title: title)
-                }
                 content(page)
             }
 
@@ -122,88 +122,30 @@ struct RepoTreeSection<Trailing: View>: View {
                     }
                 }
             }
-
-            readmeSection(page)
         }
     }
 
-    /// 面包屑条：分支胶囊 + `仓库全名 / … / 当前层`（+ 调用方的右侧动作位）。
+    /// 面包屑条：分支胶囊 + `仓库全名 / … / 当前层`。
+    ///
+    /// ⚠️ **2026-10-14 起右端没有动作位了** —— 那颗「⋯」搬到了代码页的导航栏右上角
+    /// （`RepoCodeView.levelMenu`，与文件页同形）。`BreadcrumbBar` 那边对应的
+    /// `trailing` 槽也一并删除。
     private func breadcrumb(_ page: RepoTreePage) -> some View {
         // ⚠️ `path` 的**第 0 段是仓库全名**（原型把仓库名当作路径的第一段，
-        //    `navToSub('')` 回到根目录）⇒ 根目录下 `path.count == 1`。
+        //    `codeGo('')` 回到仓库根那一层）⇒ 根目录下 `path.count == 1`。
         BreadcrumbBar(
             branch: page.branch,
             path: [session.fullName] + session.path.components,
             onTapBranch: onTapBranch,
             onSelectSegment: onSelectSegment
-        ) {
-            trailing
-        }
+        )
     }
 
-    /// 根目录下的 README 区块。
-    ///
-    /// ⚠️ **只有根目录有** —— `LoadRepoTree.fetch` 有意只在根目录问 `readme`
-    /// 端点（在任何子目录下问它都会拿到同一份仓库级 README，
-    /// 而那不是"这个目录的说明"）。所以这里不再判一次路径。
-    @ViewBuilder
-    private func readmeSection(_ page: RepoTreePage) -> some View {
-        if let readme = page.readme, !readme.isEmpty {
-            // ⚠️ 小节标题取 `RepoCopy.readmeSectionTitle`（字面 `README.md`）——
-            //    §4.13 原先另有一个 `ExploreRepoCopy.readmeSection`，值与它**完全相同**，
-            //    6.4 合并成一处（同一个标题在两个页面上不可能该长得不一样）。
-            SectionHeader(title: RepoCopy.readmeSectionTitle)
-            // ⚠️ 解析（`MarkdownParser`）在取数层已经做完 —— `MarkdownDocument`
-            //    带的是算好的块。视图只负责画，不在 `body` 里重扫全文。
-            //
-            // ⚠️ 链接要**在这里接一次线**（2026-10-07 目视发现的第 3 条）：
-            //    README 里大量链接是仓库内的相对地址（`[中文](README_zh.md)`），
-            //    系统打不开一个没有 scheme 的地址 ⇒ 表现为"点了没反应"。
-            //    判据（哪一档去哪儿）全在领域层的 `RepoLinkResolver`，这里只做分派 ——
-            //    两页（§4.4 / §4.13）共用本件，接线也只有这一处。
-            MarkdownBody(
-                blocks: readme.blocks,
-                // ⚠️ **图片也要接一次线**（2026-10-12，走查第 58 条）—— 与下面链接
-                //    那处同一套上下文：README 里的图同样是仓库内的相对地址
-                //    （`assets/hero.png`），而基准目录就是它所在的那一层。
-                //    ⚠️ `ref` 用 `page.branch`（这一页当前显示的那个分支）——
-                //    与 `LoadRepoTree` 取 README 时用的 ref 必须一致，
-                //    否则切分支之后正文换了、图还是旧分支的。
-                imageContext: MarkdownImageContext(
-                    fullName: session.fullName,
-                    ref: page.branch,
-                    baseDirectory: session.path,
-                    store: env.markdownImages
-                )
-            ) { url in
-                switch RepoLinkResolver.target(
-                    for: url,
-                    fullName: session.fullName,
-                    // README 画在**它所在的那个目录**下，所以基准就是当前目录
-                    // （`LoadRepoTree` 只在根目录问 `readme` 端点，见上一层说明）。
-                    baseDirectory: session.path
-                ) {
-                case let .file(path):
-                    onOpenFile(path)
-                    return .handled
-
-                case let .directory(path):
-                    onOpenDirectory(path)
-                    return .handled
-
-                case .external:
-                    // 外部地址必须落到系统，否则 README 里所有外链会一起静默失效。
-                    return .systemAction
-
-                case .anchor, .unresolved:
-                    // 两档都**没有落点**（页内锚点这一版不做；相对地址跳出仓库根时
-                    // 猜不出它想去哪儿）。`.discarded` 是"我们要过它、并决定不跳"，
-                    // 比 `.handled` 诚实 —— 后者声称"已经处理了"。
-                    return .discarded
-                }
-            }
-        }
-    }
+    // ⚠️ README 那一块（原 `readmeSection(_:)`，约 60 行）**2026-10-14 整体搬走了**
+    //    —— 它现在画在两个**首页**上（`RepoReadmeSection`，§4.4 四行入口之下 /
+    //    §4.13 入口行之后）。它不该是"进了代码页才看得到"的东西：
+    //    README 是"这个仓库是什么"，而代码页回答的是"里面有什么文件"。
+    //    连带的取数变化见 `LoadRepoTree`（它不再取 README）。
 
     // MARK: - 点一行
 
@@ -238,59 +180,24 @@ struct RepoTreeSection<Trailing: View>: View {
     /// 本分区首屏的骨架。
     ///
     /// ⚠️ **形状与尺寸纪律都在 `RepoTreeSkeleton` 里**（2026-10-09 切片 10 收口）：
-    /// §4.4 的代码分区用的就是本视图，而 `RepoDetailView` 此前**自己又抄了一份
-    /// 逐字相同的骨架** ⇒ 两边现在共用 `RepoTreeSkeleton`。
+    /// 代码页（§4.4.1）与 §4.13 用的就是本视图，而 `RepoDetailView` 在代码浏览
+    /// 还嵌在它里面那会儿**自己又抄了一份逐字相同的骨架** ⇒ 现在两边共用 `RepoTreeSkeleton`。
     /// 本件只是把它接在这里（写法与原先一致）。
     private var skeleton: some View {
         RepoTreeSkeleton()
     }
 
     /// 分区内的失败 —— 内容区里的一小块，**不掀翻整页**（§8.5）。
+    ///
+    /// ⚠️ **2026-10-14：它此前是本文件里一份逐字重复的实现** —— 文案、布局、
+    /// 读屏 hint 与 `SectionFailure` 一模一样（那是那个共用件被提出来时**漏掉的一个
+    /// 调用方**：它当年服务的是「代码 / Commits / Issues / PR」四段，而本件
+    /// 在改造中换过几次外壳，这一份就留了下来）。现在改成直接用共用件，
+    /// 本件自带的那个 `failureHint` 静态函数随之删除（它与 `SectionFailure.hint(for:)`
+    /// 同一张表 —— 留着就意味着"改了一处、另一处还是旧话术"）。
     private func failure(_ error: GitHubError) -> some View {
-        VStack(spacing: Theme.Spacing.s) {
-            Text("这一块加载失败")
-                .font(Theme.Font.footnote)
-                .foregroundStyle(Theme.Palette.textSecondary)
-            Button("重试") {
-                Task { await session.reload() }
-            }
-            .font(Theme.Font.footnote.weight(.semibold))
+        SectionFailure(error: error) {
+            Task { await session.reload() }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xl)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(Self.failureHint(error))
-    }
-
-    private static func failureHint(_ error: GitHubError) -> String {
-        switch error {
-        case .transport: "网络不可用"
-        case .rateLimited: "请求过于频繁"
-        case .unauthorized: "登录状态已失效"
-        default: "服务暂时不可用"
-        }
-    }
-}
-
-extension RepoTreeSection where Trailing == EmptyView {
-
-    /// 面包屑右侧没有动作位的那一种（§4.13 的他人仓库就没有那个「⋯」菜单）。
-    init(
-        session: RepoTreeSession,
-        title: String? = nil,
-        onOpenDirectory: @escaping (RepoPath) -> Void,
-        onOpenFile: @escaping (RepoPath) -> Void,
-        onTapBranch: @escaping () -> Void,
-        onSelectSegment: @escaping (Int) -> Void
-    ) {
-        self.init(
-            session: session,
-            title: title,
-            onOpenDirectory: onOpenDirectory,
-            onOpenFile: onOpenFile,
-            onTapBranch: onTapBranch,
-            onSelectSegment: onSelectSegment,
-            trailing: { EmptyView() }
-        )
     }
 }

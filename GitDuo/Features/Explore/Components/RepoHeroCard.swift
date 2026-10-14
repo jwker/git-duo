@@ -100,7 +100,7 @@ struct RepoHeroCard: View {
                     .foregroundStyle(Theme.Palette.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                // `{更新时间} 更新 · {许可证} 许可证` —— 逐字对齐原型（`10-explore-repo.js:14`）。
+                // `{更新时间} 更新 · {许可证} 许可证` —— 逐字对齐原型（`10-explore-repo.js:13`）。
                 Text(detail.metaLabel(now: now))
                     .font(Theme.Font.caption)
                     .foregroundStyle(Theme.Palette.textTertiary)

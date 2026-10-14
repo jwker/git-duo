@@ -75,7 +75,10 @@ public enum MyConversationsCopy {
     /// ⇒ 菜单文字与页面标题是**同一个字符串**。两处各写一遍，早晚会出现
     /// "菜单改了、页面标题没改"（或反过来），而两屏不会同屏出现，
     /// **看一屏永远发现不了**。所以这里向 `ProfileCopy` 取（那里是原型逐字）。
-    /// 同 `ExploreRepoCopy.readmeSection` 那条先例（两处同值时只留一份）。
+    /// 同 `RepoCopy.readmeSectionTitle` 那条先例（两处同值时只留一份）——
+    /// 那一份 2026-10-14 就是这么收的：探索页原先自己存了一份等值的副本
+    /// （`ExploreRepoCopy.readmeSection`），收成两页共用领域层那一份之后副本删掉。
+    /// ⚠️ 本条注释原来指向的正是那个副本 —— 它删了，指针就得跟着换。
     public static func title(for kind: ConversationKind) -> String {
         switch kind {
         case .pullRequest: ProfileCopy.menuPullRequests

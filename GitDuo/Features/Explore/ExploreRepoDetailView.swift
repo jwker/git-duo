@@ -13,18 +13,24 @@ import GitDuoKit
 ///
 /// （原 ②「我的收藏」分区已于 2026-10-11 随该功能整体移除。）
 ///
-/// ## ⚠️ ⑤ / ⑥ 两分区是**共享件**渲染的
+/// ## ⚠️ 2026-10-14：⑤ / ⑥ 两分区先后改了**两次**（走查第 63 条 + README 进仓库首页）
 ///
-/// 它们与 §4.4 的「代码」分区是同一件事：一条面包屑、一列目录条目、一份 README。
-/// 渲染在 `RepoTreeSection`、状态在 `RepoTreeSession`。本页与 §4.4 的两处差别：
-/// 面包屑右侧**没有**那个「⋯」菜单（复制路径 / 添加文件）、点一行的落点是**只读**的那两条路由。
+/// **第一次**：两分区原先是本页里的一整块目录浏览（`RepoTreeSection` + `RepoTreeSession`，
+/// 与 §4.4 的「代码」分区共用），于是子目录要"推入一层新页面"。它被改成**一条入口行**，
+/// 点进去是 **`RepoCodeView`（只读进去）** —— 目录层级在那一页内部推进，
+/// 而这一页不再有"当前层"这件事。
 ///
-/// ## ⚠️ 分支可以切（只读的切）
+/// **第二次**（同日，用户要求）：⑥ **README 搬回本页** —— 就在 ⑤ 那条入口行之后。
+/// README 是"这个仓库是什么"，它不是目录的一部分；当年跟着目录进代码页只因为
+/// "在根目录顺带取到了那一份"。现在它与 §4.4 首页共用 `RepoReadmeSection`，
+/// 取数走 `LoadRepoReadme`（两页都已经有头部在手 ⇒ 不必解析分支）。
 ///
-/// 原型的 `exploreTree` 面包屑上那个胶囊是可点的（`openBranchSheet(false)`），
-/// 切分支会写进**按仓库的记忆** —— 与 §4.4 共用同一份。
-/// 而弹层是 `BranchSheet(isReadOnly: true)`：**不给**「管理分支…」入口
-/// （在他人仓库上给一个管理入口，点进去每一行都必然失败，而失败原因从那一屏看不出来）。
+/// ⚠️ 连带变化两条（都是**第一次**那次带来的）：
+/// - **本页不再能切分支**（原型那一处——`exploreTree`——已随同步删除；分支胶囊现在
+///   长在代码页的面包屑上）。
+///   分支切换跟着面包屑一起去了代码页 —— 那一页是唯一还有面包屑的地方，
+///   而"在他人仓库上切分支"的语义（记忆照写、只读的切）在那里与 §4.4 共用一个实现。
+/// - 弹层从两个（分支 / 版本说明）收成一个（版本说明）。
 ///
 /// ## ⚠️ 本页**不含任何写操作**（Star 除外）
 ///
@@ -35,33 +41,21 @@ struct ExploreRepoDetailView: View {
 
     let fullName: String
 
-    /// 当前目录 —— 由路由给（`.exploreRepoDetail(fullName:path:)`）。
-    /// 进子目录是**推入一层新页面**（原型 `push('exploreRepoDetail',{repo, sub})`）。
-    let path: RepoPath
-
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
 
     @State private var model: ExploreRepoViewModel
 
-    /// 本页的弹层路由。
+    /// 版本说明全文（`LatestRelease.notesBlocks`）—— 卡片那颗「更多」的落点。
     ///
-    /// ⚠️ 用 `Identifiable` 枚举驱动 `.sheet(item:)`，**不用 `isPresented` 布尔量**：
-    /// 本页已有两张弹层（分支 / 版本说明），两个布尔量同时为真会让
-    /// "哪一张盖在上面"变成呈现顺序问题，而那种 bug 只在特定点击序列下出现。
-    /// 一个枚举天然只有一张。
-    @State private var sheet: ExploreSheet?
-
-    private enum ExploreSheet: String, Identifiable {
-        case branch
-        /// 版本说明全文（`LatestRelease.notesBlocks`）—— 卡片那颗「更多」的落点。
-        ///
-        /// ⚠️ 2026-10-11 新增（原型里**没有**这张弹层）：正文从卡片挪到这里，
-        ///    卡片才不会被一段长说明撑爆。见 `LatestRelease.notesBlocks` 的说明。
-        case releaseNotes
-
-        var id: String { rawValue }
-    }
+    /// ⚠️ 2026-10-11 新增（原型里**没有**这张弹层）：正文从卡片挪到这里，
+    ///    卡片才不会被一段长说明撑爆。见 `LatestRelease.notesBlocks` 的说明。
+    ///
+    /// ⚠️ 2026-10-14：它从"两张弹层里的一个 enum case"简化成**一个布尔量** ——
+    ///    分支那张随目录浏览一起搬去了代码页，本页只剩这一张
+    ///    （一个 `enum` 只有一个 case 时，它存在的理由——"两个布尔量同时为真谁盖谁"
+    ///    ——已经不成立了）。
+    @State private var showsReleaseNotes = false
 
     /// 「现在」只在**进页与刷新时**取一次，不在 `body` 里取。
     ///
@@ -71,29 +65,22 @@ struct ExploreRepoDetailView: View {
 
     init(
         fullName: String,
-        path: RepoPath,
         insights: LoadRepoInsights,
-        treeLoader: LoadRepoTree,
-        branches: LoadBranches,
+        readme: LoadRepoReadme,
         starToggle: ToggleStar,
         // ⚠️ 决策 #80：本页**几乎每一条都写不了**（都是别人的仓库），
         //    所以这个缓存比在 §4.4 更要紧 —— 传组合根那**同一个**（预热过的那份）。
         starScope: StarWriteScopeCache,
-        memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
-        self.path = path
         _model = State(initialValue: ExploreRepoViewModel(
             fullName: fullName,
-            path: path,
             loader: insights,
-            treeLoader: treeLoader,
-            branches: branches,
+            readme: readme,
             starToggle: starToggle,
             starScope: starScope,
-            memory: memory,
             visits: visits,
             toast: toast
         ))
@@ -116,39 +103,17 @@ struct ExploreRepoDetailView: View {
             // 四路并发取完之后再对一次表：网速慢时"30 分钟前推送"可能已经变成"31 分钟前"。
             now = Date()
         }
-        .sheet(item: $sheet) { route in
-            switch route {
-            case .branch:
-                // ⚠️ `isReadOnly: true` ⇒ 标题换成"浏览他人仓库"那一句、
-                //    底部**不给**「管理分支…」入口（见类型说明的"分支可以切"一节）。
-                BranchSheet(
-                    state: model.tree.branchList,
-                    currentBranch: model.tree.branch ?? "",
-                    isReadOnly: true,
-                    onSelect: { picked in
-                        sheet = nil
-                        Task { await model.switchBranch(to: picked) }
-                    },
-                    onManage: nil,
-                    onRetry: { Task { await model.loadBranches() } }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .task { await model.loadBranches() }
-
-            case .releaseNotes:
-                // ⚠️ 这一档**读的是弹层自己那一份**（`model.insights` 上的 `release`），
-                //    不另存一份「要展示的版本说明」到 `@State` —— 那会变成第二个真相源，
-                //    而下拉刷新（`model.refresh()`）会把它换成新的、旧的却还挂在弹层里。
-                //    取不到就什么都不画（正常到不了：`hasNotes` 为假时按钮就不给）。
-                if let release = model.insights.value?.release {
-                    ReleaseNotesSheet(release: release)
-                        // ⚠️ 这里是**读全文**的弹层 ⇒ 直接给 `.large`，
-                        //    别让它先只有半屏、还要用户自己往上拽（分支那张是选择列表，
-                        //    半屏反而更顺手，所以两张的档位有意不同）。
-                        .presentationDetents([.large])
-                        .presentationDragIndicator(.visible)
-                }
+        .sheet(isPresented: $showsReleaseNotes) {
+            // ⚠️ 这一档**读的是弹层自己那一份**（`model.insights` 上的 `release`），
+            //    不另存一份「要展示的版本说明」到 `@State` —— 那会变成第二个真相源，
+            //    而下拉刷新（`model.refresh()`）会把它换成新的、旧的却还挂在弹层里。
+            //    取不到就什么都不画（正常到不了：`hasNotes` 为假时按钮就不给）。
+            if let release = model.insights.value?.release {
+                ReleaseNotesSheet(release: release)
+                    // ⚠️ 这里是**读全文**的弹层 ⇒ 直接给 `.large`，
+                    //    别让它先只有半屏、还要用户自己往上拽。
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -198,6 +163,23 @@ struct ExploreRepoDetailView: View {
 
             fileSection
 
+            // ⑥ README —— ⚠️ **2026-10-14 晚些回到本页**（用户要求它从代码页挪到仓库首页）。
+            //    它与 §4.4 首页那块是**同一个** `RepoReadmeSection`：三档（骨架 / 内容 /
+            //    块级失败）与三套接线（相对链接、相对图片、小节标题）全在那一件里。
+            //    ⚠️ 位置：按 §4.13 的分区顺序，它在 ⑤ 文件浏览之后、⑦ 参与协作之前。
+            RepoReadmeSection(
+                state: model.readme,
+                fullName: fullName,
+                // ⚠️ `ref` 取详情里的默认分支 —— 与 `LoadRepoReadme` 取数时同一个值
+                //    （正文与图片必须同源；本页不解析分支记忆，见 `ExploreRepoViewModel`）。
+                ref: insights.detail.defaultBranch,
+                // ⚠️ `readOnly: true` —— 本页恒是**他人仓库**（路由在进入前定下，铁律 #7）
+                //    ⇒ README 里点进文件页 / 代码页都走只读那一组界面。
+                readOnly: true
+            ) {
+                Task { await model.retryReadme() }
+            }
+
             collaborationSection
 
             contributorSection(insights)
@@ -242,7 +224,7 @@ struct ExploreRepoDetailView: View {
     private func releaseCard(_ release: LatestRelease) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: Theme.Spacing.s) {
-                // ⚠️ 图标用 `tag` 而不是原型里那个 fork 字形：原型 `10-explore-repo.js:45`
+                // ⚠️ 图标用 `tag` 而不是原型里那个 fork 字形：原型 `10-explore-repo.js:44`
                 //    写的是 `svg(I.fork)`，而版本胶囊配一个"分叉"图标显然是笔误
                 //    （图标表里就有现成的 `I.tag`）。PRD 也只写"版本胶囊"，未指定图标。
                 //    **已作为候选修订上报**（改回一行即可）。
@@ -266,7 +248,7 @@ struct ExploreRepoDetailView: View {
                 Spacer(minLength: 0)
             }
 
-            // ⚠️ 正文**不在这里画**（2026-10-11 改口径）：原型 `10-explore-repo.js:46`
+            // ⚠️ 正文**不在这里画**（2026-10-11 改口径）：原型 `10-explore-repo.js:45`
             //    把整段说明铺在卡片正文里，于是一段几百字的 release note 会把这张卡
             //    撑到占满整屏、把下面的语言构成 / 文件浏览全推走。
             //    现在卡片里一个字都不画，只多一颗「更多」⇒ 点开弹层看全文
@@ -276,7 +258,7 @@ struct ExploreRepoDetailView: View {
                 releaseButton(ExploreRepoCopy.sourceCodeButton)
                 releaseButton(release.assetsButtonTitle)
                 if release.hasNotes {
-                    releaseChip(LatestRelease.notesButtonTitle) { sheet = .releaseNotes }
+                    releaseChip(LatestRelease.notesButtonTitle) { showsReleaseNotes = true }
                 }
             }
             .padding(.top, Theme.Spacing.m)
@@ -314,49 +296,42 @@ struct ExploreRepoDetailView: View {
 
     // MARK: - ⑤ / ⑥ 文件浏览 · README
 
-    /// §4.13 的 ⑤ 与 ⑥ 两分区 —— 由共享件 `RepoTreeSection` 一并渲染
-    /// （按原型的顺序画出「文件浏览」小节标题、面包屑、目录卡片、
-    /// 以及 `README.md` 的小节标题与正文）。
+    /// §4.13 的 ⑤ / ⑥ 两分区 —— 一条入口行（2026-10-14 起，走查第 63 条）。
     ///
-    /// ⚠️ **子目录里推入的是一层新页面**（原型 `push('exploreRepoDetail',{repo, sub})`），
-    /// 不是"原地换掉目录" —— 所以返回时回到的是上一级，而不是根。
+    /// ## ⚠️ 它原先**就是这两分区本身**（一块内嵌的目录浏览）
     ///
-    /// ⚠️ README **只有根目录**会出现：`LoadRepoTree` 有意只在根目录问 `readme` 端点
-    /// （在任何子目录下问它都会拿到同一份仓库级 README，而那不是"这个目录的说明"）。
-    /// 原型在子目录里也照样印一份 —— 那是它的演示数据假象，不是规格。
+    /// 那时它渲染的是 `RepoTreeSection`（面包屑 + 目录卡片 + README），
+    /// 子目录要"推入一层新页面"。现在换成一个落点：
+    /// 点这一行 → `RepoCodeView（readOnly: true）` —— 目录层级在那一页内部推进，
+    /// 「哪一层」不再出现在本页（连带 `path` 参数一起删掉）。
+    ///
+    /// ⚠️ 小节标题留着（原型这一块有「文件浏览」这个标题），
+    /// 但 ` · {path}` 那一半删了：本页已经不存在"当前目录"。
+    ///
+    /// ⚠️ **只读那一档在代码页里少一项**：导航栏右上角那颗「⋯」照给，
+    /// 只是菜单里只剩 `复制路径`（`添加文件` 在别人的仓库上做不了）。
+    @ViewBuilder
     private var fileSection: some View {
-        RepoTreeSection(
-            session: model.tree,
-            title: ExploreRepoCopy.fileSection(path: path),
-            onOpenDirectory: { target in
-                // ⚠️ 每一层都带 `fullName`：子目录页是**新的一页**，它不知道上一页是谁。
-                env.router.push(.exploreRepoDetail(
-                    fullName: fullName,
-                    path: target.isRoot ? nil : target.raw
-                ))
-            },
-            onOpenFile: { target in
-                // ⚠️ `readOnly: true` —— 走「他人仓库」那一组界面
-                //    （`编辑` 换成 `⑂ Fork 后可编辑`、页脚换成 `只读浏览 · 他人仓库文件`）。
-                env.router.push(.fileView(
-                    fullName: fullName, path: target.raw, readOnly: true
-                ))
-            },
-            onTapBranch: { sheet = .branch },
-            onSelectSegment: { index in navigate(toCrumb: index) }
-        )
-    }
+        SectionHeader(title: ExploreRepoCopy.fileSection)
 
-    /// 点面包屑的某一层 —— 与 §4.4 同规矩：**推入一层新页面**，不原地替换。
-    ///
-    /// - Parameter index: 面包屑上的下标，**第 0 段是仓库全名**。
-    private func navigate(toCrumb index: Int) {
-        // index 0 ⇒ 仓库根目录；index k ⇒ 仓库内的第 k-1 层（`RepoPath` 里根是空路径）。
-        let target = index == 0 ? RepoPath.root : model.tree.path(upTo: index - 1)
-        guard let target, target != model.tree.path else { return }
-        env.router.push(.exploreRepoDetail(
-            fullName: fullName, path: target.isRoot ? nil : target.raw
-        ))
+        CardBox(vertical: Theme.Spacing.xs) {
+            LinkRow(
+                systemImage: GitHubIcon.folder,
+                title: ExploreRepoCopy.fileBrowseRowTitle,
+                showsSeparator: false
+            ) {
+                env.router.push(.repoCode(
+                    fullName: fullName,
+                    // ⚠️ `readOnly: true` —— 走「他人仓库」那一组界面
+                    //    （那颗「⋯」不给、分支弹层不给「管理分支…」）。
+                    readOnly: true,
+                    // ⚠️ 根目录进：这一步的用户意图是"去看这个仓库有什么"，
+                    //    而不是"打开某个已知目录"（那个场景在文件页的 README 链接上，
+                    //    见 `FileView` 那一处）。
+                    path: nil
+                ))
+            }
+        }
     }
 
     // MARK: - ⑦ 参与协作
@@ -517,13 +492,10 @@ struct ExploreRepoDetailView: View {
     NavigationStack {
         ExploreRepoDetailView(
             fullName: "kuda/ui-craft",
-            path: .root,
             insights: environment.repoInsights,
-            treeLoader: environment.repoTree,
-            branches: environment.branches,
+            readme: environment.repoReadme,
             starToggle: environment.starToggle,
             starScope: environment.starWriteScope,
-            memory: environment.branchMemory,
             visits: environment.recentVisits,
             toast: environment.toast
         )

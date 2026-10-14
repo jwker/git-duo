@@ -5,7 +5,7 @@ import GitDuoKit
 /// **PR 卡片** —— §4.15 探索 PR 列表与 §4.4 分区三（仓库详情 PR 段）
 /// **两处共用**（决策 #61）。
 ///
-/// 形状逐字对齐原型 `10-explore-repo.js:136-139`，与 `IssueCard` 同构
+/// 形状逐字对齐原型 `10-explore-repo.js:118-121`，与 `IssueCard` 同构
 /// （状态图标 + 标题 + 副标题），**唯一差别是状态档数**：
 ///
 /// | | `IssueCard` | `PullCard` |

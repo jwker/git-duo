@@ -260,7 +260,7 @@ struct SearchView: View {
             //    把"不知道"的保守侧收在一处，**不要**在这里用"全名是不是以我的登录名开头"补判断
             //    （PRD §3.13 明确禁止）。代价：自己的仓库出现在结果里时也进只读页 ——
             //    这是与探索榜同一条有意接受的误差。
-            env.router.push(.exploreRepoDetail(fullName: hit.fullName, path: nil))
+            env.router.push(.exploreRepoDetail(fullName: hit.fullName))
 
         case let .user(hit):
             sheetUser = hit

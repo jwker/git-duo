@@ -230,8 +230,8 @@ struct HomeView: View {
     private func openPinned(_ summary: RepoSummary) {
         env.router.push(
             summary.canOpenWritableDetail
-                ? .repoDetail(fullName: summary.fullName, section: .code, path: nil)
-                : .exploreRepoDetail(fullName: summary.fullName, path: nil)
+                ? .repoDetail(fullName: summary.fullName)
+                : .exploreRepoDetail(fullName: summary.fullName)
         )
     }
 
@@ -239,8 +239,8 @@ struct HomeView: View {
     private func openVisit(_ visit: RecentVisit) {
         env.router.push(
             visit.canWrite
-                ? .repoDetail(fullName: visit.fullName, section: .code, path: nil)
-                : .exploreRepoDetail(fullName: visit.fullName, path: nil)
+                ? .repoDetail(fullName: visit.fullName)
+                : .exploreRepoDetail(fullName: visit.fullName)
         )
     }
 

@@ -26,54 +26,82 @@ struct RouteView: View {
             // 三个入口（首页 / 仓库 / 探索右上角的放大镜）都推到这一处（PRD §4.2、§6.3）。
             // 本视图只负责把组合根的两件依赖传下去；页面自己不认识"是谁推的它"。
             SearchView(loader: env.search, history: env.searchHistory)
-        case let .repoDetail(fullName, section, path):
-            // PRD §4.4（**自己的仓库**）。⚠️ 分片归属曾一度错标成「切片 4 落地」——
-            //    PRD §4.4 与施工图 4.4「表现层」撞了名。2026-10-07 裁定：归**切片 6**。
-            //
-            // ⚠️ `path` 此前被写成 `_`（骨架期不用它）。接真件时**必须接上**：
-            //    它是"从面包屑某层推入的深层目录"，丢了它表现为**每次点面包屑都回到仓库根**，
-            //    而源码里看不出任何异常。
+        case let .repoDetail(fullName):
+            // PRD §4.4（**自己的仓库**）—— 2026-10-14 起这一页是**枢纽**：
+            // 头部大卡 + 四行入口（代码 / Issues / Pull Requests / Commits）+ README。
+            // 头部与 README 在这一页取（README 在四行入口**之下**）；四行各自的落点由下面接。
             //
             // 依赖在这里逐条列全 —— 页面自己不碰组合根（AGENTS.md §3 的铁律）；
             // 它只从 `@Environment` 拿 `router` / `toast` 这类**UI 通道**（同 §4.13）。
             RepoDetailView(
                 fullName: fullName,
-                section: section,
-                path: RepoPath(path: path ?? ""),
                 detail: env.repoDetail,
-                treeLoader: env.repoTree,
-                commits: env.repoCommits,
-                branches: env.branches,
-                // 切片 7 的两段（§4.4 分区二 / 三）。
-                issues: env.repoIssues,
-                pulls: env.repoPulls,
+                // ⚠️ README 与头部是**两条**取数（README 要头部里的 `defaultBranch`
+                //    才知道用哪条分支读）⇒ 传的是两个不同的用例，见 `LoadRepoReadme`。
+                readme: env.repoReadme,
                 starToggle: env.starToggle,
                 // 决策 #80：头部那颗星"写不写得动"的判定来源（§3.5.5）。
                 // ⚠️ 传组合根那**同一个**缓存 —— 那里在冷启动 / 换账号时就预热过。
                 starScope: env.starWriteScope,
-                // 切片 8.4：§5.8 后两个上传出口的写通道（§4.4 的「＋ 添加」）。
+                visits: env.recentVisits,
+                toast: env.toast
+            )
+        case let .repoCode(fullName, readOnly, path):
+            // §4.4 的代码浏览（2026-10-14 独立成页，走查第 63 条）—— 一页服务两种仓库：
+            // §4.4 首页的第一行传 `false`、§4.13 的文件浏览入口传 `true`。
+            //
+            // ⚠️ `path` 是**从哪一层开始看**（`nil` = 仓库根）——`Route` 里它是 `String?`，
+            //    而 `RepoPath` 拿空串表示根 ⇒ 转过来是 `RepoPath(path: path ?? "")`。
+            //    ⚠️ 它**不是**"当前层"：进去之后用户怎么走由页内那一栈说了算，
+            //    路由不再变（见 `Route.repoCode` 的说明）。
+            //
+            // ⚠️ `saver` / `intake` 是切片 8.4 那套「添加文件」（§5.8）——
+            //    它挂在**某一层目录**的面包屑菜单上，所以跟着目录一起搬到了这一页。
+            //    只读那一档用不到它们（那一页根本不长那颗「⋯」菜单）。
+            RepoCodeView(
+                fullName: fullName,
+                readOnly: readOnly,
+                startPath: RepoPath(path: path ?? ""),
+                detail: env.repoDetail,
+                treeLoader: env.repoTree,
+                branches: env.branches,
+                memory: env.branchMemory,
                 saver: env.saveFile,
                 // 切片 8.7 / 8.8：选中之后、写之前的那一步
                 //（>1MB 的图片先压缩 #71；显示不出来的格式一律转码 #72）。
                 intake: env.uploadIntake,
-                memory: env.branchMemory,
-                visits: env.recentVisits,
                 toast: env.toast
             )
-        case let .exploreRepoDetail(fullName, path):
-            // ⚠️ `path` 是**子目录**（原型 `push('exploreRepoDetail',{repo, sub})`）——
-            //    它非空时这一页渲染的是同一套内容、只是目录停在那层。
-            //    `Route` 里它是 `String?`，`nil` = 根目录（`RepoPath` 拿空串表示根）。
+        case let .repoSection(fullName, section):
+            // 三个列表分区各自成页（2026-10-14）。⚠️ 三页同构，只有一个 `section` 之差
+            // —— 与 `.myConversations(kind:)` 同一条处置（见 `Route` 的说明）。
+            //
+            // ⚠️ `memory` 传组合根那**同一个** `branchMemory`：提交列表要自己解析一次
+            //    分支（它不再与目录共处一页），而那份记忆是**按仓库**的、谁都不能另存一份。
+            RepoSectionListView(
+                fullName: fullName,
+                section: section,
+                commits: env.repoCommits,
+                issues: env.repoIssues,
+                pulls: env.repoPulls,
+                detail: env.repoDetail,
+                memory: env.branchMemory
+            )
+        case let .exploreRepoDetail(fullName):
+            // ⚠️ 这一页**不再内嵌目录浏览**（2026-10-14）——原型的
+            //    `push('exploreRepoDetail',{repo, sub})` 那条"每层推一页"随
+            //    ⑤ / ⑥ 两分区改成入口行一起消失，目录层级跟着 `.repoCode` 走。
+            //
+            // ⚠️ `treeLoader` / `branches` / `memory` 三样也一并撤下：本页没有目录了。
+            // ⚠️ 但 `readme` **加回来了**（2026-10-14 晚些，用户要求 README 进仓库首页）——
+            //    ⑥ README 分区回到本页，它画在 ⑤ 那条入口行之后。
             ExploreRepoDetailView(
                 fullName: fullName,
-                path: RepoPath(path: path ?? ""),
                 insights: env.repoInsights,
-                treeLoader: env.repoTree,
-                branches: env.branches,
+                readme: env.repoReadme,
                 starToggle: env.starToggle,
                 // 决策 #80：**本页几乎每一条都是别人的仓库** ⇒ 这一档在这里是常态。
                 starScope: env.starWriteScope,
-                memory: env.branchMemory,
                 visits: env.recentVisits,
                 toast: env.toast
             )

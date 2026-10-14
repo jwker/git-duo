@@ -172,10 +172,23 @@ struct RepoFileModelsTests {
 
     // MARK: - RepoSection
 
-    @Test("四个分区的**顺序就是声明顺序**（分段条直接遍历 `allCases`，不要另写数组）")
+    /// ⚠️ **2026-10-14 起只有三档**（走查第 63 条）：「代码」不再是一个分区，
+    /// 它成了仓库首页那四行入口的第一行（`RepoCopy.codeEntryTitle`）。
+    /// 而 `initial`（原「进仓库默认落代码」）**删掉了** —— 首页不再"默认选中某一段"。
+    @Test("三个列表分区的**顺序就是声明顺序**（首页那四行入口的后三行直接遍历 `allCases`）")
     func sectionOrderAndTitles() {
-        #expect(RepoSection.allCases == [.code, .issues, .pullRequests, .commits])
-        #expect(RepoSection.allCases.map(\.title) == ["代码", "Issues", "Pull Requests", "Commits"])
-        #expect(RepoSection.initial == .code)
+        #expect(RepoSection.allCases == [.issues, .pullRequests, .commits])
+        #expect(RepoSection.allCases.map(\.title) == ["Issues", "Pull Requests", "Commits"])
+    }
+
+    /// ⚠️ 首页四行入口的**第一行**不是这个枚举的成员。
+    ///
+    /// 它两容易在下次改动里被"顺手合并"：把 `代码` 塞回枚举看起来最省事，
+    /// 但那样"分区页拿到 `.code`"就成了一个**类型上合法、运行时无意义**的值
+    /// （那三个列表页没有"代码"这一档可画）。
+    @Test("⚠️「代码」不在分区枚举里 —— 它是一个入口，不是某一档分区")
+    func codeIsNotASection() {
+        #expect(RepoSection.allCases.map(\.rawValue).contains("code") == false)
+        #expect(RepoCopy.codeEntryTitle == "代码")
     }
 }

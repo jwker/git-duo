@@ -1,7 +1,7 @@
 import Foundation
 import GitDuoCore
 
-/// 提交列表的一行（PRD §3.7、§4.4 分区四；原型 `SCR.repoDetail` 的 `commit-row`）。
+/// 提交列表的一行（PRD §3.7、§4.4.4；原型 `SCR.repoSection` 里 `repoSeg('commits')` 那支的 `commit-row`）。
 ///
 /// ## ⚠️ 2026-10-11：同族的 `RecentCommit` 已删
 ///

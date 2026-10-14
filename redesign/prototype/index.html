@@ -26,7 +26,7 @@
     <div id="sheetHost"></div>
   </div>
 
-  <div class="hint">💡 启动即未登录 → 点「使用 GitHub 登录」走完授权页进入主界面（「我的 → 设置 → 退出登录」可重看）· 底部 4 Tab 全部可点 · 仓库详情：⑂ 分支切换（**按仓库分别记忆**，换一个仓库不会带上一个仓库的分支） / ＋添加文件（新建 / 上传） / 文件编辑与提交（可选当前分支或新分支+PR） / commit 详情与 Revert（跳网页端） / 分支管理（删除当前分支后自动回落默认分支） · 首页置顶为只读同步个人主页（点「管理」跳网页端） · 我的：Star 管理 / 我的收藏（点收藏夹可重命名·删除）。</div>
+  <div class="hint">💡 启动即未登录 → 点「使用 GitHub 登录」走完授权页进入主界面（「我的 → 设置 → 退出登录」可重看）· 底部 4 Tab 全部可点 · 仓库首页是**枢纽**（头部大卡 + 四行入口 + **README**，README 在四行入口**之下**）：代码 → 独立代码页，目录层级在**页内**推进（返回键先回上一层目录、到根层才退出这一页；点面包屑可直接跳到某一层；往上走时上一层的内容立刻就在）· Issues / Pull Requests / Commits 各自成页 · 代码页里：⑂ 分支切换（**按仓库分别记忆**，换一个仓库不会带上一个仓库的分支） / 导航栏右上角那颗 ⋯（复制路径 / 添加文件；他人仓库只剩复制路径） / 文件编辑与提交（可选当前分支或新分支+PR） / commit 详情与 Revert（跳网页端） / 分支管理（删除当前分支后自动回落默认分支） · 他人仓库：文件浏览是一条入口「浏览目录」（只读），**README 在本页**、就在那条入口之下 · 首页置顶为只读同步个人主页（点「管理」跳网页端） · 我的：Star 管理 / 我的收藏（点收藏夹可重命名·删除）。</div>
 
 <!--
   ⚠️ 脚本：16 个文件按序加载 —— 顺序即依赖顺序，不可调换、不可并行。
@@ -42,7 +42,7 @@
 <script src="scripts/02-icons.js"></script>  <!-- SVG 图标表与构造器（I / svg / pillOf） -->
 <script src="scripts/03-core.js"></script>  <!-- 导航内核（TABS / stacks / 分支记忆 / SCR 容器 / push·pop）+ 首页屏 -->
 <script src="scripts/04-search.js"></script>  <!-- 搜索（仓库 / 用户 / 代码 / Issue·PR 四范围 + 历史 + 热词） -->
-<script src="scripts/05-repo.js"></script>  <!-- 仓库详情与四分段（代码 / Issues / PR / Commits） -->
+<script src="scripts/05-repo.js"></script>  <!-- 仓库首页（枢纽 · 四行入口）· 代码页（页内层级）· 三个列表页 -->
 <script src="scripts/06-files.js"></script>  <!-- 文件查看 / 编辑器 / 提交详情 / 分支管理页 -->
 <script src="scripts/07-issues.js"></script>  <!-- 标签（列表 / 新建）与新建 Issue -->
 <script src="scripts/08-pr.js"></script>  <!-- PR 详情（diff 卡片）与合并 / 关闭 / 评论 -->
@@ -51,8 +51,8 @@
 <script src="scripts/11-favorites.js"></script>  <!-- 收藏夹（归属映射 / 增删改 / 计数派生） -->
 <script src="scripts/12-me.js"></script>  <!-- 我的 / Star 管理 / 设置 -->
 <script src="scripts/13-auth.js"></script>  <!-- 登录页 / 授权页 / 退出登录 -->
-<script src="scripts/14-shell.js"></script>  <!-- 渲染外壳（screenHTML / paintTab / paintTabbar / 分段切换） -->
-<script src="scripts/15-sheets.js"></script>  <!-- 弹层与提示原语 + 分支切换 / 添加文件 / 提交 -->
+<script src="scripts/14-shell.js"></script>  <!-- 渲染外壳（screenHTML / 导航栏右侧动作位 / paintTab / paintTabbar / PR 分段切换） -->
+<script src="scripts/15-sheets.js"></script>  <!-- 弹层与提示原语 + 目录菜单 / 分支切换 / 添加文件 / 提交 -->
 <script src="scripts/16-init.js"></script>  <!-- 启动：未登录先进登录页 -->
 </body>
 </html>

@@ -174,13 +174,13 @@ public struct PullRow: Sendable, Hashable, Identifiable {
     }
 
     /// 探索页卡片的副标题：`#57 · feature/repo-hub → main`
-    /// （逐字对齐原型 `10-explore-repo.js:139` 的 `#${pr.n} · ${pr.b}`）。
+    /// （逐字对齐原型 `10-explore-repo.js:121` 的 `#${pr.n} · ${pr.b}`）。
     public var metaLabel: String {
         "#\(number) · \(headRef) → \(baseRef)"
     }
 
     /// 仓库详情 PR 段卡片的第三行：`reviewer-a 更新于 2 小时前`
-    /// （原型 `05-repo.js:140` 逐字 `${pr.u} 更新于 ${pr.d}`；PRD §4.4 分区三同一句）。
+    /// （原型 `05-repo.js:256` 逐字 `${pr.u} 更新于 ${pr.d}`；PRD §4.4 分区三同一句）。
     ///
     /// ## 三种"缺一半"的情形，各有各的下场
     ///
@@ -350,7 +350,7 @@ public enum RepoPullsSectionCopy {
 
     // MARK: - 分段条
 
-    /// 第一格：`开放 (N)`（原型 `05-repo.js:132` 逐字）。
+    /// 第一格：`开放 (N)`（原型 `05-repo.js:248` 逐字）。
     ///
     /// ## ⚠️ `N` 用的是 Issues 列表那一条计数规则
     ///

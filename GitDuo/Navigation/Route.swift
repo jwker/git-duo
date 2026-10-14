@@ -4,13 +4,14 @@ import GitDuoKit
 /// ⚠️ **本文件原来还有一个本地 `RepoSection`，6.4 删掉了。**
 ///
 /// 它曾是 `Route` 的唯一来源（`TECH_SPEC §8.2` 逐字记的就是那一段）。6.1 在领域层
-/// 建了**同名同取值**的 `GitDuoKit.RepoSection`（另带 `title` / `initial` 与单测）。
+/// 建了**同名同取值**的 `GitDuoKit.RepoSection`（另带 `title` 与单测；
+/// 它当时还有个 `initial`，**2026-10-14 随分段条一起删了** —— 见 `RepoSection` 的类型说明）。
 /// 两份定义在同一模块里共存时，**同模块的类型会遮蔽 import 进来的那个** ⇒
 /// `Route.swift` 之外的代码拿到的都是本地那份（它没有 `title`），
-/// 症状是"给分段条取标题"编译不过，而报错指向的是一行完全正常的代码。
+/// 症状是"给入口取标题"编译不过，而报错指向的是一行完全正常的代码。
 ///
 /// 现在**唯一来源 = `GitDuoKit.RepoSection`**（有单测，且 `allCases` 顺序即
-/// 分段条上从左到右的顺序）。§8.2 已同步改写。
+/// 仓库首页四行入口里后三行从左到右的顺序）。§8.2 已同步改写。
 ///
 /// ⚠️ **本文件原来还有一个本地 `EditorMode`，切片 8.1 删掉了。**
 ///
@@ -32,8 +33,63 @@ import GitDuoKit
 /// 3. 本期**不注册深链**：`onOpenURL` 只保留 OAuth 回调分支（§3.9）。
 enum Route: Hashable, Sendable {
     case search
-    case repoDetail(fullName: String, section: RepoSection, path: String?)
-    case exploreRepoDetail(fullName: String, path: String?)
+
+    /// 「我的仓库」**首页**（PRD §4.4）—— 2026-10-14 起它是**枢纽页**（走查第 63 条）。
+    ///
+    /// ## ⚠️ 它的两个参数是**删掉**的，不是改名的
+    ///
+    /// 原签名 `repoDetail(fullName:section:path:)`：
+    /// - `section` —— 首页不再"默认选中某一段"（分段条撤掉，四个入口各推一页）；
+    /// - `path` —— 目录层级搬进了 `.repoCode` 那一页，**这一页根本没有目录**。
+    ///
+    /// ⚠️ `path` 那条尤其要记一笔：它曾经是"从面包屑某层推入的深层目录"，
+    /// 丢了它表现为**每次点面包屑都回到仓库根**（且源码里看不出异常）。
+    /// 现在这份职责在 `.repoCode` 里由**页内层级栈**承担 —— 那边的 `RepoCodeView`
+    /// 说明写着"层级不进路由"的理由。
+    case repoDetail(fullName: String)
+
+    /// **代码页**（§4.4 的代码浏览；2026-10-14 从首页里搬出来独立成页）。
+    ///
+    /// ## 它一份服务两种仓库
+    ///
+    /// `readOnly` 就是"这是不是我自己的仓库"（铁律 #7：只读态显式传参、不让下层页推断）：
+    /// - `.repoDetail` 那四行入口的第一行传 `false`（§4.4）；
+    /// - §4.13 探索页的「文件浏览」入口传 `true`（他人仓库那一档）。
+    ///
+    /// ## ⚠️ `path` 是**起始层**，不是"当前层"
+    ///
+    /// 目录层级是**这一页内部**的导航（`RepoCodeView` 里那个 `levels` 数组
+    /// —— ⚠️ **不是**一条嵌套的 `NavigationStack`，那样会崩，见那边的说明）——
+    /// 进了路由就意味着"每进一层是一页新页面"，那正是本次要修掉的两个问题
+    /// （首屏被头部大卡吃掉一半、每层都要重取一遍头部）。
+    ///
+    /// 那为什么还要一个 `path`？因为**入口有可能不是根目录**：
+    /// README 里一个指向 `docs/` 的链接（`FileView` 那条）点下去，用户期望的是
+    /// "打开那个目录"，而不是"回到仓库根再自己找一遍"。
+    ///
+    /// ⚠️ 两者不矛盾，区别在于**用户进去之后**：路由不再变。页内那个层级从这一层
+    /// **往下**推，返回一层也不会走路由 —— 路由只负责"从哪一层开始看"。
+    /// `nil` = 仓库根（§4.4 首页第一行与 §4.13 入口行都走这一档）。
+    case repoCode(fullName: String, readOnly: Bool, path: String?)
+
+    /// **列表分区页**（Issues / Pull Requests / Commits 各自成页，2026-10-14）。
+    ///
+    /// ⚠️ 三页**同构**（标题 + 一份列表 + 各自的档位与游标），只有一个 `section` 之差
+    /// —— 与 `.myConversations(kind:)` 同一条处置：做成三个 case 就要在 `RouteView`
+    /// 里把同一个视图写三遍，而那三遍**必然**在某次改动里分叉。
+    ///
+    /// ⚠️ 它只从 `.repoDetail` 的四行入口进入 ⇒ **没有 `readOnly` 参数**：
+    /// 那一页是"自己的仓库"，行里推详情时显式传 `readOnly: false`
+    /// （他人仓库那三样走的是 §4.13 自己的两个列表页）。
+    case repoSection(fullName: String, section: RepoSection)
+
+    /// 探索仓库详情（§4.13，**他人仓库**）。
+    ///
+    /// ⚠️ 它的 `path` 也是**删掉**的（2026-10-14）：这一页原先内嵌着目录浏览，
+    /// 所以子目录要"推入一层新页面"；现在 ⑤ / ⑥ 两分区改成一条入口行、
+    /// 目录层级跟着 `.repoCode` 走 ⇒ 这一页不再有"哪一层"这件事。
+    case exploreRepoDetail(fullName: String)
+
     case fileView(fullName: String, path: String, readOnly: Bool)
     /// 编辑器页（§4.6）。
     ///

@@ -44,6 +44,20 @@ public enum GitHubIcon {
     /// 列表行右侧的指示符 —— 原型 `I.chev`。
     public static let chevron = "chevron.right"
 
+    /// **返回** —— 代码页导航栏左上角那颗自己画的「返回」（2026-10-14，走查第 63 条的崩溃修复）。
+    ///
+    /// ## ⚠️ 为什么要自己画一颗
+    ///
+    /// 代码页的目录层级是**页内**的（点一行目录只换这一页里的内容，不推新页面）。
+    /// 而系统那颗返回键的语义是"退出这一页"（它属于**外层**栈）—— 两者不是一回事
+    /// ⇒ 把它藏掉（`.navigationBarBackButtonHidden(true)`）换成这一颗：
+    /// 栈里还有上一层就回上一层，已经在仓库根层才退出这一页。
+    ///
+    /// ⚠️ 与 `chevron`（`chevron.right`）**有意分开但同族**：那一支是"行尾的指示符"
+    /// （列表面，横向），这一支是"回到上一层的方向"（导航方向，RTL 下会翻面）。
+    /// 系统自己的返回键用的就是 `chevron.backward`，照它取。
+    public static let back = "chevron.backward"
+
     // ⚠️ **2026-10-11 删掉了 `plus`**（它原本是面包屑右侧那颗「＋ 添加」的图标）。
     //    原型用 `I.plus` 配全角 `＋` 文案 —— **两者都在**，照搬过来就是两个加号并排。
     //    用户报回「有两个加号」后，保留**文案里**那一个（与「添加」二字同字体、同字号），
@@ -55,6 +69,23 @@ public enum GitHubIcon {
     //    `point.3.connected.trianglepath.dotted` 的连线是虚点，与用户给的参考图相差太多。
     //    改由设计包自绘 `ForkIcon.swift` 统一处理这几处。
     //    见 `REVIEW-CHECKLIST` 第 54 条。
+
+    // MARK: - 仓库首页的四行入口（2026-10-14，走查第 63 条）
+
+    /// 「Commits」那一行 —— 提交历史。
+    ///
+    /// ## ⚠️ 四行里只有它需要新加字形
+    ///
+    /// 另外三行全部复用已有令牌：`folder` → 代码、`StateIcon.issueOpen` → Issues、
+    /// `StateIcon.pullRequestOpen` → Pull Requests（后两个与 §4.13「参与协作」
+    /// 那两行是同一个字形与同一个颜色）。「提交」此前**从没被画成过图标** ——
+    /// 提交行用的是作者头像，列表里没有"提交"这件事本身的符号。
+    ///
+    /// ⚠️ `clock.arrow.circlepath`（表盘 + 回环箭头）是 SF Symbols 里"历史"的通用形，
+    /// 与「Commits」这个"按时间往回看"的语义对得上。
+    /// 名字**在宿主机上验过存在**（`NSImage(systemSymbolName:)` 逐名打印）——
+    /// 本文件抬头那条"名字写错不会报错、只会在界面上凭空消失"正为此而写。
+    public static let commit = "clock.arrow.circlepath"
 
     // MARK: - 文件查看页的空态（切片 6.4）
 

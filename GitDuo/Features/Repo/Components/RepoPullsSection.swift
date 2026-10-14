@@ -35,7 +35,7 @@ import SwiftUI
 /// （分页 / 守卫 / 失败），而这两段**都在用它** —— 重复的只有版式，不是逻辑。
 struct RepoPullsSection: View {
 
-    /// **当前档**的取数状态机 —— 两档各持一份，成对存在 `RepoDetailViewModel` 里。
+    /// **当前档**的取数状态机 —— 两档各持一份，成对存在 `RepoSectionViewModel` 里。
     ///
     /// ⚠️ 两档都取 `state=` 的**不同取值**（开放 → `open`，已合并 → `closed`）：
     /// GitHub 没有"只看已合并"这一个筛选项，「已关闭但没合并」的靠 `LoadRepoPulls`

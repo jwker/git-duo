@@ -49,6 +49,22 @@ function push(id, params={}){
 function pop(){ if(stacks[active].length>1){ stacks[active].pop(); paintTab(); } }
 function goTab(id){ active=id; paintTabbar(); paintTab(true); }
 
+/* 返回键（导航栏那颗「返回」的语义）。
+   ⚠️ 2026-10-14：在**代码页**里，返回先回到**上一层目录**（那是这一页内部的层级栈，
+      不进导航栈）；只有在仓库根层时才真的退出这一页。没有这一条，"返回上一层目录"
+      就只剩面包屑一条路 —— 而 iOS 上大家按的是返回键。
+   ⚠️ 曾经这里写的是「返回键 + 左滑手势的共同语义」——**左滑那条已经去掉**
+      （层级是页内状态，系统的左滑属于外层栈、语义是"退出这一页"，见 `05-repo.js`）。
+   ⚠️ 其余页面一律照旧 = `pop()`。 */
+function backOrPop(){
+  const st = stacks[active], top = st[st.length-1];
+  if(top && top.id==='repoCode' && (top.params.sub||'')){
+    codeGo(codeParentPath(top.params.sub));
+    return;
+  }
+  pop();
+}
+
 /* ============================================================ screens */
 SCR.home = {
   large:true, render(){

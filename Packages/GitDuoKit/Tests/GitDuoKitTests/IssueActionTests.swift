@@ -223,7 +223,7 @@ struct IssueActionTests {
         #expect(OpenIssueIndicator.footer == "他人仓库：可评论参与讨论，关闭 Issue 需维护者权限")
 
         // ⚠️ 详情页这一句跟的是**原型里 PR 详情页那一处**（`08-pr.js:50`，用 ` · `），
-        //    不是列表页脚（`10-explore-repo.js:126`，用 `：`）。
+        //    不是列表页脚（`10-explore-repo.js:108`，用 `：`）。
         #expect(IssueCopy.readOnlyHint.contains(" · "))
         #expect(!IssueCopy.readOnlyHint.contains("："))
     }

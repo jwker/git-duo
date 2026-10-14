@@ -3,26 +3,46 @@ import GitHubAPI
 import GitDuoDesign
 import GitDuoKit
 
-/// 「我的仓库」详情页（PRD §4.4、TECH_SPEC §9.4）。
+/// 「我的仓库」**首页**（PRD §4.4、TECH_SPEC §9.4）—— 2026-10-14 起它是**枢纽页**。
 ///
-/// 结构：头部大卡（`RepoDetailHero`）+ 四分区切换条（`SectionTabs`）+ 分区内容。
+/// ## 结构：头部大卡 + 四行入口 + README
 ///
-/// ## 四个分区
-///
-/// | 分区 | 落在哪 |
+/// | 块 | 是什么 |
 /// |---|---|
-/// | ① 代码（默认） | ✅ 面包屑 + 文件树 + README（`RepoTreeSection`，与 §4.13 共用） |
-/// | ② Issues | ✅ 切片 7 —— `RepoIssuesSection`（两档 + 标签筛选 + 新建入口） |
-/// | ③ Pull Requests | ✅ 切片 7 —— `RepoPullsSection`（两档） |
-/// | ④ Commits | ✅ 提交列表（懒加载） |
+/// | 仓库头部大卡 | 图标 + 全名 + 描述 + Star / Watch / Fork |
+/// | 四行入口 | `代码` / `Issues` / `Pull Requests` / `Commits` —— 四个**独立页面**的入口 |
+/// | **README** | ⚠️ **2026-10-14 晚些加**（用户要求它从代码页挪到首页），在四行入口**之下** |
 ///
-/// 分段条**照原型画满四项**（顺序走 `RepoSection.allCases`，不自己写数组 ——
-/// 那样两处顺序会在某次调整里分叉）。
+/// ## ⚠️ README 为什么在**四行入口之下**（这是用户裁定，不是排版随手定的）
 ///
-/// ## 四条取数各有各的节奏
+/// README 可以很长（几十到几百行）。放在四行入口**之上**，等于让一段仓库自述
+/// 把这一页的四个出口推出首屏 —— 而"四行入口"正是这一页作为枢纽的**主要用途**
+/// （见下面那条第 63 条的改动：整件事的出发点就是"别让首屏被别的东西占满"）。
+/// 放在下面：枢纽该露的照常露，README 是"再往下看"的内容。
 ///
-/// 见 `RepoDetailViewModel` 的表格。本视图只做一件事：**给每一条各自画它自己的
-/// 骨架 / 内容 / 失败**，不把四条揉成一个 `isLoading`。
+/// ⚠️ 它是**块级**取数（`LoadRepoReadme`，要头部里的 `defaultBranch` 才知道用哪条分支
+/// 读 ⇒ 比头部晚一拍开始）。取不到**只让那一块给「重试」**，头部与四行入口照常
+/// —— 判据与分工写在 `RepoDetailViewModel` 的类型说明里，渲染的三档收在
+/// `RepoReadmeSection` 里（两页共用）。
+///
+/// ## ⚠️ 2026-10-14 的大改：分段条撤掉、四个分区各自成页（走查第 63 条）
+///
+/// 用户的原话是「在仓库首页放一个『代码』的菜单条，点击进入目录结构，之后的操作
+/// 都在这个新的页面中」，并列出了两个症状：文件浏览**占太多空间**、点进下级目录
+/// **整页重新加载**。谈下来选定的是最彻底的一档 ——
+/// **这一页只做枢纽**（大卡 + 四行入口），四个分区全部搬到自己的页面上：
+///
+/// | 原来 | 现在 |
+/// |---|---|
+/// | 一条分段条四项，内容就地换 | 四行入口，点进去是**独立页面** |
+/// | 「代码」= 内嵌在页面里的目录树 | 「代码」= 独立页面，**自己承载目录层级** |
+/// | 进一层目录 = `push` 一个新仓库详情页 | 进一层目录 = **页内推进一层**（不换页面）|
+///
+/// ⇒ 首屏省下来的正是**头部大卡（约 145pt）+ 分段条连上下间距（约 60pt）**
+/// —— 那 200pt 原来顶在**每一层目录**上面，进几次目录就要重复看几次。
+///
+/// ⚠️ 这一页**不再取**目录 / 提交 / Issues / PR：四行入口的落点各页自己去取自己的数据。
+/// 本页只取两件：头部（连带 Star 基准）与 README。
 ///
 /// ## ⚠️ 本页是「自己的仓库」，写入口的有无由**路由**决定
 ///
@@ -34,86 +54,44 @@ struct RepoDetailView: View {
 
     let fullName: String
 
-    /// §5.8 两个上传出口的取件与预处理（切片 8.7 / 决策 #71）—— 交给 `AddFileSheet`。
-    ///
-    /// ⚠️ 本页自己**不用它**，只是**过一手**：弹层是这一页呈现的，而依赖一律由
-    /// `RouteView` 从组合根带下来（页面不 new 用例 —— `AGENTS.md §3` 的铁律）。
-    let intake: UploadIntake
+    let detail: LoadRepoDetail
+    let readme: LoadRepoReadme
+    let starToggle: ToggleStar
+
+    /// ⚠️ 决策 #80 那一档判定的来源（"这个仓库写不写得动"）—— 传的必须是组合根里那
+    /// **同一个**缓存：另 new 一个的代价是每次进页白问一次 `GET /user/installations`，
+    /// 而且它拿不到组合根预热过的那份结果。
+    let starScope: StarWriteScopeCache
+
+    let visits: any RecentVisitStore
+    let toast: ToastCenter
 
     @Environment(AppEnvironment.self) private var env
 
     @State private var model: RepoDetailViewModel
 
-    /// 「现在」只在**进页与刷新时**取一次（同 `ExploreRepoDetailView`）——
-    /// 在 `body` 里取 `Date()` 会让"相对时间"变成渲染时机的一部分。
-    @State private var now = Date()
-
-    @State private var sheet: RepoSheet?
-
-    /// 本页的弹层路由。
-    ///
-    /// ⚠️ 用 `Identifiable` 枚举驱动 `.sheet(item:)`，**不用 `isPresented` 布尔量**
-    /// （同 `ExploreView`）：本页有四张弹层，两个布尔量同时为真时"哪一张盖在上面"
-    /// 就变成了呈现顺序问题，而那种 bug 只在特定点击序列下出现。一个枚举天然只有一张。
-    ///
-    /// ⚠️ 从 8.4 起它**带上了关联值**（`.upload` 要拿着选中的字节）⇒ 不再能靠
-    /// `String` 原始值当 `id`，改成手写（与 `BranchesViewModel.SheetRoute` 同形）。
-    private enum RepoSheet: Identifiable {
-        case branch
-        /// §4.4 分区二「筛选」—— 与 §4.10 新建 Issue 页**同一个**弹层（决策 #56）。
-        case labelPicker
-        /// §5.8 添加文件（三行出口）。
-        case addFile
-        /// §5.9 提交弹层（§5.8 后两个出口选中之后）—— 落点是**当前打开的那一层目录 + 那个文件名**。
-        case upload(UploadDraft)
-
-        var id: String {
-            switch self {
-            case .branch: "branch"
-            case .labelPicker: "labelPicker"
-            case .addFile: "addFile"
-            case let .upload(draft): "upload-\(draft.fileName)-\(draft.data.count)"
-            }
-        }
-    }
-
     init(
         fullName: String,
-        section: RepoSection,
-        path: RepoPath,
         detail: LoadRepoDetail,
-        treeLoader: LoadRepoTree,
-        commits: LoadRepoCommits,
-        branches: LoadBranches,
-        issues: LoadRepoIssues,
-        pulls: LoadRepoPulls,
+        readme: LoadRepoReadme,
         starToggle: ToggleStar,
-        // ⚠️ 决策 #80 那一档判定的来源（"这个仓库写不写得动"）。与 `intake` 一样是**过一手**：
-        //    传的必须是组合根里那**同一个**缓存 —— 另 new 一个的代价是每次进页白问一次
-        //    `GET /user/installations`，而且它拿不到组合根预热过的那份结果。
         starScope: StarWriteScopeCache,
-        saver: SaveFile,
-        intake: UploadIntake,
-        memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
-        self.intake = intake
+        self.detail = detail
+        self.readme = readme
+        self.starToggle = starToggle
+        self.starScope = starScope
+        self.visits = visits
+        self.toast = toast
         _model = State(initialValue: RepoDetailViewModel(
             fullName: fullName,
-            section: section,
-            path: path,
             detail: detail,
-            treeLoader: treeLoader,
-            commits: commits,
-            branches: branches,
-            issues: issues,
-            pulls: pulls,
+            readme: readme,
             starToggle: starToggle,
             starScope: starScope,
-            saver: saver,
-            memory: memory,
             visits: visits,
             toast: toast
         ))
@@ -129,161 +107,12 @@ struct RepoDetailView: View {
         .background(Theme.Palette.background)
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable {
-            now = Date()
-            await model.refresh()
-            now = Date()
-        }
-        .task {
-            now = Date()
-            await model.start()
-            // 取完之后再对一次表：网速慢时"2 天前"可能已经跨过了一个整点。
-            now = Date()
-        }
-        .sheet(item: $sheet) { route in
-            switch route {
-            case .branch:
-                BranchSheet(
-                    state: model.tree.branchList,
-                    currentBranch: model.tree.branch ?? "",
-                    isReadOnly: false,
-                    onSelect: { picked in
-                        sheet = nil
-                        Task { await model.switchBranch(to: picked) }
-                    },
-                    onManage: {
-                        sheet = nil
-                        env.router.push(.branches(fullName: fullName))
-                    },
-                    onRetry: { Task { await model.tree.loadBranches() } }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .task { await model.tree.loadBranches() }
-
-            case .labelPicker:
-                LabelPickerSheet(
-                    catalog: env.labelCatalog,
-                    fullName: fullName,
-                    // 选中集合归本页（`model.issueLabels`）—— 弹层只读它、只通知变化。
-                    selected: model.issueLabels,
-                    onToggle: { label in
-                        // 点一行是**两向**的：已选则取消、未选则选中。
-                        Task {
-                            if model.issueLabels.contains(where: { $0.name == label.name }) {
-                                await model.removeIssueLabel(label)
-                            } else {
-                                await model.selectIssueLabel(label)
-                            }
-                        }
-                    },
-                    onCreation: { result in
-                        // ⚠️ 走到这里的**只有关弹层的那两条**（重名 / 建成）—— 决策 #77：
-                        //    空名那一档弹层不关，话由弹层自己画在按钮上方，**不到这里来**。
-                        //    §7 的两句逐字在领域层，这里只负责挑哪一句。
-                        switch result {
-                        case .emptyName:
-                            // 到不了（弹层自己说）。见 `NewIssueView` 那一处的同一条注释。
-                            break
-                        case let .alreadyExists(label):
-                            env.toast.show(IssueCopy.duplicateLabelToast)
-                            // 顺手选中已经是筛选项的那颗（"已存在"的语义就是"给你用上它"）。
-                            Task { await model.selectIssueLabel(label) }
-                        case let .created(label):
-                            env.toast.show(IssueCopy.labelCreatedToast(name: label.name))
-                            Task { await model.selectIssueLabel(label) }
-                        }
-                    }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-
-            case .addFile:
-                // §5.8。⚠️ 三个出口**都是"换成另一张"**（编辑器 / 提交弹层），
-                //    所以这里每一处都先把 `sheet` 置成下一个值 ——
-                //    直接 `dismiss()` 会先关掉这张、再开下一张，中间那一帧是空屏。
-                AddFileSheet(
-                    branch: model.tree.branch ?? "",
-                    intake: intake,
-                    onNewFile: {
-                        sheet = nil
-                        // 新建模式的路径由**编辑器里的输入框**定（§4.6），
-                        // ⚠️ 但要把它**预填成"就在这一层目录里建"**（2026-10-12 用户报回
-                        //    「添加 / 上传都落在根目录、而不是我打开的对应目录」）——
-                        //    根目录时传 `nil`，编辑器那边与过去逐字相同。
-                        env.router.push(.editor(
-                            fullName: fullName,
-                            path: nil,
-                            mode: .create,
-                            directory: model.tree.path.isRoot ? nil : model.tree.path.raw
-                        ))
-                    },
-                    onPicked: { draft in
-                        // 选中那一刻字节已经在手上（`UploadDraft` 的说明）——
-                        // 这里只把它交给下一张弹层。
-                        sheet = .upload(draft)
-                    }
-                )
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-
-            case let .upload(draft):
-                // §5.8 的后两个出口 → §5.9 的提交弹层（**同一个** `CommitSheet`，
-                // 与编辑器那条路共用；差别只在标题来源与多一行只读的落点）。
-                uploadCommitSheet(draft)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
-        }
+        .refreshable { await model.refresh() }
+        .task { await model.start() }
     }
 
     private var name: String {
         (try? RepositoryMapper.splitFullName(fullName))?.name ?? fullName
-    }
-
-    // MARK: - §5.8 两个上传出口的提交弹层
-
-    /// 上传出口的「提交更改」（§5.8 → §5.9）。
-    ///
-    /// ⚠️ 用的是**与编辑器同一个** `CommitSheet`。差别只有三处：
-    /// 标题来源（`draft.source`）、多一行只读的「将写入 `{路径}`」、
-    /// 以及这一条路**恒为新建**（`sha` 由 `model.upload` 写死 `nil`）。
-    /// 另做一张弹层会让 §5.9 那两行输入 / 409 两个出口 / 两档结果屏各抄一份。
-    ///
-    /// ⚠️ `defaultBranchName` 在**呈现这一刻**算：`FileWriteTarget.defaultNewBranchName(now:)`
-    /// 的 `now` 必传（同 `EditorView`），在这里取 `Date()` 与在那里取是同一件事 ——
-    /// 关键是它只在弹层出现时算一次，而不是每次重绘都变。
-    private func uploadCommitSheet(_ draft: UploadDraft) -> some View {
-        CommitSheet(
-            source: draft.source,
-            fullName: fullName,
-            branch: model.tree.branch ?? "",
-            // ⚠️ 上传出口**必须露出落点**：路径是 App 定的（§5.8 / 决策 #70②），
-            //    不露出来用户就只能靠猜 —— 而"东西存到哪"是这一步唯一可能搞错的事。
-            //    ⚠️ 它与 `model.upload` 写下去的是**同一个方法**算出来的那一份
-            //   （`uploadDestination`）—— 两处各算一次的那天，说出来的和做出来的会不一样。
-            //    算不出来时给 `nil`：那一档提交必然失败，宁可**不显示**也不要显示一个假落点。
-            destinationPath: model.uploadDestination(for: draft.fileName),
-            // ⚠️ 动过才非 nil（切片 8.7 / 8.8）—— 那一句 caption 就是"App 改了你选中的
-            //    字节 / 甚至文件名"这件事的唯一出口（决策 #71⑤ · #72⑤）。
-            adjustment: draft.adjustment,
-            defaultBranchName: FileWriteTarget.defaultNewBranchName(now: Date()),
-            onSubmit: { commit, _ in
-                // ⚠️ 那个 `sha` 参数在这里**有意丢掉**：上传恒为新建
-                //    （`RepoDetailViewModel.upload` 里写死 `nil`），不存在"基准过期"这一档。
-                await model.upload(draft, commit: commit)
-            },
-            onSettled: { outcome, commit in
-                env.toast.show(CommitSheetCopy.toast(
-                    for: outcome,
-                    currentBranch: model.tree.branch ?? "",
-                    message: commit.effectiveMessage
-                ))
-                // ⚠️ **这里不 pop**：用户是从**这一页**点「＋ 添加」进来的，
-                //    提交完该留在这儿看那个新文件（列表已经由 `model.upload` 刷过）。
-                //    「提交完返回上一页」是**编辑器**那条路的规定（§4.6），不是这一条。
-            }
-        )
     }
 
     // MARK: - 主区域
@@ -309,279 +138,130 @@ struct RepoDetailView: View {
                         Task { await model.toggleStar() }
                     }
 
-                    sectionTabs
+                    entries
                         .padding(.top, Theme.Spacing.m)
 
-                    sectionBody
-                }
-            }
-
-        case let .failure(error):
-            // 头部拿不到 ⇒ **整页失败**：连分段条都不画。
-            // 画着一个能切但每一段都空的分段条，比一句"加载失败"更难懂。
-            failureState(error)
-        }
-    }
-
-    private var sectionTabs: some View {
-        SectionTabs(
-            // ⚠️ 顺序走 `allCases`，不写数组（`RepoSection` 的说明）。
-            items: RepoSection.allCases.map {
-                SectionTabs.Item(id: $0.rawValue, title: $0.title)
-            },
-            selectedID: model.section.rawValue
-        ) { picked in
-            guard let section = RepoSection(rawValue: picked.id) else { return }
-            Task { await model.select(section: section) }
-        }
-        // 原型 `.prtabs{margin-bottom:12px}`。
-        .padding(.bottom, Theme.Spacing.m)
-    }
-
-    // MARK: - 分区内容
-
-    @ViewBuilder
-    private var sectionBody: some View {
-        switch model.section {
-        case .code:
-            codeSection
-
-        case .issues:
-            RepoIssuesSection(
-                list: model.currentIssues,
-                segment: model.issueSegment,
-                openTitle: model.openIssuesTitle,
-                closedTitle: model.closedIssuesTitle,
-                selectedLabels: model.issueLabels,
-                now: now,
-                onSelectSegment: { segment in
-                    Task { await model.selectIssueSegment(segment) }
-                },
-                onTapFilter: { sheet = .labelPicker },
-                onRemoveLabel: { label in
-                    Task { await model.removeIssueLabel(label) }
-                },
-                onOpen: { number in
-                    // ⚠️ `readOnly: false` **显式传**（铁律 #7）—— 与下面 PR 那一处同一条：
-                    //    本页是"自己的仓库"（本页的可写性在别处也是这么写的）。
-                    env.router.push(.issueDetail(fullName: fullName, number: number, readOnly: false))
-                },
-                onCreate: {
-                    env.router.push(.newIssue(fullName: fullName))
-                }
-            )
-
-        case .pullRequests:
-            RepoPullsSection(
-                list: model.currentPulls,
-                segment: model.pullSegment,
-                openTitle: model.openPullsTitle,
-                mergedTitle: model.mergedPullsTitle,
-                now: now,
-                onSelectSegment: { segment in
-                    Task { await model.selectPullSegment(segment) }
-                },
-                onOpen: { number in
-                    // ⚠️ `readOnly: false` **显式传**（铁律 #7）：本页是"自己的仓库"，
-                    //    那个判定在路由进入本页之前就做完了，本页不推断仓库归属。
-                    env.router.push(
-                        .prDetail(fullName: fullName, number: number, readOnly: false)
-                    )
-                }
-            )
-
-        case .commits:
-            commitsSection
-        }
-    }
-
-    // MARK: - ① 代码
-
-    /// 面包屑 + 文件行 + README。
-    ///
-    /// ⚠️ 三块本体在 **`RepoTreeSection`（共享件）**里 —— §4.13 第 ⑤ / ⑥ 分区
-    /// 渲染的是同一件事（原型这两处的 HTML 结构逐行对应）。
-    /// 本页与它只有两处不同，都在下面这两个参数里：
-    /// 面包屑右侧多一个「⋯」动作菜单（复制路径 / 添加文件）、点一行的落点是**可写**的那两条路由。
-    ///
-    /// ⚠️ `title: nil` —— §4.4 的这一块没有小节标题（身份由顶部的分段条表明），
-    /// 而 §4.13 有 `文件浏览 · {path}`。
-    private var codeSection: some View {
-        RepoTreeSection(
-            session: model.tree,
-            onOpenDirectory: { path in
-                env.router.push(.repoDetail(
-                    fullName: fullName, section: .code, path: path.raw
-                ))
-            },
-            onOpenFile: { path in
-                env.router.push(.fileView(
-                    fullName: fullName, path: path.raw, readOnly: false
-                ))
-            },
-            onTapBranch: { sheet = .branch },
-            onSelectSegment: { index in navigate(toCrumb: index) }
-        ) {
-            breadcrumbMenu
-        }
-    }
-
-    /// 面包屑右侧的动作位 —— **2026-10-12 起收成一颗「⋯」**（用户裁定，`REVIEW-CHECKLIST` 第 56 条）。
-    ///
-    /// 它此前是一颗文字按钮（文案 `＋ 添加`）—— 那个动作连同新增的「复制路径」
-    /// 一起住进了系统原生 `Menu`。
-    ///
-    /// ⚠️ **这是本项目第一处原生菜单**：其余弹层都是自绘 sheet
-    /// （`.presentationDetents([.medium])`），而一个只有两项的菜单做成半屏 sheet
-    /// 太重、观感也离原型更远 —— 用户在这两条之间选了原生 `Menu`。
-    ///
-    /// ⚠️ **菜单项写「添加文件」而不是「新建文件」**：它打开的是 `AddFileSheet`
-    /// 那张**三行**弹层（新建文件 / 上传文件 · 文件 App / 上传图片 · 相册），
-    /// 叫「新建文件」与它打开的东西对不上（文案见 `RepoCopy.addFileMenuAction`）。
-    ///
-    /// ⚠️ **代价如实说**：这个入口从**一键变两键**（用户知情并接受）。
-    ///
-    /// ⚠️ 形状（图标 13pt + `.padding(8)` ⇒ 约 29×29、圆角 `Radius.control`、
-    /// `surfaceSunken` 底）对着**它原来那颗「＋ 添加」的高度**拟 —— 那颗是
-    /// `footnote`(13) 加 `.padding(.vertical, 5)`。图标 13pt 与分支胶囊里那一颗
-    /// （`BreadcrumbBar` 内部同样写 `.system(size: 13)`）同字号。
-    ///
-    /// ⚠️ **未目视**：`Menu` 的 label 由系统接管，它会不会给这颗图标套上 tint
-    /// 或自带按钮样式，只有跑一次模拟器才知道 —— 下面那套显式 `foregroundStyle`
-    /// 是按"系统会尊重它"写的；真机上观感若不对，改的是这里、不是文案。
-    private var breadcrumbMenu: some View {
-        Menu {
-            Button {
-                model.copyCurrentPath()
-            } label: {
-                Label(RepoCopy.copyPathAction, systemImage: GitHubIcon.copy)
-            }
-
-            Button {
-                sheet = .addFile
-            } label: {
-                Label(RepoCopy.addFileMenuAction, systemImage: GitHubIcon.file)
-            }
-        } label: {
-            Image(systemName: GitHubIcon.ellipsis)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.Palette.textSecondary)
-                .padding(Theme.Spacing.s)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                        .fill(Theme.Palette.surfaceSunken)
-                )
-                .contentShape(Rectangle())
-        }
-        .accessibilityLabel(RepoCopy.breadcrumbMenuAccessibilityLabel)
-    }
-
-    /// 点面包屑的某一层 —— 原型是**推入一层新页面**（`navToSub`），不是原地替换。
-    ///
-    /// - Parameter index: 面包屑上的下标，**第 0 段是仓库全名**。
-    private func navigate(toCrumb index: Int) {
-        // index 0 ⇒ 仓库根目录；index k ⇒ 仓库内的第 k-1 层（`RepoPath` 里根是空路径）。
-        let target = index == 0 ? RepoPath.root : model.tree.path(upTo: index - 1)
-        guard let target, target != model.tree.path else { return }
-        env.router.push(.repoDetail(
-            fullName: fullName, section: .code, path: target.isRoot ? nil : target.raw
-        ))
-    }
-
-    // MARK: - ④ Commits
-
-    @ViewBuilder
-    private var commitsSection: some View {
-        switch model.commits.content() {
-        case .skeleton:
-            commitsSkeleton
-
-        case .items:
-            commitsList
-
-        case .needsMore:
-            continueLoading
-
-        case .empty:
-            EmptyBox(title: CommitCopy.emptyTitle, hint: CommitCopy.emptyHint)
-
-        case let .failure(error):
-            // 切片 7 起这块是**共享件**（Issues / PR 两段也用同一个失败块）——
-            // 抄三份的下场是那句「这一块加载失败」只会在其中一处被改。
-            SectionFailure(error: error) { Task { await model.loadMoreCommits() } }
-        }
-    }
-
-    private var commitsList: some View {
-        let items = model.commits.items
-        let lastID = items.last?.id
-
-        return CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
-            // ⚠️ `LazyVStack`（不是 `VStack`）：滚到底自动加载靠的就是
-            //    "最后一行真正出现时才触发"，而 `VStack` 会把所有行一次建出来 ⇒
-            //    一进这一页就把后面每一页都请求一遍。
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, commit in
-                    RepoCommitRow(
-                        commit: commit,
-                        now: now,
-                        showsSeparator: index < items.count - 1 || model.commits.canLoadMore
+                    // ⚠️ README 在**四行入口之下**（用户裁定）—— 理由见类型说明：
+                    //    上面那四行是这一页作为枢纽的主要出口，一段长 README
+                    //    不该把它们推出首屏。
+                    //
+                    // ⚠️ `ref` 用头部里的 `defaultBranch`：与 `LoadRepoReadme` 取数时
+                    //    用的是同一个值（正文与图片必须同源，见 `RepoReadmeSection`）。
+                    RepoReadmeSection(
+                        state: model.readme,
+                        fullName: fullName,
+                        ref: snapshot.detail.defaultBranch,
+                        // ⚠️ `readOnly: false` —— 本页是「自己的仓库」，写入口的有无
+                        //    由**路由**在进入前定下（铁律 #7），这里不自己去推断。
+                        readOnly: false
                     ) {
-                        env.router.push(.commitDetail(
-                            fullName: fullName, sha: commit.sha, readOnly: false
-                        ))
-                    }
-                    .onAppear {
-                        // §4.4：普通列表**滚到底自动加载**（只有搜索用「加载更多」按钮）。
-                        // 只对最后一行触发，否则每出现一行都打一次请求。
-                        if commit.id == lastID {
-                            Task { await model.loadMoreCommits() }
-                        }
+                        Task { await model.retryReadme() }
                     }
                 }
-
-                commitsFooter
             }
+
+        case let .failure(error):
+            // 头部拿不到 ⇒ **整页失败**：连四行入口都不画 ——
+            // 那四行里有三行要仓库全名之外的上下文，而它们推进去也只会各失败一次。
+            PageFailure(error: error) { Task { await model.refresh() } }
         }
     }
 
-    /// 列表底部：在途转圈 / 失败重试行。**不遮挡已有内容**（§8.5）。
-    @ViewBuilder
-    private var commitsFooter: some View {
-        if model.commits.isLoading, !model.commits.items.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.m)
-        } else if model.commits.error != nil, !model.commits.items.isEmpty {
-            Button("加载失败 · 重试") {
-                Task { await model.loadMoreCommits() }
-            }
-            .font(Theme.Font.footnote)
-            .padding(.vertical, Theme.Spacing.m)
-            .frame(maxWidth: .infinity)
-        }
-    }
+    // MARK: - 四行入口
 
-    /// 空、但服务端还有下一页 —— 此时**不能说「还没有提交」**。
+    /// 四行入口（`代码` + `RepoSection.allCases` 那三档）。
     ///
-    /// 为什么需要一个显式按钮：空列表没有可滚内容，`.onAppear` 的自动加载永远触发不到。
-    private var continueLoading: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            if model.commits.isLoading {
-                ProgressView()
-            } else {
-                Button("继续加载") {
-                    Task { await model.loadMoreCommits() }
+    /// ⚠️ **顺序**：`代码` 恒在第一行，后三行走 `RepoSection.allCases`
+    /// （`CaseIterable` 的顺序就是原型分段条从左到右的顺序）——
+    /// 不在这里手写一个数组，否则"入口顺序变了"不会有人当成 bug 报上来。
+    ///
+    /// ⚠️ 图标只有「Commits」那一行是新加的（`GitHubIcon.commit`）；
+    /// 另外三行复用已有字形：`folder`（代码）、`StateIcon.issueOpen`、`StateIcon.pullRequestOpen`
+    /// —— 后两个与 §4.13「参与协作」那两行**同一个字形、同一个颜色**，
+    /// 于是"同一个东西在两个页面上长得一样"这条继续成立。
+    private var entries: some View {
+        let rows = entryRows
+
+        return CardBox(vertical: Theme.Spacing.xs) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                LinkRow(
+                    systemImage: row.icon,
+                    iconTint: row.tint,
+                    title: row.title,
+                    showsSeparator: index < rows.count - 1
+                ) {
+                    env.router.push(row.route)
                 }
-                .font(Theme.Font.body)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xxl)
     }
 
-    // MARK: - 骨架 / 失败
+    /// 四行入口的定义（图标 / 颜色 / 文字 / 落点全在一处）。
+    ///
+    /// ⚠️ 做成一个中间结构而不是在 `ForEach` 里 `switch`：四行里三行的图标与颜色
+    /// 随 `section` 变、落点也随它变，散在视图里就是"改一行颜色要翻三层"。
+    private var entryRows: [EntryRow] {
+        var rows = [
+            EntryRow(
+                id: "code",
+                icon: GitHubIcon.folder,
+                tint: Theme.Palette.textTertiary,
+                title: RepoCopy.codeEntryTitle,
+                route: .repoCode(fullName: fullName, readOnly: false, path: nil)
+            )
+        ]
 
+        rows += RepoSection.allCases.map { section in
+            EntryRow(
+                id: section.rawValue,
+                icon: icon(for: section),
+                tint: tint(for: section),
+                title: section.title,
+                route: .repoSection(fullName: fullName, section: section)
+            )
+        }
+
+        return rows
+    }
+
+    private func icon(for section: RepoSection) -> String {
+        switch section {
+        case .issues: StateIcon.issueOpen
+        case .pullRequests: StateIcon.pullRequestOpen
+        case .commits: GitHubIcon.commit
+        }
+    }
+
+    /// 状态图标用**开放态那个颜色**（与 §4.13 那两行一致）。
+    ///
+    /// ⚠️ 这三个入口**都不是状态**（它们是"去哪个列表"），所以颜色只是沿用
+    /// "这一类东西"的固定色 —— 与列表行上的状态胶囊无关，不要从这里推"这个仓库
+    /// 有没有开放的 Issue"。
+    private func tint(for section: RepoSection) -> Color {
+        switch section {
+        case .issues, .pullRequests: Theme.Palette.stateOpenIcon
+        case .commits: Theme.Palette.textTertiary
+        }
+    }
+
+    /// 一行入口。
+    private struct EntryRow: Identifiable {
+        let id: String
+        let icon: String
+        let tint: Color
+        let title: String
+        let route: Route
+    }
+
+    // MARK: - 骨架
+
+    /// 首屏骨架（头部大卡 + 四行入口）。
+    ///
+    /// ⚠️ 它此前是"大卡 + 分段条 + 代码分区骨架"三块 ——
+    /// 后两块随分段条一起删掉了（这次改动的核心就是**别让骨架盖住半屏**）。
+    ///
+    /// ⚠️ 四行那一段的形状必须与真实内容**对齐**（`CardBox(vertical: Theme.Spacing.xs)`
+    /// + 每行约 42pt）—— 数据到达时整块跳动是最容易被做出来、也最容易被忽略的瑕疵。
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -607,42 +287,19 @@ struct RepoDetailView: View {
             .background(Theme.Palette.surface)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous))
 
-            SkeletonBar(height: 34)
-                .padding(.top, Theme.Spacing.m)
-
-            // ⚠️ 代码分区那一块**复用共享件的骨架**（`RepoTreeSkeleton`）——
-            //    本文件此前自己抄了一份逐字相同的（`codeSkeleton`），随切片 10 收口删除。
-            //    理由同 6.4 建 `RepoTreeSection` 时那条：**同一个 UI 元素有两处定义 ⇒ 必然分叉**。
-            RepoTreeSkeleton()
+            CardBox(vertical: Theme.Spacing.xs) {
+                ForEach(0..<4, id: \.self) { _ in
+                    HStack(spacing: 11) {
+                        SkeletonBar(height: 17, width: 20)
+                        SkeletonBar(height: 14, width: 120)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, Theme.Spacing.xs)
+                }
+            }
+            .padding(.top, Theme.Spacing.m)
         }
         .accessibilityHidden(true)
-    }
-
-    /// 提交段的骨架。
-    ///
-    /// ⚠️ **容器参数与行内边距必须与上面那个真实的 `commitsList` 对齐**
-    /// （`CardBox(vertical: Theme.Spacing.xs)` + `RepoCommitRow` 的 `padding:11px 4px`）。
-    /// 2026-10-09 切片 10 修：此前写的是 `Theme.Spacing.m`（12）且没有行内边距 ⇒
-    /// 数据到达时**整块上移 8pt**，随后每一行再各挪一次。
-    private var commitsSkeleton: some View {
-        CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
-            ForEach(0..<6, id: \.self) { _ in
-                HStack(spacing: 10) {
-                    SkeletonBar(height: 28, width: 28, cornerRadius: 14)
-                    SkeletonBar(height: 13, width: 200)
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 11)
-                .padding(.horizontal, Theme.Spacing.xs)
-            }
-        }
-    }
-
-    /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。
-    ///
-    /// ⚠️ 走共用件 `PageFailure`（切片 7.4 收口）：本页、`CommitDetailView`、
-    /// `BranchesView` 三处原本各有一份**逐字相同**的实现。
-    private func failureState(_ error: GitHubError) -> some View {
-        PageFailure(error: error) { Task { await model.refresh() } }
     }
 }

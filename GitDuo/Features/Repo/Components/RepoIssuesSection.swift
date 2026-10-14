@@ -25,12 +25,12 @@ import SwiftUI
 ///
 /// ## ⚠️ 取数不由本件发起
 ///
-/// 两档各自的加载时机在 `RepoDetailViewModel`（**切到这一档才取**，且
+/// 两档各自的加载时机在 `RepoSectionViewModel`（**切到这一档才取**，且
 /// **每档各自持有游标与失败态**）—— 那是一条业务规则，散进视图就没人守得住。
 /// 本件只做两件事：画，以及把点击翻成对 `list` 的调用。
 struct RepoIssuesSection: View {
 
-    /// **当前档**的取数状态机 —— 两档各持一份，成对存在 `RepoDetailViewModel` 里。
+    /// **当前档**的取数状态机 —— 两档各持一份，成对存在 `RepoSectionViewModel` 里。
     ///
     /// ⚠️ 传实例而不是"当前档的数据"：分页（滚到底自动加载 / 底部重试）要能
     /// **作用在这一档上**，而那个状态只有它有。
@@ -110,7 +110,7 @@ struct RepoIssuesSection: View {
                 .init(id: Self.filterID, title: RepoIssuesSectionCopy.filterAction, isAction: true),
             ],
             selectedID: segment.rawValue,
-            // ⚠️ 本件在**已经内缩的内容区**里（`RepoDetailView` 的外层有页面边距）
+            // ⚠️ 本件在**已经内缩的内容区**里（`RepoSectionListView` 的外层有页面边距）
             //    ⇒ 分段条不能再自带一层，否则会缩成 32pt、与卡片左边缘对不齐。
             padsHorizontally: false
         ) { picked in

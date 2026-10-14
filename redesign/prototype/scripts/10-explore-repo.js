@@ -5,7 +5,6 @@ SCR.exploreRepoDetail = {
   after(p){ recordVisit(p.repo); }, render(p){
     activeRepo = p.repo;   // 当前仓库 → 分支记忆按它解析
     const t = TRENDING.find(x=>x.n===p.repo) || {n:p.repo,d:'',lang:'其他',lc:'#959da5',s:'—',tp:[],watch:'—',fork:'—',lic:'未指定',upd:'未知',rel:'—',reld:'',relNote:'',contrib:0};
-    const path = p.sub||'';
     return `
     <div class="content">
       <div class="repo-hero">
@@ -49,15 +48,13 @@ SCR.exploreRepoDetail = {
           <button class="btn ghost" style="padding:6px 14px" onclick="toast('演示：查看 3 个附件资产')">资产 (3)</button>
         </div>
       </div>
-      <div class="section-label">文件浏览${path?` · ${path}`:''}</div>
-      ${exploreTree(p.repo, path, t)}
-      <div class="section-label">README.md</div>
-      <div class="markdown">
-        <h1>${p.repo.split('/').pop()}</h1>
-        <p>${t.d}</p>
-        <h2>安装</h2>
-        <pre><code><span class="fn">git clone</span> <span class="st">https://github.com/${p.repo}.git</span></code></pre>
+      <div class="section-label">文件浏览</div>
+      <div class="card" style="padding:4px 14px">
+        <div class="file-row" onclick="push('repoCode',{repo:'${p.repo}',ro:1})">
+          ${svg(I.folder)}<div class="grow"><div class="fname">浏览目录</div></div>${svg(I.chev)}
+        </div>
       </div>
+      ${readmeBlock()}
       <div class="section-label">参与协作</div>
       <div class="card" style="padding:4px 14px">
         <div class="file-row" onclick="push('exploreIssueList',{repo:'${p.repo}'})">
@@ -76,7 +73,7 @@ SCR.exploreRepoDetail = {
         '<b>Star</b>：公开星标，计数 +1 并进入 Starred 列表（与下方收藏互不相关）',
         '<b>Watch</b>：展示订阅计数；<b>Fork</b>：Fork 后获得完整写权限',
         '<b>收藏</b>：私人收藏夹，仅自己可见（对 Star 数无影响）｜先点收藏，再点才可选择列表；一个仓库只在一个列表里，换列表会从原列表移出',
-        '<b>只读浏览</b>：README · 文件树 · 分支切换（仅浏览，无管理分支）',
+        '<b>只读浏览</b>：⑤ 文件浏览是一条入口（「浏览目录」），进的是目录页 —— 那里可切分支（仅浏览，无管理分支）｜⑥ README **就在本页**，在 ⑤ 那条入口行之下',
         '<b>Releases</b>：版本说明 · 下载源码与附件资产',
         '<b>洞察</b>：语言构成 · 贡献者概览',
         '<b>参与协作</b>：Issues 可参与讨论（无关闭）· PR 可评论（不可合并）',
@@ -93,25 +90,13 @@ function toggleXStar(btn, base){
   btn.querySelector('span').textContent = on ? `已 Star · ${shown}` : `Star · ${shown}`;
   toast(on ? '已 Star · 公开星标，仓库计数 +1' : '已取消 Star · 仓库计数 −1');
 }
-function exploreTree(repo, path, t){
-  const items = TREE[path]||TREE[""];
-  const crumbPath = path ? ` / <b>${path.split('/').pop()}</b>` : '';
-  return `
-    <div class="crumb"><span class="branch-chip" onclick="openBranchSheet(false)">${svg(I.fork)} ${curBranch()} ▾</span> · <span>${repo}</span>${crumbPath}</div>
-    <div class="card" style="padding:4px 14px">
-      ${items.map(f=>{
-        const full = path ? path+'/'+f.n : f.n;
-        const act = f.t==='dir'
-          ? `push('exploreRepoDetail',{repo:'${repo}',sub:'${full}'})`
-          : `push('fileView',{f:'${full}',ro:1})`;
-        return `<div class="file-row" onclick="${act}">
-          ${svg(f.t==='dir'?I.dir:I.file)}
-          <div class="grow"><div class="fname">${f.n}</div><div class="fmsg">${f.msg}</div></div>
-          ${svg(I.chev)}
-        </div>`;
-      }).join('')}
-    </div>`;
-}
+/* ⚠️ 2026-10-14（走查第 63 条）：本页原来内嵌一整块目录浏览（`exploreTree`），
+   子目录靠 `push('exploreRepoDetail',{sub})` 推入一个**新的详情页**。
+   现在 ⑤ 文件浏览 是一条入口行（「浏览目录」），点它进 `SCR.repoCode`（`ro:1`，
+   目录层级在那一页内部推进）—— 原函数随之删除。
+   ⚠️ **同日晚些：⑥ README 回到本页**（在 ⑤ 那条入口行之下，用 `readmeBlock()`）——
+   它一度跟着目录进了代码页，现在两个仓库首页共用那一块（§4.4 的枢纽也一样）。
+   ⇒ 那条入口行因此**不再叫「浏览目录与 README」**（README 就在它下面）。 */
 SCR.exploreIssueList = {
   inline:p=>'Issues', render(p){
     return `

@@ -229,8 +229,10 @@ public enum FileCopy {
     /// 否则读屏用户听到的是"路径操作"，而里面躺着编辑 / 重命名 / 删除。
     ///
     /// ⚠️ 它说的是**菜单本身**（按下去会弹出什么），不是里面某一项的动作。
-    /// 与 `RepoCopy.breadcrumbMenuAccessibilityLabel` 同一条处置
-    /// （那边那颗是"路径操作菜单"，**两边现在有意不同名** —— 它的内容确实只有路径那两件）。
+    /// 与 `RepoCopy.operationsMenuAccessibilityLabel` 同一条处置
+    /// （那边那颗是"目录操作菜单"，**两边有意不同名** —— 两个菜单管的**对象**不同：
+    /// 一颗管这个文件，一颗管这一层目录。2026-10-14 那边也搬到了导航栏右上角，
+    /// 位置与控件与本颗逐字相同，差别只剩"管的是谁"）。
     public static let operationsMenuAccessibilityLabel = "文件操作菜单"
 
     // MARK: - 不支持预览（决策 #54 的第四档）

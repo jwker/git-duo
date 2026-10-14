@@ -39,6 +39,17 @@ public enum RepoCopy {
 
     // MARK: - 代码分区
 
+    /// 仓库首页那四行入口的**第一行**：`代码`（2026-10-14 新增，走查第 63 条）。
+    ///
+    /// ⚠️ 它与 `RepoSection.title` 是**两套**：那个枚举现在只剩三个列表分区
+    /// （Issues / Pull Requests / Commits），「代码」不是分区而是**一个入口**
+    /// —— 点它进的是一个独立页面（`RepoCodeView`），那里承载目录层级。
+    /// 见 `RepoSection` 的类型说明。
+    ///
+    /// ⚠️ 逐字就是原型分段条上那一格的文字（`[['code','代码'], …]`）——
+    /// 分段条撤掉之后，这两个字**换了住址**，没有换说法。
+    public static let codeEntryTitle = "代码"
+
     /// 空目录提示（原型 `repoSeg` 的 code 分支逐字）。
     public static let emptyDirectory = "空目录"
 
@@ -51,7 +62,13 @@ public enum RepoCopy {
     /// 不是"这个文件的准确名字"。刻意保持逐字。
     public static let readmeSectionTitle = "README.md"
 
-    /// 面包屑右侧动作位里那一项 —— **2026-10-12 起它住在「⋯」菜单里**。
+    /// 代码页右上角那颗「⋯」菜单里的一项 —— **2026-10-12 起它住在「⋯」菜单里**。
+    ///
+    /// ## ⚠️ 2026-10-14：连同整颗菜单一起从**面包屑右侧**搬到了**导航栏右上角**
+    ///
+    /// 文案一个字没改（用户说的是"位置与样式统一"，不是"改菜单项"），
+    /// 变的是它住的容器：`RepoTreeSection` 的 `trailing` → `RepoCodeView` 的
+    /// `ToolbarItem(.topBarTrailing)`。只读那一档**整颗菜单照给**、只是这一项不给。
     ///
     /// ## ⚠️ 2026-10-12：整颗按钮收进了「⋯」菜单，文案去掉了全角 `＋`
     ///
@@ -106,8 +123,18 @@ public enum RepoCopy {
     /// 「⋯」按钮的读屏标签。
     ///
     /// ⚠️ **不能只让它读成"更多"**：一颗光秃秃的「⋯」在读屏里说不出它管的是
-    /// **这条面包屑**、也看不出按下去会弹出什么。
-    public static let breadcrumbMenuAccessibilityLabel = "路径操作菜单"
+    /// **这一层目录**、也看不出按下去会弹出什么。
+    /// 同 `FileCopy.operationsMenuAccessibilityLabel`（那颗说的是"文件"，
+    /// 这颗说的是"目录"—— 两页菜单管的**对象**不同，所以两句都留着、且必须不同）。
+    ///
+    /// ## ⚠️ 2026-10-14 改名（原名 `breadcrumbMenuAccessibilityLabel`）
+    ///
+    /// 原来叫"路径操作菜单"，是因为它当时长在**面包屑右侧**。那天用户要求把它搬到
+    /// **导航栏右上角**（与文件页统一）⇒ 名字里那个 `breadcrumb` 与事实不符了
+    /// （正是本项目反复要治的那一类：名字还在描述一个已经不成立的处境）。
+    /// 值也跟着从"路径操作"改成"目录操作" —— 它现在管的是**这一层目录的两件事**
+    /// （复制路径 / 添加文件），而不是"这条面包屑"。
+    public static let operationsMenuAccessibilityLabel = "目录操作菜单"
 
     // MARK: - §5.8 添加文件弹层
     //
@@ -179,4 +206,23 @@ public enum RepoCopy {
     public static func breadcrumbCurrentAccessibilityLabel(name: String) -> String {
         "当前位置 \(name)"
     }
+
+    // MARK: - 代码页导航栏那颗「返回」（2026-10-14，走查第 63 条的崩溃修复）
+
+    /// 代码页左上角那颗自己画的「返回」——**栈里还有上一层目录**时的读屏文案。
+    ///
+    /// ## ⚠️ 为什么这一颗要自己画、而且读屏文案要分两句
+    ///
+    /// 代码页的目录层级是**页内**的（点一行目录只换这一页里的内容，PRD §4.4.1），
+    /// 而系统那颗返回键的语义是"退出这一页"（它属于**外层**栈）—— 两者不是一回事。
+    /// 原来那一版把层级做成了嵌套的 `NavigationStack`，**在 SwiftUI 里会崩**
+    /// （`AnyNavigationPath.Error.comparisonTypeMismatch`，见 `RepoCodeView` 的说明）
+    /// ⇒ 现在藏掉系统那颗、换成自己这一颗，于是"按下去会发生什么"**取决于栈深**。
+    ///
+    /// 一个按钮两种去向 ⇒ 读屏必须分两句说：只说"返回"，读屏用户不知道
+    /// 退的是**一层目录**还是**整页**（两者后果差很远）。
+    public static let backOneLevelAccessibilityLabel = "返回上一层"
+
+    /// 同上一颗 —— **已经在仓库根层**时（按它退出这一页，回上一个页面）。
+    public static let leaveCodePageAccessibilityLabel = "返回上一页"
 }

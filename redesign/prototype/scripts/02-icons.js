@@ -25,6 +25,10 @@ const I = {
   dir:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   gear:'<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.4l2-1.55-2-3.45-2.35.95A7 7 0 0 0 14.1 5.1L13.7 2.6h-3.4l-.4 2.5a7 7 0 0 0-2.4 1.45L5.15 5.6l-2 3.45 2 1.55a7 7 0 0 0 0 2.8l-2 1.55 2 3.45 2.35-.95a7 7 0 0 0 2.4 1.45l.4 2.5h3.4l.4-2.5a7 7 0 0 0 2.4-1.45l2.35.95 2-3.45-2-1.55c.1-.45.15-.92.15-1.4z"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  /* 导航栏右上角那颗「⋯」（App 侧 `GitHubIcon.ellipsis`）。
+     ⚠️ 三个实心点 —— 表里其余图标都是描边（`fill:none` 由外层样式给），
+        所以每个圆点上要显式写 `fill="currentColor" stroke="none"`（同 `issueO` 那个内点）。 */
+  dots:'<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/>',
   clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>',
   x:'<path d="M6 6l12 12M18 6 6 18"/>',

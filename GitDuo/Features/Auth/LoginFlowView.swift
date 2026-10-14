@@ -26,12 +26,23 @@ private struct LoginFormView: View {
 
     @Environment(AppEnvironment.self) private var env
 
+    #if DEBUG
+    /// 调试入口输入的那枚令牌（见下面 `debugLogin`）。
+    ///
+    /// ⚠️ 它只是一个**中转格**：真正落盘的是 Keychain（`env.tokenStore`），
+    ///    成功之后这个变量就不再被读，页面也随 `authState` 变进去而整体销毁。
+    @State private var debugToken = ""
+    #endif
+
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.Spacing.xl) {
                 hero
                 permissionCard
                 foot
+                #if DEBUG
+                debugLogin
+                #endif
             }
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.top, Theme.Spacing.xxl)
@@ -137,6 +148,50 @@ private struct LoginFormView: View {
             }
         }
     }
+
+    // MARK: - 调试入口（仅 Debug 编译）
+
+    #if DEBUG
+    /// 不走 OAuth、用一枚 Personal Access Token 直接进主界面。
+    ///
+    /// 为什么代码长这样（逐条都有理由，改动前先读 `AppEnvironment.debugSignIn(withToken:)`）：
+    ///
+    /// - **长得故意不像产品的一部分**：最小字号、三级文字色、不加卡片、不要主按钮样式。
+    ///   它是一个验收用的工具，被误读成"GitDuo 支持用 PAT 登录"才是真的代价。
+    /// - **`SecureField` 而不是 `TextField`**：令牌是凭据，不该明文停在输入框里
+    ///   （截屏 / 录屏时尤其；这也是 iOS 自己的做法）。
+    /// - **成功之后不需要"退出调试态"**：令牌进的是**同一个** Keychain，
+    ///   下次冷启动由正常恢复路径放行 —— 从这一格进来的会话与真实登录**没有区别**。
+    /// - **不做剪贴板自动读取**：`UIPasteboard` 那条路会在 iOS 16+ 弹一次系统授权框，
+    ///   而那个框在"只是想做一次验收"的场合比手动长按粘贴更烦。
+    @ViewBuilder
+    private var debugLogin: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Text("调试入口 · 仅 Debug 构建")
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+
+            SecureField("粘贴 Personal Access Token", text: $debugToken)
+                .font(Theme.Font.caption)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.password)
+                .padding(Theme.Spacing.s)
+                .background(Theme.Palette.surface, in: .rect(cornerRadius: Theme.Radius.control))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.control)
+                        .stroke(Theme.Palette.borderSoft)
+                }
+
+            Button("用这枚令牌进入") {
+                Task { await env.debugSignIn(withToken: debugToken) }
+            }
+            .font(Theme.Font.caption)
+            .disabled(debugToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    #endif
 }
 
 // MARK: - 授权中

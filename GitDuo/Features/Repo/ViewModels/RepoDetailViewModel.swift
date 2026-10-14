@@ -4,38 +4,46 @@ import GitDuoDesign
 import GitDuoKit
 import UIKit
 
-/// 仓库详情页（**自己的仓库**，PRD §4.4）的状态。
+/// 仓库**首页**（**自己的仓库**，PRD §4.4）的状态。
 ///
-/// ## 四条取数各有各的节奏，别把它们揉成一个 `isLoading`
+/// ## ⚠️ 2026-10-14：它从"四分区一页里全做"瘦成**只做首页**（走查第 63 条）
 ///
-/// | 数据 | 何时取 | 失败 |
-/// |---|---|---|
-/// | 头部（`GET /repos`）+ Star 基准 | 进页一次 | **整页失败** + 重试出口 |
-/// | 目录 + README | 头部到手之后（它要 `defaultBranch`） | 代码分区内失败 |
-/// | 提交列表（`GET /commits`） | **切到 Commits 分段才取**（懒加载） | 列表内失败 + 加载更多 |
-/// | 分支列表（`GET /branches`） | **打开切换弹层时取** —— 届时取目录刚问过，命中 304 | 弹层内失败 |
-/// | Issues 两档（`GET /issues`，切片 7） | **切到 Issues 分区才取**，且**每档首次才取** | 分区内失败 + 加载更多 |
-/// | PR 两档（`GET /pulls`，切片 7） | 同上 | 同上 |
+/// 用户要求把这一页改成枢纽（头部大卡 + 四行入口），代码浏览搬进独立页面。
+/// 于是原来住在这里的东西各自**搬走**，一处都没删：
 ///
-/// 后四条**有意懒加载**：主桶配额虽然宽（5,000/小时），但"进一个仓库就发六个请求"
-/// 会让每次点开的等待都变成最慢那条链路的长度 —— 而其中四条用户可能整次访问都不看
-/// （§4.4 的默认分区是「代码」）。
+/// | 原来在这里 | 现在在哪 |
+/// |---|---|
+/// | 目录（`tree`）| **代码页** `RepoCodeView`（它自己按层持有多份会话）|
+/// | 目录里**顺带取的那份 README** | ⚠️ 同日晚些**回到本页**（`readme`）—— 见下面那一段 |
+/// | 提交列表（`commits`）| **分区页** `RepoSectionViewModel`（`section == .commits`）|
+/// | Issues / PR 两档（四个状态机）| **分区页** `RepoSectionViewModel` |
+/// | Star / 头部 / 最近访问 | **还在本类型**（首页自己的数据）|
 ///
-/// ## ⚠️ 切片 7 的两段：**每档各持一份状态机**
+/// ⇒ 本类型现在只有**一条**"决定整页"的取数（头部，连带 Star 基准），失败即整页失败。
+/// 原来那张"六条数据各有各的节奏"的表格随这次拆分删掉了 —— 那种表格在一个
+/// 只取一份数据的类型上只会误导人（`RepoSectionViewModel` 里另有一张，那是它的实情）。
 ///
-/// Issues / PR 两段各有两档（`RepoSectionSegment`），而**每档有自己的游标与失败态**
-/// （TECH_SPEC §9.8.1）⇒ 四个 `RepoSubListViewModel` 实例，而不是一个"当前档"的实例。
-/// 切回来看到的是刚才那一份（不重发请求），切到没取过的那一档才取。
+/// ## ⚠️ 2026-10-14 同日晚些：README 又加了一条取数（用户要求它进首页）
 ///
-/// ⚠️ 但**换一组标签筛选时四个里有两个要重建**（Issues 那两个）：
-/// 旧结果是用旧标签取的，留着它切档就会出现两组标签混在一起的数据（见 `applyIssueLabels`）。
+/// 表 = **"整页取数"**（头部）与 **"块级取数"**（README）两类，
+/// 而不是"七条各自为政"。README 与头部的关系是**依赖**而非并列：
+/// 它要头部那份 `defaultBranch` 才知道用哪条分支去读（`LoadRepoReadme` 的类型说明）。
 ///
-/// ## ⚠️ 目录那一条**不在本类型里**
+/// | | 数据 | 何时取 | 失败时 |
+/// |---|---|---|---|
+/// | 头部（+ Star 基准）| `GET /repos/{o}/{r}` | 进页 | **整页失败**（连四行入口都不画）|
+/// | README | `GET /repos/{o}/{r}/readme` | **头部到手之后** | **块级失败**：那一块给「重试」，头部与四行入口照常 |
 ///
-/// 它在 `RepoTreeSession`（§4.13 的「文件浏览」分区用的是**同一个**会话）——
-/// 分支两段式解析、记忆失效回落那几条规则只有一个落点。
-/// 本类型只做三件与它有关的事：**把 `defaultBranch` 交下去**、
-/// 切分支后清掉自己的提交列表、以及在弹层里转发一次重试。
+/// ⚠️ 上面的分档与 `RepoTreeSection` 里那处"这一块加载失败"同一条口径
+/// （§8.5：内容区里的一小块失败，不掀翻整页）—— 一处 README 取不到，
+/// 不该让用户连"去代码页 / Issues"那四行都点不了。
+///
+/// ## ⚠️ 它**不再**拿 `defaultBranch` 去做任何事
+///
+/// 以前"头部到手 ⇒ 交给 `tree.load(defaultBranch:)`"是这一页的第二跳。
+/// 现在需要默认分支的是代码页与提交列表，它们**各自去问一次头部**
+/// （`LoadRepoDetail.repository(fullName:)`，与首页走同一条路由 ⇒ 命中 304、不计配额
+/// —— 见那个方法的说明）。本类型因此不必把自己那份传出去。
 @MainActor
 @Observable
 final class RepoDetailViewModel {
@@ -44,11 +52,14 @@ final class RepoDetailViewModel {
 
     private(set) var snapshot: LoadState<RepoDetailSnapshot> = .idle
 
-    /// 目录浏览的会话（当前分支 + 目录页 + 分支列表）。
-    let tree: RepoTreeSession
-
-    /// 提交列表 —— 子列表，**与目录那一块各有各的骨架屏**。
-    private(set) var commits = PagedListState<CommitSummary>()
+    /// 仓库 README —— 画在四行入口**之下**（用户裁定，2026-10-14）。
+    ///
+    /// ⚠️ `LoadState<MarkdownDocument?>`：里面那个 `nil` 是**"这个仓库没有 README"**
+    /// （`.loaded(nil)`），与"还没取到"（`.skeleton`）是两件事 ——
+    /// 前者在页面上**什么都不画**，后者画一小块骨架。
+    ///
+    /// ⚠️ 它**独立于 `snapshot`**：一条失败不牵连另一条（见类型说明那张表）。
+    private(set) var readme: LoadState<MarkdownDocument?> = .idle
 
     private(set) var isTogglingStar = false
 
@@ -63,114 +74,33 @@ final class RepoDetailViewModel {
     /// 但那个组织没装 GitDuo ⇒ 那时它会变成灰的，而那正是这一档存在的理由。
     private(set) var starWritable = true
 
-    /// 当前分段。初值由路由给（`.repoDetail(fullName:section:path:)` 的 `section`）。
-    var section: RepoSection
-
-    // MARK: - 切片 7：Issues / PR 两段（PRD §4.4 分区二·三、决策 #56 / #61）
-
-    /// Issues 段的两档 —— **各持一份状态机**（每档自己的游标与失败态，§9.8.1）。
-    ///
-    /// ⚠️ 它们是 `var` 而不是 `let`：换标签筛选时要**重建**（见 `rebuildIssueModels`）。
-    private(set) var issueOpen: RepoSubListViewModel<IssueRow>
-    private(set) var issueClosed: RepoSubListViewModel<IssueRow>
-
-    /// PR 段的两档。`closed` 那一档界面上叫「已合并」—— 它取回的是服务端的
-    /// `state=closed`，之后由 `LoadRepoPulls` 滤掉"关闭但没合并"（决策 #39 / #61）。
-    private(set) var pullOpen: RepoSubListViewModel<PullRow>
-    private(set) var pullMerged: RepoSubListViewModel<PullRow>
-
-    /// 两段各自选中的档。默认都是「开放」（原型两处都是 `class="seg on"`）。
-    private(set) var issueSegment: RepoSectionSegment = .open
-    private(set) var pullSegment: RepoSectionSegment = .open
-
-    /// Issues 段的标签筛选（决策 #56：**走服务端**）。
-    ///
-    /// ⚠️ 存 `[Label]` 而不是 `[String]`：视图要用它的**颜色**画已选标签行，
-    /// 只留名字的话还得再查一次标签库。
-    private(set) var issueLabels: [Label] = []
-
     // MARK: - 依赖
 
     private let detailLoader: LoadRepoDetail
-    private let commitsLoader: LoadRepoCommits
-
-    /// 两段的取数用例。⚠️ 留着它们是因为**标签一变就要重建实例**
-    /// （`rebuildIssueModels` 需要重新捕获一组标签）。
-    private let issuesLoader: LoadRepoIssues
-    private let pullsLoader: LoadRepoPulls
-
+    private let readmeLoader: LoadRepoReadme
     private let starToggle: ToggleStar
     private let starScope: StarWriteScopeCache
     private let visits: any RecentVisitStore
     private let toast: ToastCenter
 
-    /// 上传出口的写通道（§5.8 的后两行 —— 切片 8.4）。
-    private let saver: SaveFile
-
     let fullName: String
 
     init(
         fullName: String,
-        section: RepoSection,
-        path: RepoPath,
         detail: LoadRepoDetail,
-        treeLoader: LoadRepoTree,
-        commits: LoadRepoCommits,
-        branches: LoadBranches,
-        issues: LoadRepoIssues,
-        pulls: LoadRepoPulls,
+        readme: LoadRepoReadme,
         starToggle: ToggleStar,
         starScope: StarWriteScopeCache,
-        saver: SaveFile,
-        memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
-        self.section = section
         self.detailLoader = detail
-        self.commitsLoader = commits
-        self.issuesLoader = issues
-        self.pullsLoader = pulls
+        self.readmeLoader = readme
         self.starToggle = starToggle
         self.starScope = starScope
-        self.saver = saver
         self.visits = visits
         self.toast = toast
-        self.tree = RepoTreeSession(
-            fullName: fullName,
-            path: path,
-            loader: treeLoader,
-            branches: branches,
-            memory: memory
-        )
-
-        // ⚠️ 四个实例在这里直接建出来（而不是延后到 `start()`）：
-        //    视图随时可能读到它们，而"可能还没建"会让每一个调用点都要处理可空。
-        //
-        // ⚠️ 闭包**只捕获局部常量**（loader 与档位），不捕获 `self` ——
-        //    在 `init` 里捕获 `self` 会撞上"所有存储属性都还没初始化完"这条规则，
-        //    而那正是下面这两行要写成独立局部变量的唯一理由。
-        let issuesLoader = issues
-        let pullsLoader = pulls
-
-        self.issueOpen = RepoSubListViewModel { fullName, cursor in
-            try await issuesLoader.load(
-                fullName: fullName, state: .open, labels: [], cursor: cursor
-            )
-        }
-        self.issueClosed = RepoSubListViewModel { fullName, cursor in
-            try await issuesLoader.load(
-                fullName: fullName, state: .closed, labels: [], cursor: cursor
-            )
-        }
-        self.pullOpen = RepoSubListViewModel { fullName, cursor in
-            try await pullsLoader.load(fullName: fullName, state: .open, cursor: cursor)
-        }
-        self.pullMerged = RepoSubListViewModel { fullName, cursor in
-            // ⚠️ 要「已合并」就得取 `.closed` 再本地滤（GitHub 没有"只看已合并"这一档）。
-            try await pullsLoader.load(fullName: fullName, state: .closed, cursor: cursor)
-        }
     }
 
     // MARK: - 生命周期
@@ -190,64 +120,21 @@ final class RepoDetailViewModel {
 
         guard !snapshot.hasFinished else { return }
         await loadDetail()
-        // ⚠️ 头部到手之后再按当前分段取数：路由可能**直接落在** Issues / PR 段上
-        //    （`.repoDetail(fullName:section:path:)` 的 `section`）。
-        //    切片 6 时这里只处理了 Commits —— 那一段只能从分段条点进来，所以没暴露；
-        //    改成统一入口之后顺带对齐了（两段的"首次才取"由状态机自己保证）。
-        await loadCurrentSectionIfNeeded()
     }
 
-    /// 下拉刷新：头部（连带 Star 基准）+ 当前目录，一起重取。
+    /// 下拉刷新：重拉头部（连带 Star 基准与 README）。
     ///
-    /// ⚠️ **不刷新已加载的提交列表**：它有自己的"加载更多"与游标，
-    /// 从头部那一侧重置它会丢掉用户已经翻过的页（§8.5 的"刷新不遮挡已有内容"
-    /// 说的是别把内容清掉，而这里连语义都不该变）。
+    /// ⚠️ README 不单独刷新 —— 它挂在 `loadDetail` 成功那一支上（它要头部里的
+    /// `defaultBranch`）。所以"下拉刷一次"= 头部 + README 各一次请求。
     ///
-    /// ⚠️ **切片 7 的两段沿同一条口径**（下拉刷新只重新拉头部与目录）。
-    /// 它们各有自己的加载与重试出口：切档会（在首次时）取数、失败时有分区内的重试。
-    ///
-    /// ⚠️ 这条**已裁定**（2026-10-08，用户拍板**保持现状**）：在 Issues 段下拉而列表
-    /// 纹丝不动，确实可能被读成"刷新没生效"，但改它会让本页与切片 6 的 Commits 段
-    /// 口径**相反** —— 同一页两种下拉语义，比"这一段没刷新"更难解释。
-    /// 要改的话只需在这里补一句 `await currentIssues.refresh()`（两段各自有 `refresh`），
-    /// 改动很小 —— **已登记为有意偏差，不擅自改**。
+    /// ⚠️ 原来这一句后面还跟着"不刷新已加载的提交列表"那三段说明 —— 那件事
+    /// 随提交列表一起搬去了 `RepoSectionViewModel`（它有自己的下拉刷新）。
     func refresh() async {
         // 顺带重问一次可写范围：稳态下是缓存命中（白做不了什么），
         // 而**第一次没问到**时（断网进的页）这里是唯一的重试出口
         // —— `StarWriteScopeCache` 有意不缓存失败。
         await resolveStarWritable()
         await loadDetail(keepContent: true)
-    }
-
-    /// 切分区。切过去之后**首次**才去取（懒加载，见类型说明）。
-    func select(section: RepoSection) async {
-        self.section = section
-        await loadCurrentSectionIfNeeded()
-    }
-
-    // MARK: - 复制路径（2026-10-12 新增，按用户要求）
-
-    /// 复制**当前这一层**的仓库内相对路径 —— 面包屑右侧「⋯」菜单里的第一项。
-    ///
-    /// ## ⚠️ 根目录复制的是**仓库全名**，不是空串
-    ///
-    /// 根目录没有"仓库内相对路径"（`RepoPath.root.raw` 就是空串），而复制一个空串
-    /// 对用户毫无用处。取仓库全名兜底 —— **这是用户裁定的**（`REVIEW-CHECKLIST` 第 56 条）。
-    /// 代价如实记着：两档复制出来的东西**形态不同**（一个是路径、一个是仓库名），
-    /// 粘到终端里根目录那一次是个无效路径。别把它当成设计本意。
-    ///
-    /// ⚠️ 零请求：路径就在 `tree.path` 上，复制是纯本地操作（同 `FileViewModel.copyRaw`）。
-    /// ⚠️ 它认的是 `tree.path`（当前目录页的路径）而**不是**路由上那一份 ——
-    /// 两者在正常路径下相同，但切分支 / 重取之后以会话里的为准。
-    ///
-    /// ⚠️ **要复制的那一串由 `RepoCopy.clipboardPath(for:fullName:)` 算**（含根目录那条兜底）——
-    /// 规则写在领域层才跑得进单测（`make test` 不编译 App target），
-    /// 本方法只负责"取路径 → 写剪贴板 → 弹提示"这三步。
-    func copyCurrentPath() {
-        UIPasteboard.general.string = RepoCopy.clipboardPath(
-            for: tree.path, fullName: fullName
-        )
-        toast.show(RepoCopy.pathCopiedToast)
     }
 
     // MARK: - Star
@@ -284,134 +171,18 @@ final class RepoDetailViewModel {
         starWritable = await starScope.current().canWrite(fullName: fullName)
     }
 
-    // MARK: - 提交列表
-
-    func loadMoreCommits() async {
-        guard commits.canLoadMore, !commits.isLoading else { return }
-        await loadCommits(reset: false)
-    }
-
-    // MARK: - 切片 7：两段（PRD §4.4 分区二·三、决策 #56 / #61）
-
-    /// 当前选中的 Issues 档的状态机。
-    ///
-    /// ⚠️ 写成 `switch`（而不是 `issueSegment == .closed ? … : …`）：
-    /// `RepoSectionSegment` 只有两档，于是"漏了一档"是编译错误。
-    var currentIssues: RepoSubListViewModel<IssueRow> {
-        switch issueSegment {
-        case .open: issueOpen
-        case .closed: issueClosed
-        }
-    }
-
-    /// 当前选中的 PR 档的状态机。
-    var currentPulls: RepoSubListViewModel<PullRow> {
-        switch pullSegment {
-        case .open: pullOpen
-        case .closed: pullMerged
-        }
-    }
-
-    /// 分段条第一格：`开放 (N)`；**这一档还没加载过**时只有 `开放`。
-    ///
-    /// ⚠️ 问的是**「开放」这一档自己**的加载状态，而不是当前档 ——
-    /// 用户切到「已关闭」时，那一格上的数字仍然是"开放档加载到哪了"。
-    var openIssuesTitle: String {
-        RepoIssuesSectionCopy.openSegment(
-            loadedCount: Self.countIfLoaded(issueOpen),
-            hasMore: issueOpen.hasMore
-        )
-    }
-
-    /// 第二格的文案（**不带计数** —— 原型两处都只给「开放」那格计数）。
-    var closedIssuesTitle: String { RepoIssuesSectionCopy.closedSegment }
-
-    var openPullsTitle: String {
-        RepoPullsSectionCopy.openSegment(
-            loadedCount: Self.countIfLoaded(pullOpen),
-            hasMore: pullOpen.hasMore
-        )
-    }
-
-    var mergedPullsTitle: String { RepoPullsSectionCopy.mergedSegment }
-
-    /// 切 Issues 段的档。
-    ///
-    /// ## ⚠️ 切换分档要**重新取数**，不是拿已加载的那一页本地过滤
-    ///
-    /// （TECH_SPEC §9.8.1）本地过滤只会筛出"碰巧已经加载出来的"那几条，
-    /// 于是分段条上的数字与实际能看到的条数对不上 —— 而这看起来完全正常。
-    ///
-    /// ## ⚠️ 但"切回去"不重取
-    ///
-    /// 两档各自持有自己的游标与失败态（同一条 §9.8.1）⇒ 目标档已经加载过时，
-    /// 状态机会直接跳过（`RepoSubListViewModel.start` 的 `guard !state.hasLoaded`），
-    /// 用户看到的是刚才翻到的那一页。
-    func selectIssueSegment(_ segment: RepoSectionSegment) async {
-        guard segment != issueSegment else { return }
-        issueSegment = segment
-        await currentIssues.start(fullName: fullName)
-    }
-
-    /// 切 PR 段的档（同 Issues：`.closed` 那一档界面上叫「已合并」）。
-    func selectPullSegment(_ segment: RepoSectionSegment) async {
-        guard segment != pullSegment else { return }
-        pullSegment = segment
-        await currentPulls.start(fullName: fullName)
-    }
-
-    /// 应用一组标签筛选（决策 #56：**走服务端**，不做本地过滤）。
-    ///
-    /// ## ⚠️ 换一组标签 ⇒ **两档的状态机都要重建**
-    ///
-    /// 不只是当前档：旧结果是用旧标签取的，切到另一档时若还留着它，
-    /// 屏幕上会出现"两组标签混在一起"的数据 —— 而那看起来完全正常
-    /// （有内容、不报错、分页行也在）。
-    ///
-    /// ⚠️ 比较用 `[Label]`（`id` 就是名字）**含顺序**：顺序变了说明用户重新点过一遍，
-    /// 重取一次是无害的（命中 304 时连配额都不计）。
-    func applyIssueLabels(_ labels: [Label]) async {
-        guard labels != issueLabels else { return }
-        issueLabels = labels
-        rebuildIssueModels()
-        await currentIssues.start(fullName: fullName)
-    }
-
-    /// 点掉一颗已选标签（已选标签行）。
-    func removeIssueLabel(_ label: Label) async {
-        await applyIssueLabels(issueLabels.filter { $0.name != label.name })
-    }
-
-    /// 把一颗标签**加进**筛选（弹层里点了一行、或新建/已存在时顺手选中）。
-    ///
-    /// ⚠️ 已经在里面时**什么都不做**。这条守卫必须在这里而不是在两个调用点：
-    /// 直接写 `applyIssueLabels(issueLabels + [label])` 会在重复时造出一个
-    /// **多了一项的数组** —— `applyIssueLabels` 的顺序比对于是判定"变了"，
-    /// 白白重建两个状态机并发一次请求，而屏幕上一点变化都没有。
-    func selectIssueLabel(_ label: Label) async {
-        guard !issueLabels.contains(where: { $0.name == label.name }) else { return }
-        await applyIssueLabels(issueLabels + [label])
-    }
-
-    // MARK: - 分支弹层（转发给会话 + 本页特有的联动）
-
-    /// 切到另一条分支 —— 会话负责写记忆与重取目录，本页负责清掉提交列表与提示。
-    ///
-    /// ⚠️ 提交列表**必须重取**：它带着 `sha=` 参数，不重取的话列表还是旧分支的提交，
-    ///    而面包屑已经写着新分支 —— 两者对不上时用户会以为"分支切错了"。
-    func switchBranch(to name: String) async {
-        guard let defaultBranch = snapshot.value?.detail.defaultBranch else { return }
-        guard await tree.switchBranch(to: name, defaultBranch: defaultBranch) else { return }
-        if commits.hasLoaded { await loadCommits(reset: true) }
-        toast.show(BranchCopy.switchedToast(branch: name))
-    }
-
     // MARK: - 内部：取数
 
     private func loadDetail(keepContent: Bool = false) async {
         if !keepContent { snapshot.begin() }
         do {
-            snapshot.succeed(try await detailLoader.load(fullName: fullName))
+            let value = try await detailLoader.load(fullName: fullName)
+            snapshot.succeed(value)
+            // ⚠️ README **排在这里**，不在 `start()` 里另起一条并发：它要头部里的
+            //    `defaultBranch` 才知道用哪条分支读 —— 而这里正是"头部到手"那一刻。
+            //    代价是它比头部晚一拍开始（页面上先出头部、后出 README）——
+            //    那是对的：没有分支就无从发起这一问。
+            await loadReadme(ref: value.detail.defaultBranch)
         } catch {
             if keepContent, snapshot.value != nil {
                 // ⚠️ 正本在 `GitDuoKit.RefreshCopy`（切片 7.4 收口）。
@@ -419,162 +190,36 @@ final class RepoDetailViewModel {
             } else {
                 snapshot.fail(Self.failure(from: error))
             }
-            return
         }
-        // ⚠️ 头部到手才有 `defaultBranch` ⇒ 目录必须排在它后面。
-        guard let defaultBranch = snapshot.value?.detail.defaultBranch else { return }
-        await tree.load(defaultBranch: defaultBranch)
     }
 
-    private func loadCommits(reset: Bool) async {
-        commits.beginLoad(reset: reset)
+    // MARK: - 内部：README（**块级**取数）
+
+    /// 取 README。失败**只让那一块失败** —— 头部与四行入口照常（见类型说明）。
+    ///
+    /// ⚠️ 这里**不给 toast**：块级失败自有一块可见的失败态（那颗「重试」），
+    ///    再弹一句提示等于同一件事说两遍（同 `RepoTreeSection.failure` 的处置）。
+    private func loadReadme(ref: String) async {
+        // ⚠️ 下拉刷新时这一块也会切骨架（不像头部那样保留旧内容）——
+        //    与 `RepoTreeSession.load` 的处置一致（它也是 `page.begin()`）。
+        readme.begin()
         do {
-            let page = try await commitsLoader.page(
-                fullName: fullName,
-                // ⚠️ 必须传当前分支：不传时服务端用默认分支，于是列表与面包屑对不上。
-                branch: tree.branch ?? snapshot.value?.detail.defaultBranch,
-                cursor: reset ? nil : commits.nextCursor
-            )
-            commits.received(page)
+            readme.succeed(try await readmeLoader.load(fullName: fullName, ref: ref))
         } catch {
-            commits.failed(Self.failure(from: error))
+            readme.fail(Self.failure(from: error))
         }
     }
 
-    /// 按**当前分段**取数 —— 每一支都只在"还没取过"时发请求。
+    /// README 那一块自己的重试出口（`LoadState` 里没有"重试"这个概念，它是视图的事）。
     ///
-    /// 两个调用点：`start()`（进页时路由可能直接落在某一段上）与
-    /// `select(section:)`（点分区条）。切**档**不走这里（那由
-    /// `selectIssueSegment` / `selectPullSegment` 直接叫对应档的状态机）。
-    private func loadCurrentSectionIfNeeded() async {
-        switch section {
-        case .code:
-            // 目录由 `loadDetail` 里的 `tree.load` 负责（它要 `defaultBranch`）。
-            break
-        case .issues:
-            await currentIssues.start(fullName: fullName)
-        case .pullRequests:
-            await currentPulls.start(fullName: fullName)
-        case .commits:
-            // ⚠️ 这两条判断与切片 6 的 `select(section:)` **逐字等价** ——
-            //    那次只是把同一段逻辑挪进了一个函数，好让 `start()` 也能用它。
-            guard !commits.hasLoaded else { return }
-            await loadCommits(reset: true)
-        }
+    /// ⚠️ 用**手上那份头部**的分支，**不重取头部**：失败的是这一块、头部没失败，
+    ///    重取头部会把整页切回骨架（§8.5：刷新不遮挡已有内容）。
+    func retryReadme() async {
+        guard let branch = snapshot.value?.detail.defaultBranch else { return }
+        await loadReadme(ref: branch)
     }
 
-    /// 按当前的标签筛选**重建** Issues 两档的状态机。
-    ///
-    /// ⚠️ 为什么是"重建实例"而不是"清空已有实例"：`RepoSubListViewModel` 把
-    /// `PagedListState` 私有化了，而它的取数闭包在 `init` 时就捕获了标签 ——
-    /// 换标签唯一的干净做法就是换一个实例。
-    /// 这也顺带保证了"重建即清空"：不会有旧游标或旧失败态残留下来。
-    private func rebuildIssueModels() {
-        let loader = issuesLoader
-        let names = issueLabels.map(\.name)
-
-        issueOpen = RepoSubListViewModel { fullName, cursor in
-            try await loader.load(fullName: fullName, state: .open, labels: names, cursor: cursor)
-        }
-        issueClosed = RepoSubListViewModel { fullName, cursor in
-            try await loader.load(fullName: fullName, state: .closed, labels: names, cursor: cursor)
-        }
-    }
-
-    /// 分段的计数：**没加载过就是 `nil`**（不是 0）。
-    ///
-    /// ⚠️ 两者的区别正是 §8.5 末条："还没加载出来"与"确实一条都没有"。
-    /// 折成 0 会让分段条写着 `开放 (0)` —— 那是在告诉用户
-    /// "这个仓库没有开放的 Issue"，而事实是"还没问过服务端"。
-    private static func countIfLoaded<Item: Identifiable & Sendable>(
-        _ list: RepoSubListViewModel<Item>
-    ) -> Int? {
-        list.hasLoaded ? list.loadedCount : nil
-    }
-
-    // MARK: - 切片 8.4：上传文件 / 图片（§5.8 的后两个出口）
-
-    /// §5.8 两个上传出口的落点 —— **当前打开的那一层目录 + 选中的文件名**。
-    ///
-    /// ## ⚠️ 只此一处算，提交弹层那行与真正 `PUT` 的路径都读它
-    ///
-    /// 两处各算一次的那天，露出来的落点与写下去的路径会不一样 —— 而"东西存到哪"
-    /// 正是这一步里用户唯一可能搞错的事（`RepoDetailView.uploadCommitSheet` 的说明）。
-    ///
-    /// - Returns: `nil` = 这个名字拼不进路径（服务端也会拒）⇒ 调用方据此**不显示落点**、
-    ///   也不该发请求。正常路上到不了：文件名来自系统选择器（文件 App 是
-    ///   `lastPathComponent`、相册由 `UploadFileName` 生成）。
-    func uploadDestination(for fileName: String) -> RepoPath? {
-        guard case let .acceptable(resolved) = RepoPath.resolveUpload(
-            directory: tree.path, fileName: fileName
-        ) else { return nil }
-        return resolved
-    }
-
-    /// 把一份**已经在手上**的字节提交到**当前打开的那一层目录**
-    ///（`sha` 恒为 `nil` —— 这是一次新建）。
-    ///
-    /// - Parameters:
-    ///   - draft: 选中那一刻拿到的文件名与原始字节（`UploadDraft`，§5.8）。
-    ///   - commit: 提交弹层里那一份草稿（提交信息 + 目标两档）。
-    ///
-    /// - Returns: 与编辑器共用同一个 `CommitAttempt`（提交弹层只认它）。
-    ///
-    /// ## ⚠️ 它**不复用** `EditorViewModel.submit`
-    ///
-    /// 两处的差别不是"路径从哪来"这一件事：那里是**文本**（要 UTF-8 编码、要判 1MB）、
-    /// 这里是**字节**（不编码成文本；没动过时它就是选择器给的原样，>1MB 的图片、
-    /// 或网页端显示不出来的格式，已经在 `AddFileSheet` 那一步由 `UploadIntake` 压过 / 转过
-    /// —— 决策 #71 · #72 ⇒ **这里不再判大小**，判重了会让"动过之后到底算不算超限"
-    /// 出现第二个答案）；那里有"编辑模式 ⇒ 带 sha"
-    /// 那一档、这里恒为新建。合成一处要加两三个开关，而每一个开关在两个调用点里
-    /// 总有一处是错的。
-    ///
-    /// ⚠️ 与 `EditorViewModel.submit` **可能撞上同一条 409**：上传不带 `sha`，
-    /// 失败只可能是 422（同名已存在）—— 而那一档的文案由 `FileWriteFailure` 给
-    ///（`CommitSheetCopy.destinationExistsHint`，§5.8 明写"重名不静默覆盖"）。
-    func upload(_ draft: UploadDraft, commit: CommitDraft) async -> CommitAttempt {
-        // 这一屏取内容时一定解析过分支（`tree.load` 先定 ref、再取目录）——
-        // 拿不到时说明目录还没加载出来，而那时也不该有「＋ 添加」可点。
-        guard let branch = tree.branch else { return .rejected(ActionCopy.failed) }
-
-        // ⚠️ 落点走 `uploadDestination`（**同一个方法**，提交弹层那行只读的「将写入 …」也读它）
-        //    —— 两处各拼一次的那天，露出来的落点与写下去的路径会不一样。
-        // ⚠️ 它内部仍是**与新建文件同一套**判据（`RepoPath.resolveUpload` 走
-        //    `normalizeUserInput`，只多一条"文件名必须是一段"）：文件名虽然来自系统选择器，
-        //    仍然要过一遍（"界面看起来正常、路径不对"正是那套判据拦的东西）。
-        guard let path = uploadDestination(for: draft.fileName) else {
-            return .rejected(ActionCopy.failed)
-        }
-
-        do {
-            let outcome = try await saver.run(
-                fullName: fullName,
-                path: path,
-                content: draft.data,
-                draft: commit,
-                // 新建：**不带 `sha`**（决策 #70⑤：路径已存在时服务端回 422，不静默覆盖）。
-                sha: nil,
-                currentBranch: branch
-            )
-            // 完全成功 ⇒ 目录与提交列表都变了（多了一个文件、多了一次提交）。
-            // ⚠️ 两档"做到一半"**不刷新**：那一刻用户还在结果屏上读那句话，
-            //    而列表在他背后换一次内容只会让人怀疑"我到底提交成功没有"。
-            if outcome.isComplete {
-                await tree.reload()
-                if commits.hasLoaded { await loadCommits(reset: true) }
-            }
-            return .settled(outcome)
-        } catch let error as BranchCreationError {
-            // 新分支名不合法 —— 与编辑器同一条处置（表单校验，不是网络错误）。
-            return .rejected(error.message)
-        } catch {
-            let failure = FileWriteFailure(Self.failure(from: error))
-            return .rejected(failure.message ?? ActionCopy.failed)
-        }
-    }
-
-    // MARK: - 错误归一化 / 文案
+    // MARK: - 错误归一化
 
     /// 把任意错误收敛成 `GitHubError`（同其余 ViewModel：映射失败归 `.decoding`，
     /// **不是** `.transport` —— 后者会让界面给出"检查网络"的错误引导）。

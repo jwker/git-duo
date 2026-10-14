@@ -352,7 +352,7 @@ struct RepoIssuesTests {
 
     // MARK: - 切片 7：§4.4 分区二（仓库详情 Issues 段，决策 #61）
 
-    @Test("⚠️ 三段逐字对齐原型：`开放 (N)` / `已关闭` / `筛选`（`05-repo.js:118-120`）")
+    @Test("⚠️ 三段逐字对齐原型：`开放 (N)` / `已关闭` / `筛选`（`05-repo.js:234-236`）")
     func sectionSegmentsMatchPrototype() {
         #expect(RepoIssuesSectionCopy.openSegment(loadedCount: 9, hasMore: false) == "开放 (9)")
         #expect(RepoIssuesSectionCopy.closedSegment == "已关闭")

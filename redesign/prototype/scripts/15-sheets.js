@@ -26,6 +26,19 @@ function openBranchSheet(own){
     ${own?`<div class="sheet-row" onclick="closeSheet();push('branches')">${svg(I.dir)}<span class="grow">管理分支…（创建 / 删除 / 合并）</span>${svg(I.chev)}</div>`
          :`<div class="sheet-hint">他人仓库：可切换分支浏览，创建 / 删除 / 合并需先 Fork</div>`}`);
 }
+/* 代码页右上角那颗「⋯」的菜单（2026-10-14，从面包屑右端搬来 —— 用户要求与文件页统一）。
+   ⚠️ 两项与 App 的 `RepoCodeView.levelMenu` **同构**：`复制路径` 恒有、
+      `添加文件` 只在**自己的仓库**上给。两档都给这颗按钮（只读档少一项）。
+   ⚠️ 只读档那句 hint 收在这里（原来那句"没有「添加」"长在代码页的 fnote 里）。 */
+function openCodeMenuSheet(ro){
+  ro = !!ro;
+  openSheet(`
+    <div class="sheet-title">目录操作 · ${curBranch()}</div>
+    <div class="sheet-row" onclick="closeSheet();toast('已复制路径')">${svg(I.dir)}<span class="grow">复制路径</span></div>
+    ${ro
+      ? `<div class="sheet-hint">他人仓库：要写就先 Fork</div>`
+      : `<div class="sheet-row" onclick="closeSheet();openAddSheet()">${svg(I.file)}<span class="grow">添加文件</span></div>`}`);
+}
 function openAddSheet(){
   openSheet(`
     <div class="sheet-title">添加文件 · ${curBranch()}</div>

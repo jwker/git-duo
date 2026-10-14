@@ -1,39 +1,41 @@
 import Foundation
 
-/// 仓库详情的四个分区（PRD §4.4 第 2 条、原型 `SCR.repoDetail` 的 `.prtabs`）。
+/// 仓库的**列表分区**（PRD §4.4 第 2 条、原型 `SCR.repoSection` 一个路由三档）。
+///
+/// ## ⚠️ 2026-10-14：「代码」**不再是**一个分区（走查第 63 条）
+///
+/// 用户要求把仓库页改成「首页 + 四个入口」：进仓库先看到头部大卡与四行入口，
+/// **代码浏览整块搬进一个独立页面**（它自己承载目录层级），Issues / Pull Requests /
+/// Commits 也各自成一页。于是：
+///
+/// - 本枚举**收成三档** —— 它就是那三个列表页的身份；
+/// - 「代码」那一行不是这里的一员，它在 `RepoCopy.codeEntryTitle`
+///   （它是**一个入口**，不是"某一档分区"，混进这个枚举会让"分区页拿到 `.code`"
+///   成为一个类型上合法、运行时无意义的值）；
+/// - `initial`（原「进仓库默认落代码」）**删掉了**：首页不再"默认选中某一段"。
 ///
 /// ## 顺序就是声明顺序
 ///
-/// `CaseIterable` 的顺序 = 分段条上从左到右的顺序（代码 / Issues / Pull Requests /
-/// Commits），与原型 `[['code','代码'],['issues','Issues'],['prs','Pull Requests'],['commits','Commits']]`
-/// **逐位一致**。视图直接遍历 `allCases` 渲染，不要自己写一个数组 ——
-/// 那样两处顺序会在某次调整里分叉，而"分段条顺序变了"没有人会当成 bug 报上来。
-///
-/// ## ⚠️ 「本片交付了哪几段」**不在这里**
-///
-/// 决策 #50 曾定下切片 6 只交「代码」与「Commits」，Issues / Pull Requests 归切片 7，
-/// 落地方式是"分段条照画满四项、未交付的两段用占位块显式标注"。
-/// 那条信息属于**施工进度**，不属于产品语义 —— 把它做成 `RepoSection.isDelivered`
-/// 会让这个枚举在切片 7 之后还需要再改一次（去掉那个属性），
-/// 而"哪几段还没做"的判断本来就该在路由/视图那一层（那里才看得见当前进度）。
-/// **四段现已全部交付**（7.4 换真件），那个占位块类型也随切片 9 一起删掉了。
+/// `CaseIterable` 的顺序 = 首页那四行入口里**后三行**从左到右的顺序
+/// （代码 / Issues / Pull Requests / Commits 去掉首行之后）。
+/// 视图直接遍历 `allCases` 渲染这几行，不要自己写一个数组 ——
+/// 那样两处顺序会在某次调整里分叉，而"入口顺序变了"没有人会当成 bug 报上来。
 public enum RepoSection: String, CaseIterable, Sendable {
 
-    case code
     case issues
     case pullRequests
     case commits
 
-    /// 分段条上的可见文字（原型逐字，含英文大小写）。
+    /// 页面上可见的文字（原型逐字，含英文大小写）。
+    ///
+    /// ⚠️ `pullRequests` 的「Pull Requests」（全大写 P、R）是**原型的写法**，
+    /// 与 `RepoCopy.codeEntryTitle` 那一行并列时两种大小写会同时出现 ——
+    /// 那是原样保留的既有文案，不在这里统一。
     public var title: String {
         switch self {
-        case .code: "代码"
         case .issues: "Issues"
         case .pullRequests: "Pull Requests"
         case .commits: "Commits"
         }
     }
-
-    /// 默认落在哪一段 —— 进仓库先看到代码（PRD §4.4「分区一：代码（默认）」）。
-    public static let initial: RepoSection = .code
 }

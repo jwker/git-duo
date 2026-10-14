@@ -75,5 +75,9 @@
   .menu-item:last-child{border-bottom:none}
   .menu-item svg{width:19px;height:19px;stroke:var(--text2);fill:none;stroke-width:1.8;flex-shrink:0}
   .menu-item .chev{margin-left:auto;color:var(--text3)}
+  /* 仓库首页四行入口里 Issues / Pull Requests 两行的图标色（状态色 = 与列表上的开放态同一个绿）。
+     ⚠️ 必须写成 `.menu-item svg.tint-open` —— `.menu-item svg` 那条规则（0,1,1）
+        比单个类（0,1,0）更具体，只写 `.tint-open` 会被它压掉。 */
+  .menu-item svg.tint-open{stroke:#3fb950;color:#3fb950}
   .ftag{font-size:10.5px;font-weight:700;color:var(--text3);background:var(--chip);border-radius:6px;padding:2px 7px;letter-spacing:.3px}
 

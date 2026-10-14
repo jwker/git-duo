@@ -103,7 +103,7 @@ public struct RepositoryDetail: Sendable, Hashable, Identifiable {
         pushedAt.map { RelativeTime.string(from: $0, now: now) } ?? Self.unknownUpdateLabel
     }
 
-    /// 头部全名下方那一行：`{更新时间} 更新 · {许可证} 许可证`（逐字对齐原型 `10-explore-repo.js:14`）。
+    /// 头部全名下方那一行：`{更新时间} 更新 · {许可证} 许可证`（逐字对齐原型 `10-explore-repo.js:13`）。
     public func metaLabel(now: Date) -> String {
         "\(updatedLabel(now: now)) 更新 · \(licenseLabel) 许可证"
     }

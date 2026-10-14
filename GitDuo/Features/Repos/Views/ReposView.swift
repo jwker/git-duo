@@ -249,9 +249,9 @@ struct ReposView: View {
     private func open(_ repository: Repository) {
         switch repository.entry {
         case .writable:
-            env.router.push(.repoDetail(fullName: repository.fullName, section: .code, path: nil))
+            env.router.push(.repoDetail(fullName: repository.fullName))
         case .readOnly:
-            env.router.push(.exploreRepoDetail(fullName: repository.fullName, path: nil))
+            env.router.push(.exploreRepoDetail(fullName: repository.fullName))
         }
     }
 }

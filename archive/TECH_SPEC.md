@@ -109,7 +109,7 @@
 | 58 | 仓库详情 PR 卡片上的 `+842 −156` 从哪来 | **取不到 ⇒ 不显示这一截**（用户 2026-10-08 拍板，**外部事实造成的缺口**）：`additions` / `deletions` / `changed_files` **只在单个 PR 端点**（`GET /pulls/{n}`）返回，**列表端点不返回**（`PullRequestDTO` 的类型说明已记着这条）。PRD §4.4 分区三写的卡片是 `{作者} 更新于 {时间} · {增删}`，而列表给不出第三项。落地：卡片写 `{作者} 更新于 {时间}`（`user.login` + `updated_at`，**列表都给**），**去掉增删**，登记为有意偏差。**备选被否**：① 逐条补 `GET /pulls/{n}`（30 行 = 30 次主桶请求，滚一次列表烧一批配额）；② 与探索页卡片完全一致（丢掉作者与时间，与 PRD §4.4 的写法不符） | 【已定】 |
 | 59 | 评论草稿存在哪 | **落本地持久化（UserDefaults），登出清空**（用户 2026-10-08 拍板）：§9.8 原先只写"建议草稿落到本地存储"、未定。PRD §4.9 的失败提示条逐字写着「草稿已保留，可重试」—— 若只留内存，用户退出去再进来草稿就没了，**那句承诺当场落空**（与「文案是契约」这条铁律相冲）。键按「仓库 + 编号」隔离，不与 `recentVisits` / `searchHistory` / `branchMemory` 共用；`signOut()` ③ 步补 `clear()`（草稿里可能含还没发布的正文） | 【已定】 |
 | 60 | PR 的评审状态从哪来 | **`GET /pulls/{n}/reviews`，不是 `/comments`**（2026-10-08 **外部事实推翻文档写法**，性质同 #47 / #53）：§9.9 原写「评审评论走 `GET …/pulls/{n}/comments`，含 `APPROVED` / `CHANGES_REQUESTED` 状态胶囊」—— 这两件事**不是一个端点**：`/pulls/{n}/comments` 是**行内评论**（带 `path` / `line`，本身不含任何审批状态），审批状态在 **`/pulls/{n}/reviews`**（`state` 取值 `APPROVED` / `CHANGES_REQUESTED` / `COMMENTED` / `DISMISSED` / `PENDING`，官方枚举 `PullRequestReviewState`）。原型评论上那个「已批准」胶囊来自后者。落地：**两个端点都取** —— 会话评论（`/issues/{n}/comments`）构成时间线，评审（`/pulls/{n}/reviews`）提供"谁批准了"，两者合进同一条时间线 | 【已定】 |
-| 61 | 仓库详情两段与探索两段的差别 | **范围有意不同、组件复用同一个**（2026-10-08 定）：① **范围**：仓库详情 Issues 段是 `开放 (N)` + **已关闭** 双档、PR 段是 `开放 (N)` + **已合并** 双档 —— 与探索页（#38 只开放 / #39 开放 + 已合并）**有意不同**：探索页回答"看别人的贡献"，仓库详情回答"管自己的仓库"，已关闭的 Issue 在这里是要看的。② **组件**：`IssueCard` / `PullCard` 仍留在 Feature 层（#43），但**移出 `Features/Explore/`** 改由两个 Feature 共用 —— 判据是「**同一个 UI 元素有两处定义 ⇒ 必然分叉**」（6.4d 的 `RepoTreeSection` 已有先例）。⚠️ 但两处卡片**形态确有差别**、不是照搬：仓库详情的 Issue 卡片多一枚**标签胶囊**（原型 `05-repo.js:127` 的 `${i.c}`）、PR 卡片多一行 `{作者} 更新于 {时间}`；探索页两处都没有（原型 `10-explore-repo.js` 的卡片只有两行） | 【已定】 |
+| 61 | 仓库详情两段与探索两段的差别 | **范围有意不同、组件复用同一个**（2026-10-08 定）：① **范围**：仓库详情 Issues 段是 `开放 (N)` + **已关闭** 双档、PR 段是 `开放 (N)` + **已合并** 双档 —— 与探索页（#38 只开放 / #39 开放 + 已合并）**有意不同**：探索页回答"看别人的贡献"，仓库详情回答"管自己的仓库"，已关闭的 Issue 在这里是要看的。② **组件**：`IssueCard` / `PullCard` 仍留在 Feature 层（#43），但**移出 `Features/Explore/`** 改由两个 Feature 共用 —— 判据是「**同一个 UI 元素有两处定义 ⇒ 必然分叉**」（6.4d 的 `RepoTreeSection` 已有先例）。⚠️ 但两处卡片**形态确有差别**、不是照搬：仓库详情的 Issue 卡片多一枚**标签胶囊**（原型 `05-repo.js:243` 的 `${i.c}`）、PR 卡片多一行 `{作者} 更新于 {时间}`；探索页两处都没有（原型 `10-explore-repo.js` 的卡片只有两行） | 【已定】 |
 | 62 | Issue 的「关闭 / 重新打开」做不做 | ~~**本期不做**~~ ⇒ ⚠️ **已推翻（2026-10-09，用户走查第 7 条）**：从「我的 Issue」进详情后要能改状态 ⇒ **正本移交给决策 #79**。⚠️ 这次推翻值得记一句：当时"与原型一致"是**成立**的依据，而它失效的地方恰恰是**原型没画过的那一屏**（「我的 Issue」是切片 9 新加的，原型里根本没有）。原文保留：**本期不做**（2026-10-08 登记，**规格未给**）：PRD §4.9 的结构里只有"评论输入区"、**没有关闭 / 重开入口**；原型 `SCR.issueDetail` 同样没有（只有评论框 + 失败提示条）。§4.6.2 的端点表里确实列了 `PATCH …/issues/{n}`，但那是**端点清单**、不等于产品范围。⇒ 本片按"与原型一致"落地：**只有评论**。⚠️ 这是**登记而非否决**：若产品上需要（例如"我的 Issue"页要能关自己的 Issue），说一声即补 —— 它不影响本片其余部分，属可后加项 | ~~【已定】~~ **【已推翻】** |
 | 63 | 标签胶囊的白字读不清浅色标签怎么办 | **保留白字，把色板里的浅色换成同族深色**（用户 2026-10-08 拍板）：`.lbl-tag{color:#fff}` 是**白字压色块**，而原 10 色色板里有四档太浅 —— 白字对比度（WCAG 2.1，门槛 4.5）分别是 橙 `e16f24` **3.23** · 黄 `fbca04` **1.55** · 粉 `db61a2` **3.36** · 灰 `959da5` **2.75**，其中黄 / 灰连"非文字图形"的 3:1 都不到。三个候选里用户选了"换色板"而不是"按底色亮度自动选黑/白字"（后者偏离原型，要连 `07-issues.js` 与 PRD 一起改）。⇒ 那四档改为 `bc4c00`(5.03) / `9a6700`(4.87) / `bf3989`(5.05) / `6a737d`(4.82)，其余六档**原值不动**，十档全部 ≥ 4.5:1（最紧的一档是绿 `0e8a16` = 4.50）。**同步三处**：原型 `scripts/07-issues.js` 的 `LBL_COLORS` · 领域层 `GitDuoKit.LabelPalette.hexes` · `RepoLabelsTests`（逐字对齐 + 新增对比度护栏）。⚠️ **残留缺口（已登记，未拍板）**：本条只治**新建标签**；仓库里**已存在**的标签颜色是服务端数据，照样有浅色（GitHub 默认的 `enhancement` 就是 `#a2eeef`，白字 **1.31:1**）⇒ 要连它一起治，只能走被否掉的那个方案（§10.7 切片 7 段） | 【已定】 |
 | 64 | 编辑器要更新的 `sha` 从哪来 | **编辑器页自己重取一次 `GET /contents/{path}?ref={branch}`**（用户 2026-10-08 拍板）：`PUT /contents` 更新已存在文件时 `sha` 是**必填**（官方原文：`Required if you are updating a file`），而 `Route.editor(fullName:path:mode:)` 里**没有这个参数**（§8.2 正本；⚠️ 2026-10-12 起那个 case 多了一个 `directory`，见决策 #70⑥ —— 它服务的是**新建模式的预填落点**，与 `sha` 无关）。三个候选（路由加参 / 编辑器自己取 / 从文件查看页传）里选自己取 —— **另两个都有"拿到旧 sha"的路径**：文件查看页可能只读过 raw（大文件）、也可能读的是几分钟前的缓存，而旧 sha 的结果是 409，用户完全不知道自己做了什么。⚠️ `mode == .create` 时**不取**（没有文件可读，`sha` 留 `nil`，服务端按"新建"处理）。代价：编辑一个文件多一次主桶请求，**但带 ETag ⇒ 复访命中 304 不计配额**（与 §9.4.1 的分支解析同一性质） | 【已定】 |
@@ -559,6 +559,26 @@ RootView
 - 【已定】**登录页须承载「安装范围」引导**：安全说明中固定一行「安装页请选 All repositories（全部仓库）」，依据见 §3.5.4。这是用户点「登录」前唯一的提示位——GitHub 安装页本身不会解释漏选仓库的后果。
 - 点击后按钮**立即禁用 + 内联 loading**，防连点重复开启授权会话。
 
+**⚠️ 调试入口（仅 Debug 编译 · 2026-10-14 新增）**
+
+登录页最下面多一格「调试入口 · 仅 Debug 构建」：贴一枚 Personal Access Token 就能直接进主界面，
+**省掉走一遍 OAuth**。这是为**目视验收**加的（验收一趟往往要登录 / 登出好几次，而一次 OAuth 要开系统浏览器、
+在网页上确认、等回跳）。⚠️ **它只在 `#if DEBUG` 里存在** —— Release 里这段代码**编译期裁掉**，
+不存在"忘了关的开关"。
+
+三条设计要点（改动前先读 `AppEnvironment.debugSignIn(withToken:)` 与 `LoginFlowView.debugLogin`）：
+
+1. **它不是另一条认证路径**：令牌写进**同一个 `tokenStore`（Keychain）**、写的是同一个 `StoredToken` 形状，
+   登录名照旧来自 `GET /user` ⇒ **下一次冷启动走的是真实登录那条恢复路径**，App 不会停在一个"真实登录到不了"的状态。
+2. **先验令牌、再落盘**：`GET /user` 跑通才 `save`。不验就写，写进去的是一枚注定 401 的令牌，
+   之后每个页面各自报错 —— 那时看到的现象是"App 坏了"，而不是"令牌填错了"。
+3. **两个"看起来不对但其实是对的"**：`refreshToken` 传空串 + 两个过期时刻取 `.distantFuture`
+   （PAT 不过期，而 `restore()` 只在 `needsRefresh` 时才刷新 ⇒ 那个空 refresh token 永远用不到）；
+   从这个会话**退出登录**时提示会落"未能在 GitHub 侧撤销"那一档（PAT 不属于本 App，
+   `/applications/{client_id}/grant` 必然失败）—— 本地凭据一样清干净，§3.6 的语义不变。
+   ⚠️ **不做剪贴板自动读取**（`UIPasteboard` 在 iOS 16+ 会弹一次系统授权框，比手动长按粘贴更烦），
+   输入框用 `SecureField`（凭据不该明文停在框里）。
+
 **授权页**
 
 - ⚠️ **授权页不是自绘页面**，而是 `ASWebAuthenticationSession` 里的 GitHub 官方页面，应用**无权也不应干预其外观**；原型中的「浏览器卡片 + 权限清单 + Authorize」是对该会话形态的还原。
@@ -998,23 +1018,48 @@ enum EditorMode: Hashable, Sendable {
 
 enum Route: Hashable {
     case search
-    case repoDetail(fullName: String, section: RepoSection, path: String?)
-    case exploreRepoDetail(fullName: String, path: String?)
+    case repoDetail(fullName: String)
+    case repoCode(fullName: String, readOnly: Bool, path: String?)
+    case repoSection(fullName: String, section: RepoSection)
+    case exploreRepoDetail(fullName: String)
     case fileView(fullName: String, path: String, readOnly: Bool)
     case editor(fullName: String, path: String?, mode: EditorMode, directory: String?)
     case commitDetail(fullName: String, sha: String, readOnly: Bool)
     case branches(fullName: String)
-    case issueDetail(fullName: String, number: Int)
+    case issueDetail(fullName: String, number: Int, readOnly: Bool)
     case newIssue(fullName: String)
     case prDetail(fullName: String, number: Int, readOnly: Bool)
     case exploreIssueList(fullName: String)
     case explorePRList(fullName: String)
     case stars
-    case folders
     case myConversations(kind: ConversationKind)
     case settings
 }
 ```
+
+⚠️ **2026-10-14 顺带对齐了两处本节与代码的既有漂移**（都不是这次改动引入的，是抄录时漏的）：
+① `issueDetail` **有一个 `readOnly`**（决策 **#79**）—— 它的含义**比 `.prDetail` 那个窄**：
+只表示"这个入口假定我没有仓库写权限"，**不是**"整页只读"（详情页的操作区还要并上"我是不是这条 Issue 的作者"）。
+② `folders`（「我的收藏」）**已不存在** —— 那个功能 2026-10-11 整体移除，本节的枚举清单没跟着删。
+
+⚠️ **2026-10-14 改了三个 case**（走查第 63 条，PRD §4.4 那次大改）：
+
+| 原来 | 现在 | 为什么 |
+|---|---|---|
+| `repoDetail(fullName:section:path:)` | `repoDetail(fullName:)` | 本页**只剩一个枢纽** —— 没有分区可就地切换，也没有目录层级要它承载 |
+| —— | `repoCode(fullName:readOnly:path:)` | 「代码」独立成页。⚠️ `path` 不是"当前层"，是**起始层**（只决定进页那一刻层级铺到哪，进去之后**页内那个 `levels` 数组**说了算）—— 要它的唯一理由是入口可能不是仓库根（README 里一条指向 `docs/` 的链接点下去，用户期望打开那个目录）。⚠️ `readOnly` 就是"这是不是我自己的仓库"（§4.4 首页第一行传 `false`、§4.13 入口行传 `true`） |
+| —— | `repoSection(fullName:section:)` | 三个列表分区各自成页，**一个路由三个标题**（同 `myConversations` 那条先例：三条路由会让"改标题"要找三个地方，而三者除标题外完全同构） |
+| `exploreRepoDetail(fullName:path:)` | `exploreRepoDetail(fullName:)` | §4.13 的文件浏览入口改推 `.repoCode(readOnly: true)`，本页不再需要 `path` |
+
+⚠️ **`RepoSection` 的唯一来源是领域层 `GitDuoKit/Repo/RepoSection.swift`**（6.1 建、6.4 收编，**2026-10-14 收成三档**）。
+它比本节原来记的那份多出 `title`（列表页与四行入口上的可见文字），
+而 `initial`（原「进仓库默认落代码」）**已随分段条一起删掉** —— 首页不再"默认选中某一段"。
+⚠️ **「代码」不是这个枚举的成员**：它是一个**入口**，文字在 `RepoCopy.codeEntryTitle`。
+塞回枚举看起来最省事，但那样"分区页拿到 `.code`"就成了一个**类型上合法、运行时无意义**的值
+（三个列表页没有"代码"这一档可画）。有单测钉住这条（`codeIsNotASection`）。
+**本节原先逐字记过一份同名同取值的定义**，6.4 已删 —— 两份在同一模块里共存时，
+**同模块的类型会遮蔽 `import` 进来的那个** ⇒ `Route.swift` 之外的代码拿到的都是本地那份（它没有 `title`），
+症状是"给入口取标题"编译不过，而报错指向的是一行完全正常的代码。
 
 ⚠️ **2026-10-09 新增 `myConversations(kind:)`**（决策 #73，切片 9）—— 「我的 Pull Request / 我的 Issue」两个菜单项的去向。
 它的关联值**直接复用切片 5 就有的 `GitDuoKit.ConversationKind`**（`.issue` / `.pullRequest`），**不新造类型**：
@@ -1022,12 +1067,6 @@ enum Route: Hashable {
 新造一个同义词只会让"哪一份才是真的"变成问题（先例：`EditorMode` 迁入领域层，§8.2 上一条）。
 ⚠️ 它是**一个路由、两个标题**：页面标题按 `kind` 取（`我的 Pull Request` / `我的 Issue`），**不是两条路由** ——
 两条路由会让"改标题"要找两个地方，而两者除了标题与查询限定符之外**完全同构**。
-
-⚠️ **`RepoSection` 的唯一来源是领域层 `GitDuoKit/Repo/RepoSection.swift`**（6.1 建、6.4 收编）。
-它比本节原来记的那份多出 `title`（分段条上的可见文字）与 `initial`（默认落在「代码」），并且有单测。
-**本节原先逐字记过一份同名同取值的定义**，6.4 已删 —— 两份在同一模块里共存时，
-**同模块的类型会遮蔽 `import` 进来的那个** ⇒ `Route.swift` 之外的代码拿到的都是本地那份（它没有 `title`），
-症状是"给分段条取标题"编译不过，而报错指向的是一行完全正常的代码。
 
 - **只读态通过参数显式传递**（`readOnly: Bool`），而不是让下层页面自行推断当前仓库归属——推断会造成权限判定散落、口径不一。
 - 深链（`gitduo://repo/owner/name`）本期不做，但路由为值类型天然支持，后续接 `onOpenURL` 即可。
@@ -1040,7 +1079,9 @@ enum Route: Hashable {
 | 登录页 / 授权等待态 | `LoginFlowView` —— **全屏门禁，不是路由**；由 `authState` 驱动（§3.8） |
 | 首页 / 仓库 / 探索 / 我的 | Tab 根页（Tab 页形态，大标题 + 可滚动）。**共 4 个**，通知 Tab 本期不做（§3.5.3） |
 | 搜索 | `.search` |
-| 仓库详情（自己的） | `.repoDetail` |
+| 仓库详情（自己的） | `.repoDetail` —— **枢纽页**（大卡 + 四行入口），2026-10-14 起不承载任何分区内容（§9.4） |
+| 代码页（自己的 / 他人的） | `.repoCode(readOnly:path:)` —— **一页服务两种仓库**（同 `RepoTreeSection` 那条先例）。⚠️ 层级在**页内**，不进路由（§9.5） |
+| 仓库列表分区（Issues / PR / Commits） | `.repoSection(fullName:section:)` —— **一个路由三个标题**（同 `.myConversations` 那条先例） |
 | 探索仓库详情（他人只读） | `.exploreRepoDetail` |
 | 文件查看 | `.fileView(readOnly:)` |
 | 编辑器 | `.editor(mode:)` |
@@ -1050,9 +1091,10 @@ enum Route: Hashable {
 | PR 详情 | `.prDetail(readOnly:)` |
 | 探索 Issues / PR 列表 | `.exploreIssueList` / `.explorePRList` |
 | 我的 Star | `.stars` |
-| 我的收藏 | `.folders` |
 | 我的 Pull Request / 我的 Issue | `.myConversations(kind:)` —— **一个路由两个标题**（决策 #73） |
 | 设置 | `.settings` |
+
+⚠️ 「我的收藏」（`.folders`）那一行**已删**：该功能 2026-10-11 整体移除（同 §8.2 那条对齐说明）。
 
 ### 8.4 弹层与轻提示
 
@@ -1190,17 +1232,46 @@ App 侧 `UserProfileSheet` 用 `@State(initialValue: fallback)` + `.task(id: fal
 ⚠️ **取数时不得过滤（2026-10-06 实现期发现，务必照此）**：直觉上会想"在「私有」段加载更多时直接请求 `visibility=private`"，但这会让那一页的公开仓库被**当场丢弃** —— 用户切回「全部」时它们**永远不存在**，而界面上毫无迹象（既不报错、也不缺 loading，只是内容凭空少了）。正确做法是**取数只取数、过滤在展示层**：`PagedListState` 存全量条目，`visibleItems(segment:)` 才按段过滤。同理，`PagedListState` 判空要接收 `matching:` 谓词 —— 否则"条目非空但本段命中零条"会被渲染成"有内容的空列表"，而不是空态。两条性质各有一个守卫测试（`segmentSwitchNeverDropsData` / `segmentSwitchDoesNotRefetch`）。
 - 每段的空态文案**逐段不同**（原型为准）：全部「还没有仓库」· 公开「没有公开仓库」· 私有「没有私有仓库」· Starred「还没有 Starred 仓库」。失败态统一「加载失败」+ 重试，「继续加载」按钮用于空列表时仍可手动续页（空列表没有可滚内容，`.onAppear` 触发不到）。
 
-### 9.4 仓库详情（自己的仓库 · 四分区）
+### 9.4 仓库详情（自己的仓库 · 枢纽页）
 
-- 头部：`GET /repos/{owner}/{repo}`。
+⚠️ **2026-10-14：本页不再是"四分区"**（走查第 63 条，PRD §4.4 那次大改）。它现在只有
+**头部大卡 + 四行入口 + README**，四行分别推入 `.repoCode` / `.repoSection`（§8.2 那张对照表）。
+下面每一条都按"今天还成不成立"标注。
+
+- 头部：`GET /repos/{owner}/{repo}`。**它是本页两条取数之一**（连 Star 基准一起，见 §13.2 那条配额）。
+- **README**（⚠️ **2026-10-14 晚些新增** · 用户要求它进仓库首页）：
+  `GET /repos/{owner}/{repo}/readme`（raw）→ §11.1 块级渲染。
+  - ⚠️ **两条取数串行**：README 要头部里的 `defaultBranch` 才知道用哪条分支读
+    （所以它比头部晚一拍开始，且**不在** `start()` 里另起一条并发）。
+  - ⚠️ **它不解析分支记忆**：README 恒用默认分支（`LoadRepoReadme` 的类型说明）。
+    用户切到别的分支后回首页，README 仍是默认分支的那一份 —— **有意为之**：
+    要跟着变就得把决策 #55 那整套规则搬过来，而本件存在的理由正是让 README 摆脱它。
+  - ⚠️ **失败只让那一块失败**：README 取不到 ⇒ 那一块给「重试」，头部与四行入口照常（§8.5）。
+  - ⚠️ **位置在四行入口之下**（用户裁定）：README 可以很长，放在四行**之上**会把这一页的
+    四个出口挤出首屏 —— 而四行正是这一页作为枢纽的用处。
+  - 渲染件是 **`RepoReadmeSection`**（与 §9.11 共用同一件，含它的三档与三套接线）
+    —— **别在各页各接一次线**。
 - 🔴 **头部大卡里那颗 Star 多一档**（2026-10-09 起，**决策 #80** / §3.5.5）：**确定**写不了 ⇒ `.disabled(true)` + 下方一行 `StarCopy.unavailableHint`。
   形态（含那一行排在哪儿、为什么与 Watch / Fork 的 `allowsHitTesting(false)` 有意不同）以 **§9.11** 为正本 —— 两页是同一个控件、同一句话，只有页脚那几行不一样。
   ⚠️ **本页多半恒为可点**：自己的仓库必然在安装范围内（`GET /user/installations` 有自己那个账号）。**唯一的例外是组织仓库** —— 你对它有 `push`、而那个组织没装 GitDuo，此时它真的会变灰。那一档正是这个参数存在的理由。
-- 分区切换**不重新请求头部**，只切换内容区；分区状态存 ViewModel。
-- 代码分区：见 §9.5。Issues / PR：见 §9.8 / §9.9。Commits：`GET …/commits?sha={branch}`，**随当前分支联动**。
-- **当前分支是按仓库分别记忆的状态**（同一仓库内代码与 Commits 共用，跨仓库互不影响）；切分支后失效该仓库的 contents/commits 缓存。⚠️ 记忆**持久化**（不是"会话级"，见**决策 #55**）。
-- ⚠️ **本页的四个分区不在同一个切片里交付**（**决策 #50**）：切片 6 交 ①代码 + ④Commits（外加 §4.5 / §4.7 / §4.8），**②Issues / ③Pull Requests 归切片 7**。落地方式：分段条**照原型画满四项**，未交付的两段用 `PendingSection` 显式标注「切片 7 落地」—— 整块不渲染会让评审看不出还差什么（`AGENTS.md §0` 的"一眼可辨、不冒充成品"）。
-  ⚠️ **该占位已于 2026-10-08 消解**：切片 7.4 把两段换成真件（`RepoIssuesSection` / `RepoPullsSection`，见 §9.8.1），`PendingSection` 在本页不再出现 —— 本页四分区**至此全部是真件**。
+- ~~分区切换**不重新请求头部**，只切换内容区；分区状态存 ViewModel。~~
+  ⚠️ **作废**（2026-10-14）：没有分区可就地切换了。四行入口每一行都推入**另一个页面**，
+  而那个页面**自己取自己那份头部之外的数据** —— 代码页要 `defaultBranch`（它从同一份 `GET /repos/{owner}/{repo}` 拿，
+  走的是 `HTTPTransport` 的缓存 ⇒ 不额外花配额），分区页拿到 `fullName` 就够了。
+- ~~代码分区：见 §9.5。~~ ⚠️ **改为**：「代码」是一个入口 ⇒ 落在 `.repoCode` 那一页，见 §9.5。
+  Issues / PR：见 §9.8 / §9.9。Commits：`GET …/commits?sha={branch}`，**随当前分支联动**。
+- **当前分支是按仓库分别记忆的状态**（同一仓库内代码与 Commits 共用，跨仓库互不影响）。见**决策 #55**。
+  ⚠️ **2026-10-14 起这份记忆的读写在两个 ViewModel 里各读一遍**（代码页的 `RepoCodeViewModel`、
+  分区页的 `RepoSectionViewModel`），而"共用"改成了**靠落盘的记忆**：
+  两页在枢纽页下**永不共存**（推入其中一个，另一个必然已被弹出）⇒ 代码页 `switchBranch` 写记忆、
+  Commits 页下次进页时 `BranchResolver.initial(remembered:)` 读一遍，联动照样成立。
+  ⚠️ **别加"两页同时在栈里"的路径**，那会让这条联动悄悄失效（旧分支的提交留在屏上，而界面看不出异常）。
+- ⚠️ **切分支不显式清 contents / commits 缓存**：请求 URL 里带 `?ref=`，两条分支是两个缓存键 ⇒
+  各自取到各自那一份。（本节原先写的"切分支后失效该仓库的 contents/commits 缓存"**从未落地**，
+  今天也不需要 —— 需要"按路径前缀粗粒度失效"的只有**记忆值失效回落**那一档，见 §9.4.1 末条。）
+- **决策 #50（四分段分批交付）与 `PendingSection` 占位**：⚠️ **2026-10-14 起彻底终结** ——
+  分段条撤掉之后，占位块连放的地方都没有了。四段今天**全部是真件**（`RepoCodeView` +
+  `RepoSectionListView`）。这条记事留在这里只为追溯，**不要**照着它去恢复分段条。
 
 #### 9.4.1 分支解析规则【已定】
 
@@ -1211,26 +1282,80 @@ App 侧 `UserProfileSheet` 用 `@State(initialValue: fallback)` + `.task(id: fal
 | 该仓库记忆的分支仍在 `GET /repos/{owner}/{repo}/branches` 结果中 | 沿用记忆值 |
 | 记忆的分支**已不存在**（被删除 / 改名 / 无权限） | **回落 `Repository.defaultBranch`**，并失效该仓库的 contents/commits 缓存 |
 | 无记忆（首次访问该仓库） | 直接用 `Repository.defaultBranch` |
-| 切到「他人仓库详情」（§9.11） | 同规则，但只用于浏览，记忆与自己的仓库各存一份 |
+| 切到「他人仓库详情」（§9.11） | 同规则。⚠️ **2026-10-14 更正**：这份记忆**只有一份**，键是仓库全名 ⇒ 「同一个仓库从自己的入口进 vs 从探索页进」**共用同一格**（`.repoCode` 那个 `readOnly` 只管写入口给不给，**不管**记忆分不分桶）。本节原先写的"记忆与自己的仓库各存一份"从未落地，已作废 |
 
-- 实现：`RepositoryScope.branch(for fullName: String) -> String` + `private var branchByRepo: [String: String]`；`Repository.defaultBranch` 作为回落值（§6.2 实体字段）。
+- 实现：**领域层 `BranchResolver`**（`Packages/GitDuoKit/Sources/GitDuoKit/Branches/BranchResolution.swift`）
+  三个纯静态函数 `initial(remembered:defaultBranch:)` → `resolved(remembered:available:defaultBranch:)`
+  → `shouldSilentlyRetry(after:attemptedBranch:defaultBranch:)`；记忆读写是 `BranchMemoryStore`
+  协议（落盘实现 `UserDefaultsBranchMemoryStore`，键按**仓库全名**分桶）；`Repository.defaultBranch` 作为回落值（§6.2 实体字段）。
+  ⚠️ **本节此前记的实现名是 `RepositoryScope.branch(for:)` —— 那是一个从未落地过的方案**
+  （只在文档里存在过）。**2026-10-14 对齐成真名**。别照着旧名字去找类型。
 - 分支列表本身来自 `GET …/branches`（已带缓存），因此"分支是否存在"的校验**不额外消耗请求**。
 - 记忆**持久化**（键前缀独立，落点照 `UserDefaultsRecentVisitStore` 先例）；**登出时清空**（§3.6 ③），与其它账号绑定数据一致。见**决策 #55**。
 - ⚠️ **解析是两段式的**（决策 #55）——"记忆值是否仍存在"要等分支列表到手才知道，而首屏的 contents 请求**不能**等它（那是白白多一个 RTT）：
   1. **立即**用记忆值（无记忆则 `defaultBranch`）发 contents / commits ⇒ 不串行等待；
   2. 分支列表回来后校正：记忆值**不在**列表里 ⇒ 按上表**回落 `defaultBranch`**、失效该仓库的 contents/commits 缓存并重取；
   3. 若第 1 步那次 contents 因该 `ref` 不存在回了 **404**，走同一套回落**静默重发一次、不向用户报错** —— 否则用户会先看到一个"不存在或无权访问"（§4.3：404 与无权限在 GitHub 侧被混同）再自愈，而那正是回落规则本就该吸收的情况。
-- ⚠️ **与回落相关的请求都不许把 404 吞成空值**（6.2 登记）：例如文件树副标题的 `GET …/commits?path={p}&per_page=1`，吞掉 404 会让副标题**静默空白**而不触发上面的回落 —— 于是"分支已不存在"这件事被吸收成一次无伤大雅的留白，用户永远看不到正确分支。**唯一被允许吞 404 的是 README**（§9.5：仓库没 README 是正常情况，`nil` 表达"就是没有"）。
+- ⚠️ **与回落相关的请求都不许把 404 吞成空值**（6.2 登记）：例如文件树副标题的 `GET …/commits?path={p}&per_page=1`，吞掉 404 会让副标题**静默空白**而不触发上面的回落 —— 于是"分支已不存在"这件事被吸收成一次无伤大雅的留白，用户永远看不到正确分支。**唯一被允许吞 404 的是 README**（§9.4 / §9.11：仓库没 README 是正常情况，`nil` 表达"就是没有"）。
 - ⚠️ **回落时的缓存失效是粗粒度的**（6.2 登记）：按**路径前缀**匹配、不看查询串 ⇒ 删除 / 回落一次会清掉该仓库所有分支的 contents 与 commits。这是**有意的**：要把 `?ref=` 纳入缓存键的语义才分得清，而"多几个请求"比"删完分支后一直 404"轻得多。
 
 ### 9.5 代码浏览与文件树
 
+⚠️ **2026-10-14：这块独立成了「代码页」（`RepoCodeView`，路由 `.repoCode`）**（走查第 63 条、PRD §4.4.1）。
+两条新增的口径，两条都是"错了不报错"的那一类：
+
+⚠️ **同日晚些：本页不再取 README**（它搬去了两个仓库首页，见 §9.4 / §9.11）——
+`LoadRepoTree` 从"目录清单 + README"瘦成**只有目录清单**、`RepoTreePage.readme` 字段退役。
+本页曾经在**仓库根那一层**顺带画它，而那只是"根目录这个位置顺带取到了那一份"，
+与"用户要在哪里看这个仓库的自述"是两件事。
+
+- **层级在页内，不进路由**。目录层级由 `RepoCodeView` 内部那个 `levels: [RepoCodeLevel]` 数组承担，
+  每一项 = **路径 + 那一层自己的 `RepoTreeSession`**。
+  ⚠️⚠️ **它不是一条 `NavigationStack`**（2026-10-14 崩溃修复）：第一版写成
+  `NavigationStack(path: $levels)`，**一进这一页就崩** ——
+  `Fatal error: 'try!' … SwiftUI.AnyNavigationPath.Error.comparisonTypeMismatch`。
+  根因是 **SwiftUI 不支持把 `NavigationStack` 嵌在另一条 `NavigationStack` 的推入页里**：
+  那两条栈被当成同一条处置 ⇒ 它拿外层路径的元素（`Route`）与内层路径的元素
+  （`RepoCodeLevel`）逐元素比对，类型不同就 `try!` 失败。
+  现在只有**栈顶那一层**被渲染（换层 = 一次重绘，不推新页面）。
+  ⚠️ 会话**跟着层一起放进那个数组**，而不是另开一张表按路径查：表那一版必然要在
+  **渲染期间**建对象（在 `content` 里改状态是 SwiftUI 明令禁止的）。
+- **"返回不重取"靠的是"那一层的数据还在"** —— 会话躺在 `levels` 里、带着已经落地的目录页；
+  **不是**"视图还在栈里"（底下几层的视图是销毁的，只有栈顶被渲染）。落点是
+  `RepoCodeViewModel.load(_ session:)` 的第一条守卫 `guard !session.page.hasFinished`。
+  ⚠️ 所以**不要**在这条路上加"每次出现都重新取一遍"的钩子（`.onAppear` / 无 `id` 的 `.task`）
+  —— 那正好把这次要修的"文件夹感"打掉。
+  - ⚠️ `.task(id:)` 的 `id` **必须带上 `defaultBranch`**：它是异步来的，而这一层的取数要等它。
+    ⚠️ **更正（2026-10-14 同日核了一遍）**：`tree` 那一支**只在分支到手之后**才会被渲染
+    （分支还没来那一格骨架由 `content(_:)` 画）⇒ 这一半现在**到不了 `nil`**、也就不会真的
+    触发过一次重跑；而原先那句"无 `id` 的 `.task` 会在它还是 `nil` 时就跑完并返回"**在当前
+    结构下不成立**（那是这份文档与 `RepoCodeView` 的注释里都写错的一句）。留着它的理由是
+    **它描述了取数的依赖**（`load` 第一条守卫就是 `guard let defaultBranch`）：哪天骨架改成
+    由"会话自己"画（`.task` 会先带着 `nil` 跑一次），少了它就会静默退化成"永远停在骨架屏"。
+    （⚠️ 2026-10-14 起**不再需要**"在不在栈顶"那半截：只有栈顶那一层被渲染，`.task` 天然只属于它。）
+  - ⚠️⚠️ **`id` 还必须带上"这一层的路径"**（2026-10-14 当天补 —— 同日用户报回
+    "点二级目录一直停在骨架屏、而别的页面都正常"）：换层时 `defaultBranch` **一个字都不会变**
+    ⇒ 只按它做 key，`.task` **不会重跑** ⇒ 那一层的会话从没被取过（`page` 停在 `idle`，
+    而 `idle` 的 `presentation` 就是骨架）⇒ **一块永不消失的骨架屏**。
+    ⚠️ 它的来由正是上面的"删掉嵌套栈"：在那之前每一层是各自一个 `navigationDestination` 视图、
+    各有自己的 `.task` ⇒ "每进一层会取数"**是栈给的保证，不是这一页给的**。
+    现在这个 id 是一个结构体 **`RepoCodeLoadKey`**（`branch` + `path` 两个字段）——
+    ⚠️ 用结构体而不是拼字符串是**有意的**：结构体让"漏一半"**编译不过**，
+    而拼字符串那版漏掉的正是 `path` 那一半（还要额外操心分隔符与 `nil` 占位）。
+    ⚠️ 这条**实跑验过**（2026-10-14 最小复现 + 退回验证，证据见 `REVIEW-CHECKLIST` 第 63 条那条补记）。
+  - ⚠️ 同时内容要**换身份**（`RepoCodeView` 里的 `.id(level.path.raw)`）：换层 = 换一份 `ScrollView`
+    ⇒ 滚动位置归零（不换的话，上一层那个偏移会被继承 —— 子目录进来就是滚下去的，
+    而"我在哪一层"由面包屑回答、它恰恰在内容最上面）。⚠️ 它**不参与取数**（取数由上面那个
+    `.task(id:)` 管），两处**故意分开**：漏前者 = 永远停在骨架屏，漏后者 = 进子目录时它是滚下去的。
+  - ⚠️ 下拉刷新只刷**当前这一层**（`level.session.reload()`），不是整个层级。
+  - ⚠️ **隐藏系统返回键之后左滑手势还剩什么，未目视**（真机核对项，同 `RepoCodeView` 的说明）。
+
 | 场景 | 端点 |
 |---|---|
 | 逐级目录 | `GET /repos/{owner}/{repo}/contents/{path}?ref={branch}` |
-| 面包屑跳级 | 直接请求目标 path，或从已在内存的路径栈回退（避免重复请求） |
+| 面包屑跳级 | **零请求**：把 `levels` 截断到目标那一层（那一层的会话早已在数组里），不重新请求 |
 | 文件查看 | `GET …/contents/{path}`（小文件返回 base64；大文件用 `Accept: application/vnd.github.raw` 取原文） |
-| README 渲染 | `GET …/readme`（raw）→ §11.1 块级渲染 |
+| README 渲染 | ⚠️ **2026-10-14 晚些起不在这里** —— 它由两个**仓库首页**取（`LoadRepoReadme`：`GET …/readme`（raw）→ §11.1 块级渲染）。见 §9.11 与 `RepoReadmeSection` |
 
 - ⚠️ **目录清单里没有「最近提交信息」**：`GET …/contents/{path}` 的返回项只有 `name`/`path`/`sha`/`size`/`type`/`url`/`_links`/`git_url`/`html_url`/`download_url`（2026-10-07 实测），`git/trees` 也不含提交信息。PRD §3.2 的副标题要**逐文件补一次** `GET …/commits?path={p}&per_page=1`（**决策 #49**）；带 ETag ⇒ 复访 304 不计配额，且副标题**随请求陆续填充**、不阻塞文件列表先出。
 - ⚠️ **三档降级由纯函数判定**（**决策 #54**，落点在领域层 `FilePreviewKind`，因为 App target 没有测试 target）：
@@ -1276,7 +1401,7 @@ App 侧 `UserProfileSheet` 用 `@State(initialValue: fallback)` + `.task(id: fal
 | # | 入口 | 通道 | 步数 |
 |---|---|---|---|
 | ① | 文件查看页菜单「编辑」→ 编辑器（`mode = .edit`） | `GET contents?ref=` 取 `sha` → `PUT contents` | 2 |
-| ② | 代码分区「＋ 添加 → 新建文件」→ 编辑器（`mode = .create`） | `PUT contents`（**不带 `sha`**） | 1 |
+| ② | 代码页导航栏**右上角**那颗「⋯ → 新建文件」（更早是面包屑右侧的「＋ 添加」；2026-10-14 搬进导航栏，走查第 63 条那条补记）→ 编辑器（`mode = .create`） | `PUT contents`（**不带 `sha`**） | 1 |
 | ③ | 「＋ 添加 → 上传文件 · 文件 App」 | `.fileImporter` 选中 → `PUT contents` | 1 |
 | ④ | 「＋ 添加 → 上传图片 · 相册」 | `PhotosPicker` 选中 → `PUT contents` | 1 |
 | ⑤ | 文件查看页菜单「重命名」（2026-10-13 起在右上角那颗「⋯」里，第 62 条） | `PUT` 新路径 → **串行** `DELETE` 旧路径 | 2 |
@@ -1435,13 +1560,16 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
 
 #### 9.8.1 仓库详情的 Issues / Pull Requests 两段（切片 7 新增）
 
-这两段是 §4.4 四分区里的第二、三段，零件由切片 7 交付（决策 #50）。**与 §4.14 / §4.15 的探索页两段有意不同**（决策 #61）：
+这两段是 §4.4 那三个列表分区里的第二、三段，零件由切片 7 交付（决策 #50）。
+⚠️ **2026-10-14**：它们从"仓库详情页就地切换的两段"改成了**两个独立页面**
+（`RepoSectionListView`，路由 `.repoSection(fullName:section:)`，§8.2）——
+下面的口径**一条没变**，只是换了宿主。**与 §4.14 / §4.15 的探索页两段有意不同**（决策 #61）：
 
-| | 探索页（§4.14 / §4.15） | 仓库详情（§4.4 两段） |
+| | 探索页（§4.14 / §4.15） | 仓库详情那两个分区页（§4.4.2 / §4.4.3） |
 |---|---|---|
 | Issues 范围 | **只开放**（决策 #38） | **开放 + 已关闭** → 两档分段 |
 | PR 范围 | **开放 + 已合并**（决策 #39） | **开放 + 已合并** → 两档分段 |
-| Issue 卡片 | 状态图标 + 标题 + 副标题 | **多一枚标签胶囊**（原型 `05-repo.js:127`） |
+| Issue 卡片 | 状态图标 + 标题 + 副标题 | **多一枚标签胶囊**（原型 `05-repo.js:243`） |
 | PR 卡片 | 状态图标 + 标题 + `#N · head → base` | **多一行** `{作者} 更新于 {时间}`（**无增删** —— 列表端点不返回，决策 #58） |
 | 新建入口 | 无 | Issues 段有「＋ 新建 Issue」；PR 段**无**（PRD §4.4 明确） |
 | 筛选 | 无 | Issues 段有「筛选」（**只按标签**，决策 #56） |
@@ -1578,7 +1706,23 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
   ⚠️ 这一行**排在 `statRow` 与页脚之间**：页脚那句（`他人仓库 · 只读浏览，Fork 后可编辑与提交`）是 PRD §4.13 **逐字给的原型文案**，
   一个字都不能动，全页只有这一句的**语义**与它不冲突 —— 所以是**加一行**、不是改它。
 
-**落地分片：8 个分区不属同一切片**（PRD §4.13 有同一张表）。切片 4 交付 ①头部 ③语言构成 ④Latest Release ⑦参与协作 ⑧贡献者；⑤文件浏览 / ⑥README 由 **6.4d** 交付（与 §4.4 的代码分区**共用** `RepoTreeSection` / `RepoTreeSession`）；②我的收藏由**切片 9** 交付。
+**落地分片：8 个分区不属同一切片**（PRD §4.13 有同一张表）。切片 4 交付 ①头部 ③语言构成 ④Latest Release ⑦参与协作 ⑧贡献者；⑤文件浏览 / ⑥README 由 **6.4d** 交付（与 §4.4 的代码浏览**共用** `RepoTreeSection` / `RepoTreeSession`）；②我的收藏由**切片 9** 交付。
+> ⚠️ 上面那句里的"共用"是**当时**的实情：2026-10-14 起 ⑤ 与 ⑥ 都不再与代码页共用目录会话（⑤ 变一条入口行、⑥ 走 `LoadRepoReadme` 单独取 README）—— 见下面两段。
+
+⚠️ **2026-10-14：⑤ 与 ⑥ 在这一页上先后改过两次**（走查第 63 条 + 用户要求 README 进仓库首页，PRD §4.13）。
+
+**第一次**：两者原来都是"就地在页内展开的目录树 + README 卡片"，被合成一条
+**`浏览目录与 README`** 的入口行，点它推入 **`.repoCode(fullName:readOnly: true)`**
+—— 也就是代码页那一档只读形态（§9.5）。两条理由：
+① 页面短了一半，② 目录层级跟着页内栈走之后，"点进一层还留在这一页、返回不重取"这条才成立
+（原地展开的树做不到这件事：它每进一层都要重画整页）。
+
+**第二次**（同日 · 用户要求）：⑥ **README 搬回本页**，位置在 ⑤ 那条入口行**之下**、
+`参与协作` 之前。它与 §4.4 首页那一块**共用** `RepoReadmeSection`（渲染三档与三套接线都在那一件里），
+取数走 **`LoadRepoReadme`**（`ref` = 详情里的 `defaultBranch` ⇒ 本页不解析分支记忆）。
+⚠️ 连带：那条入口行**不再叫 `浏览目录与 README`**（README 就在它下面，留着那三个字是假承诺）。
+
+⚠️ 探索页这一页**仍然不画**目录树 —— 想看目录请走那一行。别在这里再长出一棵。
 未落地的分区曾用 **`PendingSection`（小型占位块）** 显式标注——与 `SkeletonScreen` 同一哲学（"一眼可辨、不冒充成品"，`AGENTS.md §0`）：整块不渲染会让评审看不出还差什么，而假数据更糟。**2026-10-09（切片 9.5）：占位块归零** —— ②落地后 `PendingSection` 已全 App 无调用点并被删除，`SkeletonPlaceholders.registry` 同步清空。
 **同日稍后（切片 10 收口，用户裁定）：`SkeletonScreen` 类型也一并删除** —— 十个切片做完后全 App 再没有"未落地界面"，它没有收件人了；两个占位类型至此都不在，只剩登记册（空数组）。
 ⚠️ **这份名单会随切片推进变短，改了就要跟着删** —— 留着过期的占位块或过期的说明，等于把"页面看着完整、其实少一块"换个方向重演一遍。⚠️ 这条纪律**没有随这两个类型一起消失**：下一个切片若要再出现半成品页面，**三条一起恢复** —— 占位屏（`SkeletonScreen`）、页内占位块（`PendingSection`）、登记册（`SkeletonPlaceholders.registry`），别只恢复一条。
@@ -1971,7 +2115,7 @@ GlassEffectContainer(spacing: 12) {
 |---|---|---|
 | `CodeSurface` | `.markdown pre` / `pre code`（PRD §4.4 / §4.5） | 只收 `[[CodeSpan]]`（`text` + 五档 `CodeTone`）⇒ 与业务无关。**横向滚动不折行**（折行会让缩进层次看不出来，而缩进是读代码的第一信息）；**一个 `Text` 装全部行**（否则行距要靠 `VStack(spacing:)` 凑，而那个值同时管着行距与末行内边距） |
 | `DiffRow` | `.dline` / `.hunk`（PRD §4.7） | 只收 `number` / `text` / `tone` 三个基础类型 ⇒ 进设计包。**六档**：原型四档 + `.note`（`\ No newline`）与 `.content`（未知行）—— 这两档原型没有但**必须有地方落**，丢掉会让用户看到的 diff **少几行且没有任何迹象**。行号列宽 34（含右侧 8pt 内边距，故修饰符顺序不能反） |
-| `BreadcrumbBar` | `.crumb` + `.branch-chip`（PRD §4.4 / §4.13） | 只收 `branch: String` + `path: [String]` ⇒ 进设计包。"当前在哪一级"是领域层 `RepoPath` 的事。路径段走 `FlowLayout` **折行不截尾**（截尾会把"我在哪一级"这个唯一的信息压掉）；分隔符作**每段的前缀**（否则折行时行尾会留一根孤零零的斜杠） |
+| `BreadcrumbBar` | `.crumb` + `.branch-chip`（PRD §4.4 / §4.13） | 只收 `branch: String` + `path: [String]` ⇒ 进设计包。"当前在哪一级"是领域层 `RepoPath` 的事。路径段走 `FlowLayout` **折行不截尾**（截尾会把"我在哪一级"这个唯一的信息压掉）；分隔符作**每段的前缀**（否则折行时行尾会留一根孤零零的斜杠）。⚠️ **2026-10-14：右端那个 `trailing` 槽删了**（它唯一的生产调用方 `RepoTreeSection` 不再传 —— 那颗「⋯」搬到了导航栏右上角），连同 `where Trailing == EmptyView` 的便利 init 与 `#Preview` 里那段演示 |
 | `BranchRow` | `.menu-item` 的分支行（PRD §4.8） | 只收 `name` / `badgeTitle` / `canDelete` / 两个闭包 ⇒ 进设计包。**不判断能不能删**（判据在 `BranchSummary.canDelete`）、**不写死任何文案**（从 `BranchCopy` 传） |
 
 ⚠️ **`MarkdownBody`（吃 `[MarkdownBlock]`）与 `DiffCard`（吃 `FileChange`）因此**留 Feature**（`GitDuo/Features/Repo/Components/`）—— 它们收领域模型，按决策 #43 不进设计包。与之配套的 `CodeHighlighting`（`SyntaxTokenKind` → `CodeTone`）也留在 App 层：两侧互不认识（设计包不得 import 领域层、领域层不得 import SwiftUI），这次翻译**只能**落在 App 层；而 App target 没有测试 target ⇒ 两处翻译（`CodeHighlighting.tone` / `DiffCard.tone`）的 `switch` **一律去掉 `default` 写成穷尽**，领域层加一档时**编译不过**，那是唯一可用的守卫。
@@ -1988,10 +2132,12 @@ GlassEffectContainer(spacing: 12) {
 |---|---|---|
 | `SHABadge` | `.sha`（PRD §4.4 目录行 / §4.7 提交头部） | 只收一个 `String` ⇒ 进设计包。它原先私有在 `RepoRows.shaBadge` 里，而 §4.7 的提交头部要画**同一枚**徽章 —— 两处各画一遍时，任何一处改错底色或字号都**不会报错**，只会让同一个短哈希在两个页面上长得不一样 |
 | `ActionButton` | `.btn`（PRD §4.5 / §4.7 的底部按钮） | 只收 `title` / `style` / 闭包。6.4 补了两个参数：`horizontalPadding`（原型 16，`SCR.fileView` 覆写 22）与 `fillsWidth`（默认 `true`；`false` 时按内容宽度、不撑满） |
-| `SectionTabs` | `.prtabs`（PRD §4.4 分段条） | 只收 `[String]` + 选中项 + 回调 ⇒ 与业务无关（**四段是哪四段**由 `RepoSection.allCases` 决定，不是由它）。⚠️ 它**不**判断"哪几段已交付" —— 那是施工进度，属路由/视图层（见 `RepoSection` 的说明） |
+| `SectionTabs` | `.prtabs`（原型里仓库详情与 PR 详情两处的分段条） | 只收 `[String]` + 选中项 + 回调 ⇒ 与业务无关。⚠️ **2026-10-14 起它只剩一个调用方**：`PullDetailView` 的「对话 / Commits / 文件」三格（原型的 `p.seg`）。仓库详情那条分段条**撤掉了**（§8.2 / §9.4），所以它不再认识 `RepoSection.allCases` —— 那条例据作废 |
 | `SheetPrimitives` | 全部弹层的公共骨架（`SheetTitle` / `SheetRow` / `SheetHint` / 底部按钮区） | 只收基础类型与闭包。六个弹层（分支 §5.7 / 新建分支 / 删分支 / 合并 §5.3 / 添加文件 §5.8）的标题、行、说明若各写一遍，改一处内边距就要改六遍 |
 
-⚠️ **留 Feature 的三件**（`GitDuo/Features/Repo/Components/`）：`RepoTreeSection`（吃 `RepoTreeSession`，§4.4 与 §4.13 **共用**的"面包屑 + 文件行 + README"）· `RepoDetailHero` · `RepoRows`。前者的三处差异（标题 / 尾部控件 / 两个点击回调）由参数表达，**`symlink` / `submodule` 在它内部就被拦下**（`open(_:)` 里 `guard entry.kind.isNavigable`）⇒ 调用方只会收到"能进入的条目"。它同时是**本片最大的一处去重**：§4.4 代码分区与 §4.13 第 ⑤/⑥ 分区渲染的是同一件事，而状态迁移（两段式分支解析、记忆失效回落、副标题补填、分支列表 304）**逐条相同** —— 抄一份的代价是那几条规则将来只改到一份，"同一个仓库在两页里点同一行结果不一样"。
+⚠️ **留 Feature 的三件**（`GitDuo/Features/Repo/Components/`）：`RepoTreeSection`（吃 `RepoTreeSession`，**代码页**与 §4.13 **共用**的"面包屑 + 文件行 + README"）· `RepoDetailHero` · `RepoRows`。前者的差异（两个点击回调 + 分支胶囊）由参数表达，**`symlink` / `submodule` 在它内部就被拦下**（`open(_:)` 里 `guard entry.kind.isNavigable`）⇒ 调用方只会收到"能进入的条目"。它同时是**本片最大的一处去重**：代码页与 §4.13 第 ⑤/⑥ 分区渲染的是同一件事，而状态迁移（两段式分支解析、记忆失效回落、副标题补填、分支列表 304）**逐条相同** —— 抄一份的代价是那几条规则将来只改到一份，"同一个仓库在两页里点同一行结果不一样"。
+  ⚠️ **2026-10-14 补，同日又改了一次**：它的调用方从"两处"收成了**一处** —— `RepoCodeView` 里那一处（只读态由 `readOnly` 给）。第一版曾写成"三处 / 每一层都画一个、同屏可能有多个实例"，那是**嵌套栈**时代的论据：那一版底下几层都在视图树上 ⇒ 同屏确实有多个实例。现在只有**栈顶那一层**被渲染（§9.5）⇒ **同一时刻只有一个实例**，"多个实例"这条注意事项作废。
+  ⚠️ **同日再收一次：`title` 与 `trailing` 两个参数一起删了**（用户裁定），本件因此**不再需要泛型参数**（原来那个 `<Trailing: View>` 只服务 `trailing`）。`title` 是上一段"收成唯一调用方"那一刻就没人传的（代码页不画分区标题），`trailing` 是那颗「⋯」搬到**导航栏右上角**之后没人传的（§9.5 / 走查第 63 条那条补记）。删它的判据与 `FileCopy` 那次"失去唯一消费端的常量一并删除"同一条：留着等于给下一个读的人一道判断题。
 
 ⚠️ **`RepoWebLinks` 不是组件，但它同属"外置以免分叉"**：`blob(fullName:ref:path:)` / `commit(fullName:sha:)` 收拢了「跳网页端」的**三处**出口（文件查看页、`symlink` / `submodule` 条目、提交详情页的 Revert）。三处各自拼字符串的代价不是多几行 —— 而是**拼错了不会报错**：用户看到的是 GitHub 的 404 页，于是他会以为"这个文件被删了"。⚠️ 统一用 `blob` 而不是 `tree`（`blob` 指目录会自动跳，`tree` 指文件不会），且引用名**必传**（拿不到给字面 `HEAD`）。
 
@@ -2126,13 +2272,15 @@ GlassEffectContainer(spacing: 12) {
 > **链接落点：`GitDuoKit/Repo/RepoLinkResolver`（纯函数，可单测）。**
 > `[中文](README_zh.md)` 这种**相对地址**在 `AttributedString.link` 里是打不开的（没有 scheme），
 > 表现是"点了没反应"——而源码里 `URL(string: "README_zh.md")` 与 `piece.link = url` 都完全合法。
-> 五档归宿：`.file`（推入文件查看页）/ `.directory`（推入该路径的代码分区）/ `.external`（交给系统）/
+> 五档归宿：`.file`（推入文件查看页）/ `.directory`（推入代码页的**那一层** —— 2026-10-14 起带 `path` 作起始层，见 §8.2 的 `repoCode`）/ `.external`（交给系统）/
 > `.anchor`（解析得出来、本期不做井内跳转）/ `.unresolved`（相对地址跳出仓库根）。
 > ⚠️ `.anchor` 与 `.unresolved` **必须分开**：前者"地址没问题、只是不做"，后者"这个地址看不懂" ——
 > 合成一档之后两件事在界面上表现一样，而它们该说的话完全不同。
 > ⚠️ 两条与文件系统直觉相反的规则：**以 `/` 开头的是站点根**（`/owner/repo/issues` 指 `github.com/...`）；
 > **同仓库才收进 App**（收别的仓库会以当前仓库身份去取数 ⇒ 404，比不跳更难解释）。
-> 接线只有一处：`RepoTreeSection` 的 README 分区（§4.4 与 §4.13 共用它）。
+> 接线只有一处：`RepoReadmeSection`（§4.4 与 §4.13 两个**仓库首页**共用它）。
+> ⚠️ 2026-10-14 晚些之前，这一处是 `RepoTreeSection` 的 README 分区（README 当时画在代码页里）；
+> 它随 README 一起搬到了首页，接线本身**没有分叉成两份**。
 
 > ### 表格（GFM）已支持 —— 及它带来的两处「规格未给」（2026-10-10）
 >
@@ -2259,7 +2407,10 @@ GlassEffectContainer(spacing: 12) {
 
 | 操作 | 请求数 | 备注 |
 |---|---|---|
-| 打开仓库详情（代码分区） | 1（repo）+ 1（contents）+ 1（branches） + **N**（文件树副标题） | README 另计 1。⚠️ 2026-10-07 补：原表写「1 + 1」漏了两处 —— **分支列表**（面包屑上的分支胶囊与切换弹层都要它）与**逐文件副标题**（**决策 #49**，N = 该目录条目数，带 ETag ⇒ 复访 304 不计配额） |
+| 打开代码页（首层） | 1（repo）+ 1（contents）+ 1（branches） + **N**（文件树副标题） | ⚠️ 2026-10-14 晚些：**README 不另计**了 —— 它不在这条路径上（由两个仓库首页各自取，见下一行）。⚠️ 2026-10-07 补：原表写「1 + 1」漏了两处 —— **分支列表**（面包屑上的分支胶囊与切换弹层都要它）与**逐文件副标题**（**决策 #49**，N = 该目录条目数，带 ETag ⇒ 复访 304 不计配额） |
+| 打开仓库首页（§4.4 / §4.13） | 1（repo）+ **1（readme）** | ⚠️ 两条**串行**：README 要头部里的 `defaultBranch` 才知道用哪条分支读（§4.13 那一页的详情是四路并发取的，但 README 不在那四路里 —— 它自己算一条）。同一条 `HTTPTransport` 的缓存 / 条件请求口径 |
+| 打开仓库枢纽页（`repoDetail`） | **1** | 2026-10-14 起本页只取头部（连 Star 基准）。⚠️ 上面那一行**不再叠加在本行上** —— 那四行的每一行都是**另一次进页**，各自算各自的 |
+| 代码页**往里点一层目录** | 0–1 + **N'** | 2026-10-14 新增：`contents` 命中缓存则 0（同一层看过），否则 1；副标题那 N' 条按新一层的条目数算。⚠️ **返回上一层是 0** —— 那一层的会话还在内存里（§9.5「返回不重取」） |
 | 文件查看（≤1MB 文本） | 1 | `contents` base64 解开即可 |
 | 文件查看（>1MB 或图片） | 2 | 先 `contents` 拿 `size` 与 `encoding:"none"`，再 raw 取原文（**决策 #54**） |
 | 提交详情 | 1 | `commits/{sha}`，响应含 `files[].patch` 与 `stats` |

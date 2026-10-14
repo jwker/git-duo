@@ -284,7 +284,7 @@ struct ExploreView: View {
     /// ⚠️ 反过来说：**用户自己的公开仓库出现在榜单里时也会进只读页**。这是有意接受的误差 ——
     /// 榜单是"发现"语境，进的是浏览页；真要看自己的仓库，走首页或仓库 Tab。
     private func open(_ row: TrendingRow) {
-        env.router.push(.exploreRepoDetail(fullName: row.fullName, path: nil))
+        env.router.push(.exploreRepoDetail(fullName: row.fullName))
     }
 }
 

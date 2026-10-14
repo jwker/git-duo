@@ -71,7 +71,7 @@ struct RepoFileRow: View {
 
 // MARK: -
 
-/// Commits 分区里的一行（原型 `SCR.repoDetail` 的 `.commit-row`）。
+/// Commits 页里的一行（原型 `SCR.repoSection` 里 `repoSeg('commits')` 那支的 `.commit-row`）。
 ///
 /// ```css
 /// .commit-row{display:flex;gap:10px;align-items:center;padding:11px 4px;

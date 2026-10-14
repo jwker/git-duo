@@ -33,10 +33,12 @@ struct PullSectionTests {
         // 这条不是同义反复：`initial` 曾经最自然的写法是写死 `.conversation`，
         // 那样"把 files 挪到第一位"之后默认仍然停在对话，而没人会去改它。
         #expect(PullSection.initial == PullSection.allCases.first)
-        // 与仓库详情那边**有意不同**：`RepoSection.initial` 是写死的 `.code`
-        // （PRD §4.4 明写"分区一：代码（默认）"，那是一条产品指定、不是"第一条"）。
-        #expect(RepoSection.initial == .code)
-        #expect(RepoSection.allCases.first == .code)
+        // ⚠️ 对照那条**已于 2026-10-14 消失**（走查第 63 条）：`RepoSection.initial`
+        // 写死 `.code`，而 `.code` 那天起**不再是 `RepoSection` 的成员**
+        // ——「代码」成了仓库首页四行入口里的一个**入口**，不再是"默认选中的某一段"。
+        // ⇒ 这个仓库里**没有第二个 `initial` 可以拿来对照**了。
+        // 那条对照当年钉住的道理仍然成立（"默认"该不该跟着声明顺序走，取决于它是
+        // 产品指定还是"第一条"），只是现在只剩 `PullSection` 一处有默认段落。
     }
 
     // MARK: - 标题

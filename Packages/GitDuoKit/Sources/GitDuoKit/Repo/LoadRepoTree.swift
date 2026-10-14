@@ -1,9 +1,16 @@
 import Foundation
 import GitHubAPI
 
-/// 代码浏览的取数：目录清单 + README + **两段式分支解析**。
+/// 代码浏览的取数：目录清单 + **两段式分支解析**。
 ///
 /// 依据：TECH_SPEC §9.4.1（分支解析）、§9.5（代码浏览）、决策 #55。
+///
+/// ## ⚠️ 2026-10-14 起它**不再取 README**（用户要求 README 进仓库首页）
+///
+/// 此前根目录那一趟会**并发**多问一次 `readme` 端点，把结果塞进 `RepoTreePage.readme`
+/// —— 于是 README 与"目录"绑在一起，只是因为"仓库根"这个位置顺带有了它。
+/// 现在 README 由 `LoadRepoReadme` 单独取（两个首页画它，它们都已经有头部在手
+/// ⇒ 比这里少一整套依赖）。本件因此只剩"某条分支下某个目录的清单"这一件事。
 ///
 /// ## ⚠️ 为什么分支解析落在这里而不是视图里
 ///
@@ -34,17 +41,16 @@ public struct LoadRepoTree: Sendable {
         self.branchSource = branches
     }
 
-    // MARK: - 目录 + README
+    // MARK: - 目录
 
-    /// 取一个路径的目录清单（根目录另附 README）。
+    /// 取一个路径的目录清单。
     ///
     /// - Parameters:
     ///   - path: 已经过 `RepoPath` 校验的路径（`RepoPath.root` 表示根目录）。
     ///   - remembered: `BranchMemoryStore` 里该仓库的记忆值；没有则 `nil`。
     ///   - defaultBranch: 头部（`RepositoryDetail.defaultBranch`）给的回落值。
     ///
-    /// - Throws: 目录请求的错误（含**两次都失败**时的那个）。⚠️ README 的 404
-    ///   不会抛 —— 它在端点里已被翻译成 `nil`（§9.5：唯一允许吞 404 的一处）。
+    /// - Throws: 目录请求的错误（含**两次都失败**时的那个）。
     public func load(
         fullName: String,
         path: RepoPath,
@@ -55,7 +61,7 @@ public struct LoadRepoTree: Sendable {
 
         // ── 第 1 步：立即用记忆值（无记忆则默认分支）发，不等分支列表。
         var branch = BranchResolver.initial(remembered: remembered, defaultBranch: defaultBranch)
-        var fetched: (entries: [ContentEntryDTO], readme: String?)
+        var fetched: [ContentEntryDTO]
         do {
             fetched = try await fetch(owner: owner, repo: repo, path: path, ref: branch)
         } catch {
@@ -95,10 +101,7 @@ public struct LoadRepoTree: Sendable {
 
         return RepoTreePage(
             branch: branch,
-            entries: fetched.entries.map(RepoFileMapper.treeEntry),
-            // ⚠️ 解析在**这里**做一次，不在视图的 `body` 里（见 `MarkdownDocument`）：
-            //    放进 body 是每次重绘重扫全文，而结果每次都相同。
-            readme: fetched.readme.map(MarkdownDocument.init),
+            entries: fetched.map(RepoFileMapper.treeEntry),
             didFallBack: resolution.didFallBack
         )
     }
@@ -111,31 +114,26 @@ public struct LoadRepoTree: Sendable {
         return page.items.map(\.name)
     }
 
-    /// 目录 + README 一趟取回（根目录两路并发）。
+    /// 一个路径的目录清单。
+    ///
+    /// ⚠️ **2026-10-14 起它不再顺带取 README**（本地图曾经是"目录 + README 一趟取回"，
+    /// 根目录时两路并发）—— README 现在由 `LoadRepoReadme` 单独取，见类型说明。
+    /// 连带好处：本函数不再需要知道"这是不是根目录"（原来那个 `path.isRoot` 分支
+    /// 存在的唯一理由就是"子目录不问 readme 端点"）。
     private func fetch(
         owner: String,
         repo: String,
         path: RepoPath,
         ref: String
-    ) async throws -> (entries: [ContentEntryDTO], readme: String?) {
-        async let payloadTask = contents.contents(
+    ) async throws -> [ContentEntryDTO] {
+        try await contents.contents(
             owner: owner, repo: repo, path: path.raw, ref: ref
-        )
-
-        guard path.isRoot else {
-            // ⚠️ 非根目录**不取 README**：`readme` 端点找的是仓库级的 README，
-            //    在任何子目录下问它都会拿到同一份（那不是"这个目录的说明"）。
-            return (try await payloadTask.entries, nil)
-        }
-
-        async let readmeTask = contents.readme(owner: owner, repo: repo, ref: ref)
-        let (payload, readme) = try await (payloadTask, readmeTask)
-        return (payload.entries, readme)
+        ).entries
     }
 
 }
 
-/// 一个路径的目录清单（根目录另附 README）与**解析后的分支**。
+/// 一个路径的目录清单与**解析后的分支**。
 public struct RepoTreePage: Sendable {
 
     /// 本次取数实际用的分支 —— 视图的面包屑现实显示它。
@@ -146,12 +144,6 @@ public struct RepoTreePage: Sendable {
 
     public let entries: [TreeEntry]
 
-    /// README（原文 + 已解析的块）；`nil` = 这个仓库没有 README，或当前不在根目录。
-    ///
-    /// ⚠️ 解析（`MarkdownParser`，§11.1）**在取数那一层已经做完** —— 视图拿到的是
-    /// 可以直接渲染的块，不必（也不该）在 `body` 里再解析一次。
-    public let readme: MarkdownDocument?
-
     /// 记忆值失效、回落到了默认分支。
     ///
     /// 调用方拿到 `true` 时有一件事必须做：`BranchMemoryStore.forget(fullName:)`。
@@ -160,15 +152,15 @@ public struct RepoTreePage: Sendable {
     /// **不清缓存**：清掉只会让下一帧多几个请求。）
     public let didFallBack: Bool
 
+    /// ⚠️ **2026-10-14 起本类型没有 `readme` 了** —— README 改由 `LoadRepoReadme`
+    /// 单独取（它不再是"某条分支下某个目录"的一部分）。理由见 `LoadRepoTree` 的类型说明。
     public init(
         branch: String,
         entries: [TreeEntry],
-        readme: MarkdownDocument?,
         didFallBack: Bool
     ) {
         self.branch = branch
         self.entries = entries
-        self.readme = readme
         self.didFallBack = didFallBack
     }
 

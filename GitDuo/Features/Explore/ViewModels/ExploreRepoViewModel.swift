@@ -5,16 +5,22 @@ import GitDuoKit
 
 /// 他人仓库详情的状态（PRD §4.13、TECH_SPEC §9.11）。
 ///
-/// ## 它管三件不同节奏的事
+/// ## 它管两件不同节奏的事
 ///
 /// | | 数据 | 何时取 |
 /// |---|---|---|
 /// | 页面四路数据 | `GET /repos` + `languages` + `releases/latest` + `contributors` | 进页一次（并发四路） |
 /// | Star 基准 | `GET /user/starred/{o}/{r}` | 详情回来之后 —— 它需要详情里的星数 |
-/// | 目录 + README | `GET /contents` 等 | 详情回来之后 —— 它要 `defaultBranch` |
 ///
-/// 第三条走 **`RepoTreeSession`**（§4.4 的「代码」分区用的是同一个会话）：
-/// 分支两段式解析、记忆失效回落那几条规则只有一个落点。
+/// ## ⚠️ 2026-10-14：目录 + README 那一半**搬走了**（走查第 63 条）
+///
+/// 第 ⑤ / ⑥ 两分区原先在本页**内嵌**着一整块目录浏览（`RepoTreeSession`
+/// + `RepoTreeSection`，与 §4.4 的「代码」分区共用），于是子目录要"推入一层新页面"。
+/// 现在它改成**一条入口行**，点进去是 `RepoCodeView`（那一页自己承载目录层级）
+/// ⇒ 本类型不再需要目录会话、分支列表，也不再需要 `path`。
+///
+/// ⚠️ 连带消失的还有"这一页能切分支"这件事（原型那一处——`exploreTree`——已随同步删除）：
+/// 分支切换跟着目录一起去了代码页，那里是唯一有面包屑的地方。
 ///
 /// ## ⚠️ 一路失败 ⇒ 整页失败（有意如此）
 ///
@@ -22,20 +28,33 @@ import GitDuoKit
 /// 并明写"各页面不得自行发挥"。分区块各自失败要再定义一套"块级失败态"，
 /// 那是新的产品口径，不该由实现顺手定。`LoadRepoInsights` 里有完整理由。
 ///
-/// ⚠️ 上面那条**不适用于目录**：它落在第 ⑤ / ⑥ 分区里、由 `RepoTreeSection`
-/// 自带块级失败态（那是 §8.5 三档在"分区"这一层上的正常用法，
-/// 与"整页失败"不是同一件事 —— §4.4 的代码分区也是这么处理的）。
+/// ## ⚠️ 2026-10-14 晚些：README 是**块级**取数，不走上面那条
+///
+/// | | 数据 | 何时取 | 失败时 |
+/// |---|---|---|---|
+/// | 页面四路（`insights`）| 头部 + 语言 + Release + 贡献者 | 进页（并发四路）| **整页失败** |
+/// | Star 基准 | `GET /user/starred` | 详情回来之后 | 静默降级（`star` 留 `nil`）|
+/// | README | `GET /repos/{o}/{r}/readme` | **详情回来之后** | **块级失败**：那一块给「重试」 |
+///
+/// ⚠️ 上面那条"整页失败"说的是 `insights` 自己那四路 —— 它们是**一屏**（少一路那一屏
+/// 就不成立）。README 不是：它是"再往下看"的一段内容，取不到不该让用户连头部、
+/// 语言构成、文件浏览入口都看不成。而"块级失败态"也**不是新产品口径** ——
+/// `SectionFailure` 早就存在（§4.4 分段时代四个分区共用它），这里只是又一个调用方。
 @MainActor
 @Observable
 final class ExploreRepoViewModel {
 
     private(set) var insights: LoadState<RepoInsights> = .idle
 
-    /// 目录浏览的会话（当前分支 + 目录页 + 分支列表）。
+    /// 仓库 README（§4.13 的 ⑥ 分区）。
     ///
-    /// ⚠️ 它是**只读浏览**的那一半：可切分支（记忆照写）、不可增删合并 ——
-    /// 后者由 `BranchSheet(isReadOnly: true)` 那一侧决定，与本类型无关。
-    let tree: RepoTreeSession
+    /// ⚠️ 2026-10-14 起它**住在本页**：此前它跟着目录一起在代码页里（README 与"根目录"
+    /// 那个位置绑在一起），现在由 `LoadRepoReadme` 单独取 —— 本页已经有头部在手
+    /// （`RepoInsights.detail.defaultBranch`），不需要分支列表、不需要分支记忆。
+    ///
+    /// ⚠️ `nil`（内层）= 这个仓库没有 README（**正常结果**，不是错误）；
+    ///    `nil`（外层）= 还没取到。两者在 `RepoReadmeSection` 里各有各的画法。
+    private(set) var readme: LoadState<MarkdownDocument?> = .idle
 
     /// Star 的当前状态。`nil` = 基准还没确认（详情没好，或那次查询失败了）。
     ///
@@ -60,6 +79,7 @@ final class ExploreRepoViewModel {
     var now: Date { .now }
 
     private let loader: LoadRepoInsights
+    private let readmeLoader: LoadRepoReadme
     private let starToggle: ToggleStar
     private let starScope: StarWriteScopeCache
     private let visits: any RecentVisitStore
@@ -69,29 +89,20 @@ final class ExploreRepoViewModel {
 
     init(
         fullName: String,
-        path: RepoPath,
         loader: LoadRepoInsights,
-        treeLoader: LoadRepoTree,
-        branches: LoadBranches,
+        readme: LoadRepoReadme,
         starToggle: ToggleStar,
         starScope: StarWriteScopeCache,
-        memory: any BranchMemoryStore,
         visits: any RecentVisitStore,
         toast: ToastCenter
     ) {
         self.fullName = fullName
         self.loader = loader
+        self.readmeLoader = readme
         self.starToggle = starToggle
         self.starScope = starScope
         self.visits = visits
         self.toast = toast
-        self.tree = RepoTreeSession(
-            fullName: fullName,
-            path: path,
-            loader: treeLoader,
-            branches: branches,
-            memory: memory
-        )
     }
 
     // MARK: - 生命周期
@@ -149,21 +160,6 @@ final class ExploreRepoViewModel {
         starWritable = await starScope.current().canWrite(fullName: fullName)
     }
 
-    // MARK: - 目录（转发给会话）
-
-    /// 打开切换弹层时取分支列表。
-    func loadBranches() async {
-        await tree.loadBranches()
-    }
-
-    /// 切到另一条分支 —— 只影响这一页的目录与 README（本页没有提交列表要清）。
-    func switchBranch(to name: String) async {
-        guard let defaultBranch = insights.value?.detail.defaultBranch else { return }
-        guard await tree.switchBranch(to: name, defaultBranch: defaultBranch) else { return }
-        // 只读浏览也能切分支 ⇒ 切成功要给一句（与 §4.4 同一句）。
-        toast.show(BranchCopy.switchedToast(branch: name))
-    }
-
     // MARK: - 内部
 
     private func load() async {
@@ -176,8 +172,9 @@ final class ExploreRepoViewModel {
             insights.succeed(value)
             // 详情到手才知道星数 ⇒ Star 基准必须在这之后问。
             star = await starToggle.initialState(fullName: fullName, starCount: value.detail.starCount)
-            // ⚠️ 目录也排在详情之后：它要 `defaultBranch`。
-            await tree.load(defaultBranch: value.detail.defaultBranch)
+            // ⚠️ README 也在这之后（它要 `defaultBranch` 才知道用哪条分支读）——
+            //    与 `RepoDetailViewModel` 是同一个顺序、同一个理由。
+            await loadReadme(ref: value.detail.defaultBranch)
         } catch {
             if hadContent {
                 // ⚠️ 正本在 `GitDuoKit.RefreshCopy`（切片 7.4 收口）。
@@ -186,6 +183,28 @@ final class ExploreRepoViewModel {
                 insights.fail(Self.failure(from: error))
             }
         }
+    }
+
+    /// 取 README —— **块级**取数（失败只让那一块给出口，见类型说明那张表）。
+    ///
+    /// ⚠️ 这里**不给 toast**：块级失败自有一块可见的失败态（那颗「重试」），
+    ///    再弹一句提示等于同一件事说两遍（同 `RepoTreeSection` 的处置）。
+    private func loadReadme(ref: String) async {
+        readme.begin()
+        do {
+            readme.succeed(try await readmeLoader.load(fullName: fullName, ref: ref))
+        } catch {
+            readme.fail(Self.failure(from: error))
+        }
+    }
+
+    /// README 那一块自己的重试出口（`LoadState` 里没有"重试"这个概念，它是视图的事）。
+    ///
+    /// ⚠️ 用**手上那份详情**的分支，**不重取整页**：失败的是这一块、`insights` 没失败，
+    ///    重取整页会把头部与其余分区一起切回骨架（§8.5：刷新不遮挡已有内容）。
+    func retryReadme() async {
+        guard let branch = insights.value?.detail.defaultBranch else { return }
+        await loadReadme(ref: branch)
     }
 
     /// 把任意错误收敛成 `GitHubError`（同其余 ViewModel 的口径：
@@ -215,20 +234,27 @@ enum ExploreRepoCopy {
     static let languageSection = "语言构成"
     static let releaseSection = "Latest Release"
 
-    /// 第 ⑤ 分区的小节标题 —— 根目录是 `文件浏览`，子目录里带 ` · {path}`（原型逐字）。
+    /// 第 ⑤ 分区的小节标题（原型逐字）。
     ///
-    /// - Parameter path: 当前目录。传 `nil` 或根路径即为根目录。
-    static func fileSection(path: RepoPath?) -> String {
-        guard let path, !path.isRoot else { return fileSectionBase }
-        return "\(fileSectionBase) · \(path.raw)"
-    }
+    /// ⚠️ **2026-10-14 去掉了 ` · {path}` 那一半**：这一分区原先内嵌着目录树，
+    /// 子目录里要带出"现在是哪一层"；现在它是一条**入口行**，点进去才是目录页
+    /// ⇒ 这一页没有"当前层"可言，那个函数（`fileSection(path:)`）随之删除。
+    static let fileSection = "文件浏览"
 
-    private static let fileSectionBase = "文件浏览"
+    /// 那条入口行的标题。
+    ///
+    /// ⚠️ **2026-10-14 晚些去掉了 `与 README`**：README 现在**就在本页**（在这条入口
+    /// 行下面），不再跟着它进代码页 —— 留着那三个字，等于标题承诺一个点进去
+    /// 根本看不到的东西。原值 `浏览目录与 README`。
+    /// （同 `RepoCopy.breadcrumbMenuAccessibilityLabel` → `operationsMenuAccessibilityLabel`
+    ///  那次一样：名字不该继续描述一个已经不成立的处境。）
+    static let fileBrowseRowTitle = "浏览目录"
 
-    // ⚠️ 第 ⑥ 分区的小节标题（`README.md`）**已删** —— 它原先在这里有一个
+    // ⚠️ 第 ⑥ 分区的小节标题（`README.md`）**不在这里** —— 它原先在这里有一个
     //    `readmeSection`，值与 `RepoCopy.readmeSectionTitle` **完全相同**。
     //    两处各存一份时，"把标题改成 `README`"只会改到其中一页。
-    //    现在两页共用 `RepoCopy.readmeSectionTitle`（由 `RepoTreeSection` 渲染）。
+    //    现在两页共用 `RepoCopy.readmeSectionTitle`（由 `RepoReadmeSection` 渲染
+    //    —— 2026-10-14 起那一块画在本页与 §4.4 首页上，不在代码页了）。
 
     static let collaborationSection = "参与协作"
     static let releaseAssetsHint = "资产与源码下载依赖仓库的 Release 页面"

@@ -98,9 +98,12 @@ struct FileCopyTests {
         #expect(FileCopy.operationsMenuAccessibilityLabel == "文件操作菜单")
         #expect(!items.contains(FileCopy.operationsMenuAccessibilityLabel))
 
-        // ⚠️ 与仓库页面包屑那颗**有意不同名**：那边的菜单里确实只有路径那两件
-        //    （`复制路径` / `添加文件`）⇒ 它叫"路径操作菜单"是对的，抄过来就错了。
+        // ⚠️ 与代码页那颗**有意不同名**：两颗菜单现在**位置与控件逐字相同**
+        //    （都是导航栏右上角 + 系统原生 `Menu`），差别只剩管的**对象** ——
+        //    一颗管这个文件、一颗管这一层目录（`复制路径` / `添加文件`）。
+        //    所以两个标签可以同构，但**不能同值**：读屏里两颗若读成同一句，
+        //    用户在"文件页"和"代码页"之间就分不出自己站在哪一页。
         #expect(FileCopy.operationsMenuAccessibilityLabel
-                != RepoCopy.breadcrumbMenuAccessibilityLabel)
+                != RepoCopy.operationsMenuAccessibilityLabel)
     }
 }

@@ -329,7 +329,7 @@ struct RepoPullsTests {
         )
     }
 
-    @Test("⚠️ 卡片第三行：`{作者} 更新于 {时间}`（原型 `05-repo.js:140` 逐字）")
+    @Test("⚠️ 卡片第三行：`{作者} 更新于 {时间}`（原型 `05-repo.js:256` 逐字）")
     func updateLineMatchesPrototype() {
         #expect(row().updateLine(now: base.addingTimeInterval(7_200)) == "reviewer-a 更新于 2 小时前")
     }
@@ -386,7 +386,7 @@ struct RepoPullsTests {
         #expect(page.items.first?.updatedAt == nil)
     }
 
-    @Test("§4.4 分区三分段条：`开放 (N)` / `已合并`（原型 `05-repo.js:132-133` 逐字）")
+    @Test("§4.4 分区三分段条：`开放 (N)` / `已合并`（原型 `05-repo.js:248-249` 逐字）")
     func sectionSegmentsMatchPrototype() {
         #expect(RepoPullsSectionCopy.openSegment(loadedCount: 5, hasMore: false) == "开放 (5)")
         #expect(RepoPullsSectionCopy.openSegment(loadedCount: 30, hasMore: true) == "开放 (30+)")
