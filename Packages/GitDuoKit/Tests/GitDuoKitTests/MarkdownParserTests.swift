@@ -44,7 +44,7 @@ struct MarkdownParserTests {
                     .map { switch $0 { case .left: "L"; case .center: "C"; case .right: "R" } }
                     .joined()
                 return "table[\(align)]:\(header)#\(body)"
-            case let .image(url, alt):
+            case let .image(url, alt, _):
                 // 2026-10-12 新增（走查第 58 条）。地址进大纲，便于看出"指向哪一张"。
                 return "img:\(alt)@\(url.absoluteString)"
             }

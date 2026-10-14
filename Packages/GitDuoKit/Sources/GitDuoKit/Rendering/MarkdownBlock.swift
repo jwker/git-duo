@@ -50,7 +50,7 @@ public struct MarkdownSpan: Equatable, Hashable, Sendable {
         /// ⚠️ **独立成段的图片不走这里** —— 那一种在 `MarkdownParser` 里被提成
         /// `MarkdownBlock.image`（块级、间距按代码块那一档）。留下这一档是给
         /// **混在文字里**的图片（`看图 ![x](a.png) 这里`），而它在视图层由
-        /// `MarkdownInline.runs(of:)` 切成独立的一格、**同样真的画出来**
+        /// `MarkdownInline.rows(of:)` 切成独立的一格、**同样真的画出来**
         /// （`MarkdownBody.spanContent`）—— 只是"图与文字同一行"会排成
         /// "文字 / 图 / 文字"的竖排，不做横排混流。
         ///
@@ -58,7 +58,13 @@ public struct MarkdownSpan: Equatable, Hashable, Sendable {
         /// 老规矩（alt 为空则整张丢掉）有意不同：那时候丢掉是对的（纯文字里没有落点），
         /// 现在图是真的要画出来的，一张没有 alt 的图不该因此消失。
         /// 地址同样带 `URL`，无效地址在解析阶段就被退回普通文本。
-        case image(URL)
+        ///
+        /// ## `size`（2026-10-14 新增）
+        ///
+        /// 来自 HTML `<img width= height=>` 那对属性 —— markdown 语法**没有**尺寸位，
+        /// 所以只有 HTML 来源的图才可能带它（`MarkdownHTML.blocks(from:)` 回填，
+        /// 见 `MarkdownBlock.applyingImageSizes`）。`nil` = 没声明过。
+        case image(URL, size: MarkdownImageSize?)
 
         /// 解析样式时用的**标记符号**，供 `plainText` 与调试。
         ///
@@ -112,6 +118,45 @@ public struct MarkdownTable: Equatable, Hashable, Sendable {
         self.header = header
         self.rows = rows
     }
+}
+
+/// 一张图**声明的尺寸**（HTML `<img width= height=>`，2026-10-14 新增）。
+///
+/// ## 为什么需要它（两个病一起治）
+///
+/// 1. **占位块的高度**：不知道尺寸时占位块恒为 `Spacing.page × 8`（128pt）——
+///    而 README 开头那排"构建状态 / 许可证"徽章真实高度只有 20pt 上下，
+///    于是四张徽章占掉半屏，正文被挤得很长（用户 2026-10-14 的截图正是这样）。
+/// 2. **小图被放大**：`MarkdownImage` 用 `resizable` 画图，不给上限时一张 16×16
+///    的徽章会**撑满整屏宽** —— 上限本来只从"已解码的 `UIImage`"上取，
+///    而仓库外的绝对地址（`AsyncImage` 那条路）拿不到它。
+///
+/// ## ⚠️ 单位：CSS 像素，这里**当 pt 用**
+///
+/// GitHub 页面上的 `width="200"` 是 200 个 CSS px；iOS 的 pt 与它**语义相同**
+/// （都是"与设备无关的逻辑长度"）⇒ 直接当 pt 用，观感与网页一致。
+/// 不乘任何缩放系数 —— 乘了反而会在大屏 / 小屏上偏离网页。
+///
+/// ## ⚠️ 它是"声明"，不是"事实"
+///
+/// 作者写的 `width` 可能不准（也可能只写了 `height`）。所以它**只用两处**：
+/// 占位块的高度、以及渲染时的宽度上限。真实尺寸到位后，宽度上限取两者中**更小**的
+/// （见 `MarkdownImage.imageWidthLimit`）—— 声明值再离谱也不会把小图拉大。
+public struct MarkdownImageSize: Equatable, Hashable, Sendable {
+
+    /// `width` 属性；没写、或不是合法整数（`width="100%"`）时为 `nil`。
+    public let width: Int?
+
+    /// `height` 属性；同上。
+    public let height: Int?
+
+    public init(width: Int? = nil, height: Int? = nil) {
+        self.width = width
+        self.height = height
+    }
+
+    /// 两个都没解析出来 ⇒ 等于没声明过（调用方据此不必造一个空对象）。
+    public var isEmpty: Bool { width == nil && height == nil }
 }
 
 /// 一个块级元素（TECH_SPEC §11.1）。
@@ -175,7 +220,7 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
     /// 能表达的东西。所以**独占一段的图片被提成块**（`MarkdownParser` 里那一步）。
     ///
     /// ⚠️ **提到块上只是"间距"的差别，不是"画不画"的差别**：混在文字里的图由
-    /// `MarkdownInline.runs(of:)` 切成独立的一格、照样画得出来
+    /// `MarkdownInline.rows(of:)` 切成独立的一格、照样画得出来
     /// （`MarkdownBody.spanContent`）；这一档额外拿到的是**块与块之间**那档间距
     /// （原型 `.markdown pre{margin-bottom:10px}`），以及"这一段只有它"的排版自由。
     ///
@@ -185,7 +230,8 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
     /// 掉到自己那一行 —— 登记在 `TECH_SPEC §11.1`。
     ///
     /// - `alt`: 替代文字，**可以为空**（读屏标签与加载失败时的说明都用它）。
-    case image(url: URL, alt: String)
+    /// - `size`: HTML `<img>` 声明的尺寸；markdown 语法写的图是 `nil`。
+    case image(url: URL, alt: String, size: MarkdownImageSize?)
 
     /// 这段块是不是空的（**不渲染任何东西**）。
     ///
@@ -203,7 +249,7 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
         case let .table(table):
             table.rows.isEmpty
               && !Self.hasContent(table.header.flatMap { $0 })
-        case let .image(url, _):
+        case let .image(url, _, _):
             // ⚠️ **地址为空才算空**，`alt` 空不算 —— 一张没有替代文字的图仍然要画。
             url.absoluteString.isEmpty
         case .divider:
@@ -228,5 +274,89 @@ public enum MarkdownBlock: Equatable, Hashable, Sendable {
             if case .image = span.style { return true }
             return !span.text.isEmpty
         }
+    }
+}
+
+// MARK: - 按 HTML 声明的尺寸补全（2026-10-14）
+
+extension MarkdownBlock {
+
+    /// 把 `<img width= height=>` 声明的尺寸补到块里的那些图片上。
+    ///
+    /// ## 为什么是"补"而不是"解析时带上"
+    ///
+    /// `MarkdownHTML` 走的是**改写成 markdown 源**再解析那条路（本件抬头的论证：
+    /// 一切复用块判定 / 行内解析 / 实体 / 列表栈），而 **markdown 图片语法里没有尺寸位**
+    /// —— 改写出来的 `![alt](src)` 无处安放 `width` / `height`。
+    ///
+    /// 三条路可选：① 造一条非标准的扩展语法（`![alt](src){width=96}`），
+    /// ② 绕过字符串、让 HTML 那一支直接产块，③ **解析完再回填**。
+    /// 选 ③ 的理由：①② 都要动**公共的解析路径**（手写的 markdown 也会吃到新语法 /
+    /// HTML 那一支要抄一遍块判定），而尺寸是 **HTML 特有的东西**
+    /// ⇒ 它就该留在 HTML 特有的入口里（`MarkdownHTML.blocks(from:)` 调它）。
+    ///
+    /// ## 键为什么是 `absoluteString` 而不是 `src` 原文
+    ///
+    /// 两边（造表那一侧与这里）都过一遍 `URL(string:)?.absoluteString` ——
+    /// 这样 `src` 里含空格之类需要编码的字符时**两边算出来的是同一串**。
+    /// 只拿原文对原文、或原文对 `URL`，都会在那些边角上静默 miss（图照样画，
+    /// 只是尺寸没了 —— 而那看起来像"作者没写尺寸"）。
+    func applyingImageSizes(_ sizes: [String: MarkdownImageSize]) -> MarkdownBlock {
+        guard !sizes.isEmpty else { return self }
+
+        func fixed(_ spans: [MarkdownSpan]) -> [MarkdownSpan] {
+            spans.map { span in
+                guard case let .image(url, size) = span.style, size == nil,
+                      let declared = sizes[url.absoluteString]
+                else { return span }
+                return MarkdownSpan(text: span.text, style: .image(url, size: declared))
+            }
+        }
+
+        switch self {
+        case let .heading(level, spans):
+            return .heading(level: level, spans: fixed(spans))
+        case let .paragraph(spans):
+            return .paragraph(fixed(spans))
+        case let .listItem(ordered, number, depth, checked, spans):
+            return .listItem(
+                ordered: ordered, number: number, depth: depth, checked: checked, spans: fixed(spans)
+            )
+        case let .quote(spans):
+            return .quote(fixed(spans))
+        case let .table(table):
+            return .table(table.applyingImageSizes(sizes))
+        case let .image(url, alt, size):
+            guard size == nil, let declared = sizes[url.absoluteString] else { return self }
+            return .image(url: url, alt: alt, size: declared)
+        case .codeBlock, .divider:
+            return self
+        }
+    }
+}
+
+extension MarkdownTable {
+
+    /// 表格单元格里的图片同样要补 —— 与 `MarkdownBlock.applyingImageSizes` 同一件事
+    /// （HTML 表格里放徽章是常见写法，漏了这一支的症状正是"表格里的图占位块还是 128pt"）。
+    func applyingImageSizes(_ sizes: [String: MarkdownImageSize]) -> MarkdownTable {
+        guard !sizes.isEmpty else { return self }
+
+        func fixed(_ row: [[MarkdownSpan]]) -> [[MarkdownSpan]] {
+            row.map { cell in
+                cell.map { span in
+                    guard case let .image(url, size) = span.style, size == nil,
+                          let declared = sizes[url.absoluteString]
+                    else { return span }
+                    return MarkdownSpan(text: span.text, style: .image(url, size: declared))
+                }
+            }
+        }
+
+        return MarkdownTable(
+            alignments: alignments,
+            header: fixed(header),
+            rows: rows.map(fixed)
+        )
     }
 }

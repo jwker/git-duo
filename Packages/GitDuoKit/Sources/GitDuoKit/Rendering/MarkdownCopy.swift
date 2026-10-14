@@ -43,6 +43,27 @@ public enum MarkdownCopy {
         alt.isEmpty ? "图片加载失败" : "图片加载失败：\(alt)"
     }
 
+    /// 图片**是 SVG、本版不渲染**那行说明（2026-10-14 新增）。
+    ///
+    /// ## ⚠️ 为什么要与上面那一句分开
+    ///
+    /// 2026-10-14 用户报回"README 里一部分图没出来"，而**那些图全都是 SVG**
+    /// （`image/svg+xml`）。在此之前两种情况都显示「图片加载失败」——
+    /// 那句话**把排查方向指错了**：它听起来像网络问题，而实际上字节早就取回来了，
+    /// 只是 `UIImage` 画不了矢量图。
+    ///
+    /// 分开之后用户至少知道"这不是我网络的问题、也不是仓库的问题"，
+    /// 也知道**这一版就是看不到它**（不是等一下就好）。
+    ///
+    /// ⚠️ 措辞取「SVG 图片：」而不是「图片加载失败」：这是**有意裁剪**
+    /// （同第 58 条"图片这一期不画"那条口径），不是能力上的缺陷 ——
+    /// 真要画出来得引 `WKWebView` 逐张截图，代价与收益不成比例
+    /// （登记在 `REVIEW-CHECKLIST` 第 **64** 条那一段补记里）。
+    /// 2026-10-14 当晚用户要求把「暂不渲染」四字去掉，遂收成「SVG 图片：xxx」。
+    public static func imageUnsupportedFormatText(alt: String) -> String {
+        alt.isEmpty ? "SVG 图片" : "SVG 图片：\(alt)"
+    }
+
     /// 图片的读屏标签。
     ///
     /// ⚠️ 有 `alt` 就用 `alt` 本身（写它的人已经描述过这张图了，不必再套一层
@@ -62,4 +83,16 @@ public enum MarkdownCopy {
     ///
     /// `alt` 有就用 `alt`，没有就用这一句 —— 一个**看不见但能点**的空白是最坏的结果。
     public static let inlineImageFallbackText = "图片"
+
+    /// 一个 shields.io 徽章的读屏标签（2026-10-14，走查第 **65** 条）。
+    ///
+    /// ⚠️ **不能只念文字**：徽章是一张图，读屏用户看到的是"这里有个东西"，
+    /// 而它的全部内容就是那两句话 ⇒ 念出来即可，但要**先说明这是个徽章** ——
+    /// 否则一句 `license MIT OR Apache-2.0` 混在正文里像作者随手写的一行字。
+    ///
+    /// ⚠️ `label` 为空（Discord 那种单段徽章）时不补一个空位，只念 message。
+    public static func badgeAccessibilityLabel(label: String?, message: String) -> String {
+        guard let label, !label.isEmpty else { return "徽章：\(message)" }
+        return "徽章：\(label) \(message)"
+    }
 }

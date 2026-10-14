@@ -29,6 +29,41 @@ struct MarkdownImageContext {
     let store: MarkdownImageStore
 }
 
+/// 一次取图的**结果**（2026-10-14 新增）。
+///
+/// ## ⚠️ 为什么不是 `UIImage?`
+///
+/// 2026-10-12 那一版返回 `UIImage?`，把两种情况合并成同一个 `nil`：
+/// "这张图**取不到**"与"字节取到了、但**画不出来**"。
+///
+/// 2026-10-14 用户报回"README 里一部分图没出来"，取证之后发现那些图
+/// **全都是 SVG**（`image/svg+xml`，见 `MarkdownImageBytes`）——
+/// 也就是说合并成 `nil` 之后，占位块只能对用户说「图片加载失败」，
+/// 而那句话**把排查方向指错了**：听起来像网络问题，实际网络上一切正常。
+///
+/// 三档现在的分工：
+/// - `.failed` → 「图片加载失败」（取不到字节，或字节既不是位图也不是 SVG）；
+/// - `.unsupportedFormat` → 「SVG 图片：xxx」（`MarkdownCopy` 那一句；空 alt 时为「SVG 图片」）。
+enum MarkdownImageOutcome {
+
+    /// 解出来了，可以直接画。
+    case loaded(UIImage)
+
+    /// 字节取到了、`UIImage` 解不出来，**且看起来是 SVG**。
+    ///
+    /// ⚠️ 「看起来是」的判据在 `MarkdownImageBytes.looksLikeSVG`（领域层、有单测）。
+    ///
+    /// - Parameter size: SVG **自己声明的**尺寸（`MarkdownImageBytes.declaredSize`）。
+    ///   ⚠️ 2026-10-14 傍晚才带上它：此前占位块只能落"满宽 × 128"的兜底，
+    ///   而 README 里那排徽章的 HTML **一个 `width` / `height` 都没写** ⇒
+    ///   四块拼成一排大白条（用户截图里的样子）。
+    ///   徽章自己声明的往往是 `98×20` 这种小尺寸 —— 浏览器就是读它来摆位的。
+    case unsupportedFormat(MarkdownImageSize?)
+
+    /// 取不到字节，或字节不是一张图、也不是 SVG。
+    case failed
+}
+
 /// markdown 里**仓库内图片**的取数与解码缓存（2026-10-12，走查第 58 条）。
 ///
 /// ## ⚠️ 字节层不另写缓存：HTTP 层已经有一份
@@ -49,6 +84,12 @@ struct MarkdownImageContext {
 ///
 /// ⚠️ **它必须有单例般的生命周期**（由 `AppEnvironment` 持有一个、随环境传给各处）——
 /// 每个视图各 `new` 一个的话，缓存等于没有。
+///
+/// ## ⚠️ 它**只管仓库内的图**（2026-10-14 明确）
+///
+/// 仓库外的绝对地址（`https://img.shields.io/...`）不需要令牌、也不需要仓库与分支，
+/// 由 `MarkdownImage` 自己用 `URLSession.shared` 取（那里把两条路的结果收成同一个
+/// `MarkdownImageOutcome`，理由写在 `MarkdownImage` 的类型说明里）。
 @MainActor
 final class MarkdownImageStore {
 
@@ -62,21 +103,44 @@ final class MarkdownImageStore {
         self.contents = contents
     }
 
-    /// 取一张仓库内的图（已解码）。取不到时 `nil` —— 调用方画占位块，
-    /// **不区分**"404 / 超限 / 不是图片 / 网络断了"：对着一屏正文里的一张小图，
-    /// 那些原因的区别给不出不同的动作（都是"这张图没出来"）。
-    func image(fullName: String, ref: String?, path: RepoPath) async -> UIImage? {
+    /// 取一张仓库内的图。取不到时 `.failed`。
+    ///
+    /// ⚠️ **失败不进缓存**（只缓存成功解出来的那些）：失败可能是暂时的
+    /// （断网、GitHub 抽风），把它记下来会让"过一会儿就好"的那张图**再也回不来**。
+    /// `.unsupportedFormat` 同理 —— 代价只是重试时多走一次 HTTP 缓存命中的请求。
+    func repositoryImage(fullName: String, ref: String?, path: RepoPath) async -> MarkdownImageOutcome {
         let key = Self.key(fullName: fullName, ref: ref, path: path)
-        if let cached = decoded.object(forKey: key as NSString) { return cached }
+        if let cached = decoded.object(forKey: key as NSString) { return .loaded(cached) }
 
-        guard let (owner, repo) = try? RepositoryMapper.splitFullName(fullName) else { return nil }
+        guard let (owner, repo) = try? RepositoryMapper.splitFullName(fullName) else { return .failed }
         guard let data = try? await contents.rawFile(
             owner: owner, repo: repo, path: path.raw, ref: ref
-        ) else { return nil }
-        guard let image = UIImage(data: data) else { return nil }
+        ) else { return .failed }
 
-        decoded.setObject(image, forKey: key as NSString)
-        return image
+        return Self.decode(data, cacheKey: key, into: decoded)
+    }
+
+    /// 字节 → 结果；解出来就进缓存。
+    ///
+    /// ## ⚠️ 两步的顺序不能反（先解码、后判格式）
+    ///
+    /// SVG 嗅探是**启发式**（找 `<svg` 字样），而 `UIImage(data:)` 是**确定**的。
+    /// 先猜后解会让一张"恰好含 `<svg` 字样的坏 PNG"被报成 SVG ——
+    /// 而那种错误没人会报回来，它看起来只是"这句话说得怪"。
+    /// 判据与理由详见 `MarkdownImageBytes`。
+    private static func decode(
+        _ data: Data,
+        cacheKey: String,
+        into cache: NSCache<NSString, UIImage>
+    ) -> MarkdownImageOutcome {
+        guard let image = UIImage(data: data) else {
+            // ⚠️ 顺序：先判"是不是 SVG"、再量"它有多大"（理由见 `MarkdownImageBytes`）。
+            return MarkdownImageBytes.looksLikeSVG(data)
+                ? .unsupportedFormat(MarkdownImageBytes.declaredSize(in: data))
+                : .failed
+        }
+        cache.setObject(image, forKey: cacheKey as NSString)
+        return .loaded(image)
     }
 
     /// 解码缓存的键。

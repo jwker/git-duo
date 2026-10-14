@@ -238,7 +238,7 @@ struct MarkdownBody: View {
         case let .codeBlock(language, lines): codeBlock(language: language, lines: lines)
         case .divider: divider
         case let .table(table): tableView(table)
-        case let .image(url, alt): imageBlock(url: url, alt: alt)
+        case let .image(url, alt, size): imageBlock(url: url, alt: alt, size: size)
         }
     }
 
@@ -252,11 +252,25 @@ struct MarkdownBody: View {
     ///
     /// ⚠️ `imageContext` 为 `nil` 时它仍然会画（仓库外的绝对地址那一条路），
     /// 只有"仓库内的相对地址"会落到占位块 —— 见 `MarkdownImage` 的两条路。
-    private func imageBlock(url: URL, alt: String) -> some View {
-        MarkdownImage(url: url, alt: alt, context: imageContext)
-            // 间距照原型 `.markdown pre{margin-bottom:10px}` 那一档：
-            // 图片与下面的块之间留出与代码块相同的距离，**不新造数字**。
-            .padding(.bottom, 10)
+    ///
+    /// ⚠️ `size` 是 HTML `<img width= height=>` 声明的尺寸（2026-10-14）：
+    /// 它决定**占位块多高**、以及**小图别被放大**（`MarkdownImage` 那两处）。
+    /// markdown 语法写的图恒为 `nil` —— 那个语法里没有尺寸位。
+    private func imageBlock(url: URL, alt: String, size: MarkdownImageSize?) -> some View {
+        Group {
+            if let badge = MarkdownBadge.parse(url: url, alt: alt) {
+                // ⚠️ 徽章**不进 `MarkdownImage`** —— 它的内容全在地址里
+                //    （`MarkdownBadge` 已经解出来），没有"加载中 / 取不到"那几档，
+                //    画出来就是最终形态，一次请求都不发。
+                //    能走到块一级的徽章通常是那枚独立的 Discord 徽章。
+                MarkdownBadgeView(badge: badge)
+            } else {
+                MarkdownImage(url: url, alt: alt, size: size, context: imageContext)
+            }
+        }
+        // 间距照原型 `.markdown pre{margin-bottom:10px}` 那一档：
+        // 图片与下面的块之间留出与代码块相同的距离，**不新造数字**。
+        .padding(.bottom, 10)
     }
 
     // MARK: - 标题
@@ -524,9 +538,9 @@ struct MarkdownBody: View {
     ///
     /// ## 两条路
     ///
-    /// - **这一段里没有图** ⇒ 一个 `Text`（与从前**逐字一致**）；
-    /// - **这一段里有图** ⇒ 按 `MarkdownInline.runs(of:)` 拆成"文字段 / 图 / 文字段"，
-    ///   竖着排下来 —— 图**自成一行**画在文字后面。
+    /// - **这一段里全是文字** ⇒ 一个 `Text`（与从前**逐字一致**）；
+    /// - **这一段里有图 / 徽章** ⇒ 按 `MarkdownInline.rows(of:)` 拆成一行行东西：
+    ///   文字自成一行，**能并排的若干格（≥2）横着排、放不下就换行**。
     ///
     /// ## ⚠️ 2026-10-12：这一段是**用户报回缺陷之后**重做的
     ///
@@ -537,8 +551,18 @@ struct MarkdownBody: View {
     /// 两个字占位，然后点击跳转到图片详情」）。
     ///
     /// 判据太窄是**我的**问题：`Text` 里插不进图，但"图与文字挤在同一行"只是
-    /// 一种**写法**，不是"画不出来"的理由。现在的规则只有一条：
-    /// **只要这一段里有图，图就画出来**（它自己占一行）。
+    /// 一种**写法**，不是"画不出来"的理由。从那以后的规则是：
+    /// **只要这一段里有图，图就画出来**。
+    ///
+    /// ## ⚠️ 2026-10-14：从"每格自成一行"改成"能并排的并排"（走查第 **65** 条）
+    ///
+    /// 上一条规则解决了"图没出来"，但**排法是错的**：一律竖排 ⇒ README 开头
+    /// 那四张 20pt 高的徽章各占一行、吃掉 216pt，正文被挤得很长
+    /// （用户 2026-10-14 的原话：「四张徽章排成四行」）。GitHub 网页上它们是**横排**的。
+    ///
+    /// **哪些格并排由领域层定**（`MarkdownRun` 的判据：连续 ≥2 个"宽度已知"的格）——
+    /// 那种判据必须能跑单测，而 `make test` 不编译 App target。
+    /// 这一层只负责"把同一行的几格交给 flow 布局"。
     ///
     /// ## 代价（如实说）
     ///
@@ -553,25 +577,54 @@ struct MarkdownBody: View {
     /// 而**行距**是这一层的（它跟着 `style` 走，见 `lineSpacing`）。
     @ViewBuilder
     private func spanContent(_ spans: [MarkdownSpan], base: Font, color: Color) -> some View {
-        let runs = MarkdownInline.runs(of: spans)
+        let rows = MarkdownInline.rows(of: spans)
 
-        if runs.contains(where: \.isImage) {
+        if rows.allSatisfy(\.isText) {
+            textRun(spans, base: base, color: color)
+        } else {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
-                    switch run {
-                    case let .text(spans):
-                        textRun(spans, base: base, color: color)
-
-                    case let .image(url, alt):
-                        // ⚠️ 这里**不加** `imageBlock` 那个 10pt 下边距 ——
-                        //    间距由上面 `VStack` 的 `spacing` 统一给。
-                        //    两处都给的话，图与下一格之间会是 8 + 10。
-                        MarkdownImage(url: url, alt: alt, context: imageContext)
-                    }
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    rowContent(row, base: base, color: color)
                 }
             }
-        } else {
+        }
+    }
+
+    /// 一行内容 —— 文字 / 单独一格 / 并排的若干格。
+    @ViewBuilder
+    private func rowContent(_ row: MarkdownRun, base: Font, color: Color) -> some View {
+        switch row {
+        case let .text(spans):
             textRun(spans, base: base, color: color)
+
+        case let .item(item):
+            // ⚠️ 这里**不加** `imageBlock` 那个 10pt 下边距 ——
+            //    间距由上面 `VStack` 的 `spacing` 统一给。
+            //    两处都给的话，图与下一格之间会是 8 + 10。
+            itemView(item)
+
+        case let .row(items):
+            // ⚠️ 并排那一行的**格间距比行距更宽**（两台机器挨着，比两行字之间要松一点）。
+            MarkdownFlowLayout(spacing: Theme.Spacing.s, lineSpacing: Theme.Spacing.xs) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    itemView(item)
+                }
+            }
+        }
+    }
+
+    /// 一格"不是文字"的东西 —— 一张图，或一个 shields.io 徽章。
+    ///
+    /// ⚠️ 徽章**不走取字节那条路**（它的内容全在地址里，`MarkdownBadge` 已经解出来了）
+    /// ⇒ 它没有"加载中 / 取不到"那几档，画出来就是最终的形态。
+    @ViewBuilder
+    private func itemView(_ item: MarkdownRun.Item) -> some View {
+        switch item {
+        case let .badge(badge):
+            MarkdownBadgeView(badge: badge)
+
+        case let .image(url, alt, size):
+            MarkdownImage(url: url, alt: alt, size: size, context: imageContext)
         }
     }
 
@@ -635,12 +688,15 @@ struct MarkdownBody: View {
                 piece.foregroundColor = Theme.Palette.accent
                 result += piece
 
-            case let .image(url):
+            case let .image(url, _):
                 // ⚠️ **这一档在 2026-10-12 之后基本到不了**：段落 / 列表项 / 引用 /
                 //    表格单元格都改走 `spanContent`，那一条路会把图**真的画出来**。
                 //    这里留着兜的是**它之外**的调用点 —— 现在只有**标题**
                 //    （`heading` 仍用一个 `Text`：标题必须是**一行**，在里面塞一张图
                 //    连原型都没有依据）。
+                //
+                //    ⚠️ 尺寸（`size`）在这一档**用不上**（这里画不出图，只画文字），
+                //    所以 `_` 掉；它服务的两件事都在 `MarkdownImage` 里。
                 //
                 //    文字取 `alt`；`alt` 为空时用兜底那一句 —— 一个**看不见但能点**
                 //    的空白是最坏的结果（用户不知道那里有东西）。

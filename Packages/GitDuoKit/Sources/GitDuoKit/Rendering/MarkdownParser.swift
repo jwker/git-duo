@@ -230,13 +230,13 @@ public enum MarkdownParser {
     /// 还是上下两张）**原型与 PRD 都没定义过**，与其猜一种，不如让它停在
     /// "两段可点的替代文字"上 —— 那是明确的、可解释的降级。
     static func soleImage(in spans: [MarkdownSpan]) -> MarkdownBlock? {
-        var found: (url: URL, alt: String)?
+        var found: (url: URL, alt: String, size: MarkdownImageSize?)?
 
         for span in spans {
             switch span.style {
-            case let .image(url):
+            case let .image(url, size):
                 guard found == nil else { return nil }
-                found = (url, span.text)
+                found = (url, span.text, size)
             case .text where span.text.trimmingCharacters(in: .whitespaces).isEmpty:
                 continue
             default:
@@ -245,7 +245,7 @@ public enum MarkdownParser {
         }
 
         guard let found else { return nil }
-        return .image(url: found.url, alt: found.alt)
+        return .image(url: found.url, alt: found.alt, size: found.size)
     }
 
     // MARK: - 表格判定
@@ -583,7 +583,7 @@ public enum MarkdownInline {
                 //    那时候丢掉是对的（纯文字里没有落点），现在图是真的要画出来的。
                 if let image = parseLink(characters, at: index + 1, allowsEmptyLabel: true) {
                     flush()
-                    result.append(MarkdownSpan(text: image.label, style: .image(image.url)))
+                    result.append(MarkdownSpan(text: image.label, style: .image(image.url, size: nil)))
                     index = image.next
                     continue
                 }
@@ -592,7 +592,27 @@ public enum MarkdownInline {
             // ⑤ 链接 `[文字](地址)`
             if character == "[", let link = parseLink(characters, at: index) {
                 flush()
-                result.append(MarkdownSpan(text: link.label, style: .link(link.url)))
+                // ⚠️ **`[![alt](图)](外链)` 取图、丢外链**（2026-10-14 新增）。
+                //
+                //    这个形状不是人写的 —— 是 `MarkdownHTML` 把 HTML 里
+                //    `<a href="…"><img src="…"></a>` 改写成 `[` + `![alt](src)` + `](href)`
+                //    拼出来的（README 里"点徽章跳官网"到处都是这种写法）。
+                //
+                //    在 `parseLink` 学会**嵌套计数**之前，它会被切错：label 取到
+                //    "**第一个** `]`"之前那一段（连前导 `!` 一起当文字），
+                //    尾巴 `](href)` 漏成正文 ⇒ 用户看到的是"一串原文 + 一张没画出来的图"
+                //    （2026-10-14 那两张截图右下角就是它）。
+                //
+                //    ⚠️ **代价如实说：外链丢了**。`MarkdownSpan` 是**平铺**的
+                //    （见它的类型说明"有意不嵌套"），没有"一张可点的图"这一档；
+                //    而"把外链也留住"要新加一个嵌套结构，那与本项目整个渲染模型
+                //    冲突 ⇒ 取"图能画出来"这一头。GitHub 网页上两种都能点，
+                //    这里只有图。
+                if let image = soleImageLabel(link.label) {
+                    result.append(MarkdownSpan(text: image.alt, style: .image(image.url, size: nil)))
+                } else {
+                    result.append(MarkdownSpan(text: link.label, style: .link(link.url)))
+                }
                 index = link.next
                 continue
             }
@@ -685,13 +705,20 @@ public enum MarkdownInline {
     ///   ⚠️ 它同时服务链接与图片（2026-10-12）：两者除了那个前导 `!` 与空 label
     ///   这两点之外**语法完全相同**，各写一份扫描逻辑迟早会在某一边漏掉一条边界
     ///   （例如闭合括号的嵌套处理）。
+    ///
+    /// ## ⚠️ 收尾的 `]` 是**按嵌套层数配**的（2026-10-14 改）
+    ///
+    /// 原先取"从 `[` 往后**第一个** `]`"，而那在 label 里**含一对括号**时是错的：
+    /// `[![alt](src)](href)`（`MarkdownHTML` 把 `<a><img></a>` 改写成这个）
+    /// 会切在 `src` 的那个 `]` 上 ⇒ label 变成 `![alt`、`(src)` 落进地址
+    /// ⇒ 整串散成原文。
     static func parseLink(
         _ characters: [Character],
         at start: Int,
         allowsEmptyLabel: Bool = false
     ) -> (label: String, url: URL, next: Int)? {
         guard start < characters.count, characters[start] == "[" else { return nil }
-        guard let closingBracket = firstIndex(of: "]", in: characters, from: start + 1) else { return nil }
+        guard let closingBracket = matchingBracket(in: characters, from: start) else { return nil }
         let afterBracket = closingBracket + 1
         guard afterBracket < characters.count, characters[afterBracket] == "(" else { return nil }
         guard let closingParen = firstIndex(of: ")", in: characters, from: afterBracket + 1) else { return nil }
@@ -707,5 +734,55 @@ public enum MarkdownInline {
         guard let url = URL(string: address) else { return nil }
 
         return (label, url, closingParen + 1)
+    }
+
+    /// 找与 `start` 处那个 `[` **配对**的 `]` —— 按嵌套层数配，不取"第一个 `]`"。
+    ///
+    /// ## ⚠️ 为什么必须计数
+    ///
+    /// `![](a)` 里的 `(` `)` 不影响；真正会撞上的是**label 里再套一层方括号**，
+    /// 而那个形状**不是人写的**：`MarkdownHTML` 把 `<a href="…"><img src="…"></a>`
+    /// 改写成 `[` + `![alt](src)` + `](href)` ⇒ 拼出 `[![alt](src)](href)`
+    /// （README 里"点徽章跳官网"大量是这种写法）。
+    ///
+    /// ⚠️ **不做转义与行内代码的例外**（`\]` 与 `` `]` `` 仍会被计数）：
+    /// 那两处要跟着 `MarkdownInline` 的反引号扫描一起判，是另一个量级的改动；
+    /// 而它们错了的样子是"这一小段不解析、原样显示"——**看得见、不吞字**。
+    /// 登记在此，等真在某个 README 上撞到再说。
+    static func matchingBracket(in characters: [Character], from start: Int) -> Int? {
+        var depth = 0
+        var index = start
+
+        while index < characters.count {
+            switch characters[index] {
+            case "[":
+                depth += 1
+            case "]":
+                depth -= 1
+                if depth == 0 { return index }
+            default:
+                break
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    /// `label` 整段就是一张图片（`![alt](src)`）⇒ 取出它；否则 `nil`。
+    ///
+    /// 服务的形状是 `[![alt](src)](href)` —— 外链**有意丢掉**（理由见调用点那条注释）。
+    ///
+    /// ⚠️ **一层判定、不递归**：本函数只调一次 `parseLink`，而 `parseLink` **不调用本函数**
+    /// ⇒ 深度恒为 2、与输入长度无关。远程 README 是**不可信输入**，
+    /// `[![![![…]]]](x)` 那种构造不能让它一路递归下去（栈溢出 = 整机崩）。
+    /// 判据里那句 `next == characters.count` 保证 label 里**除了这张图什么都没有**
+    /// （`![a](b) 还有字` 不算 ⇒ 回落成普通链接，不吞掉后半截）。
+    static func soleImageLabel(_ label: String) -> (url: URL, alt: String)? {
+        guard label.hasPrefix("![") else { return nil }
+        let characters = Array(label)
+        guard let image = parseLink(characters, at: 1, allowsEmptyLabel: true),
+              image.next == characters.count
+        else { return nil }
+        return (image.url, image.label)
     }
 }

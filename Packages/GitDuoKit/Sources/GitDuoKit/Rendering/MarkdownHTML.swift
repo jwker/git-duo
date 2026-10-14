@@ -24,7 +24,7 @@ import Foundation
 /// |---|---|---|
 /// | `<h1>`–`<h6>` | `#`–`######` | 标题本来就有块类型 |
 /// | `<br>` | **空行** | `MarkdownSpan` 里没有"换行"这一档（`AGENTS.md §3` 的登记一起看） |
-/// | `<img src alt>` | `![alt](src)` | **2026-10-12 起真的画出来**（走查第 58 条）：改写回图片语法，独占一段的会被提成块级图片（`MarkdownBlock.image`）。⚠️ `alt` 缺失或为空**不再丢整张**（老规矩 `[alt](src)` 那套已废） |
+/// | `<img src alt>` | `![alt](src)` | **2026-10-12 起真的画出来**（走查第 58 条）：改写回图片语法，独占一段的会被提成块级图片（`MarkdownBlock.image`）。⚠️ `alt` 缺失或为空**不再丢整张**（老规矩 `[alt](src)` 那套已废）。⚠️ `width` / `height` 在 `blocks(from:)` 里回填（markdown 语法没有尺寸位） |
 /// | `<a href>` | `[文字](href)` | 复用行内链接；仓库内的相对地址由 `RepoLinkResolver` 再解析 |
 /// | `<table>` / `<tr>` / `<td>` / `<th>` | **GFM 表格**（表头 + 分隔行 + 数据行） | 已有表格块类型（`TECH_SPEC §11.1`「表格（GFM）已支持」）；`<th>` / `<thead>` 判为表头，**全 `<td>` 时首行兜底为表头**（GFM 表格必须有表头） |
 /// | 其余标签 | 只去标签、留文字 | 最保守的一档 |
@@ -60,8 +60,25 @@ public enum MarkdownHTML {
     }
 
     /// 直接产出块 —— 给 `MarkdownParser` 调用。
+    ///
+    /// ## ⚠️ 一条两趟：改写出的 markdown 里**放不下尺寸**
+    ///
+    /// `markdown(from:)` 把 `<img src alt width height>` 改写成 `![alt](src)`，
+    /// 而 markdown 图片语法**没有尺寸位**。于是这里再多做一步：
+    /// 先解析出块，再**按 `<img>` 上声明的 `src` 把尺寸补回去**。
+    ///
+    /// ⚠️ 为什么不在改写那一步顺手塞进字符串（例如 `![alt](src){width=96}`）：
+    /// 那会给 `MarkdownParser` 加一条**非标准语法**，而它对**用户手写的 markdown
+    /// 同样生效** ⇒ 一个改给 HTML 用的东西会泄漏到公共解析路径上。
+    /// 尺寸是 HTML 特有的 ⇒ 它就该留在 HTML 特有的入口里（本条）。
+    ///
+    /// ⚠️ 表为空时**一个块都不动**（绝大多数 README 的 `<img>` 不带尺寸，
+    /// 那时这条路的开销就是一次字符串扫描）。
     public static func blocks(from html: String) -> [MarkdownBlock] {
-        MarkdownParser.blocks(from: markdown(from: html))
+        let blocks = MarkdownParser.blocks(from: markdown(from: html))
+        let sizes = declaredImageSizes(in: html)
+        guard !sizes.isEmpty else { return blocks }
+        return blocks.map { $0.applyingImageSizes(sizes) }
     }
 
     /// 一张 HTML 表格的改写状态。
@@ -80,15 +97,27 @@ public enum MarkdownHTML {
         var rowCount = 0
     }
 
+    /// 一个尚未闭合的 `<a>` 的跟踪状态。
+    fileprivate struct AnchorState {
+        /// 外链地址。
+        let href: String
+        /// `[` 在输出串里的位置（闭合时可能要从这里删掉头部的包装）。
+        let outputIndex: String.Index
+        /// `<a>` 开标签之后、到当前为止，**只输出过空白 + 一张图** 时
+        /// 等于那张图的 markdown；一旦输出过其它可见内容就置空串。
+        /// `nil` 表示这个 `<a>` 没有 `href`（那种锚点本来也不该产出任何链接语法）。
+        var imageMarkdown: String?
+    }
+
     // MARK: - 改写
 
     /// 扫一遍文本：标签按映射改写（`mapping` 为假时一律丢弃），其余原样保留。
     private static func rewrite(_ text: String, mapping: Bool) -> String {
         var out = ""
         var index = text.startIndex
-        // 待闭合的 `<a>` 栈。存 `href`，`nil` 表示"这个 `<a>` 没有地址"。
+        // 待闭合的 `<a>` 栈。`nil` 表示"这个 `<a>` 没有地址"。
         // ⚠️ `<a>` 不允许嵌套，所以一层栈就够；深一层也不会错，只是用不上。
-        var openAnchors: [String?] = []
+        var openAnchors: [AnchorState?] = []
         // 列表栈：元素为有序列表的"下一个编号"（Int），或 `nil`（无序列表）。
         // 用栈是因为列表会嵌套（ul 里套 ol、ol 里套 ul），每层各自计数。
         var listStack: [Int?] = []
@@ -146,7 +175,7 @@ public enum MarkdownHTML {
     private static func apply(
         tag body: String,
         to out: inout String,
-        openAnchors: inout [String?],
+        openAnchors: inout [AnchorState?],
         listStack: inout [Int?],
         tableStack: inout [TableState]
     ) {
@@ -298,12 +327,24 @@ public enum MarkdownHTML {
 
         case "a":
             if isClosing {
-                // `href` 为空（`<a id="run"></a>`）⇒ 这一对标签什么都不产出。
-                if let href = openAnchors.popLast(), let href {
-                    out += "](\(href))"
+                guard let state = openAnchors.popLast(), let state else { break }
+                // ⚠️ `<a>` 里**只有一张图**（可能夹点空白/换行）⇒ 剥掉外链包装。
+                //    这是 `MarkdownHTML` 把 `<a><img></a>` 改写成
+                //    `[![alt](src)](href)` 后出现的多行情形：标签之间一旦有换行，
+                //    下游 `MarkdownParser` 会按行拆成 `[` / `![alt](src)` / `](href)`
+                //    三段，屏幕上就是"外链括号包着一张图"。
+                //    这里在闭合时回头检查：如果 `[` 之后到当前为止只有空白 + 一张图，
+                //    就把 `[<ws>图<ws>` 整段删掉，只保留图片 markdown。
+                if let imageMarkdown = state.imageMarkdown,
+                   !imageMarkdown.isEmpty,
+                   isImageOnlyAnchor(in: out, state: state, imageMarkdown: imageMarkdown) {
+                    out.removeSubrange(state.outputIndex..<out.endIndex)
+                    out += imageMarkdown
+                } else {
+                    out += "](\(state.href))"
                 }
             } else if let href = attribute("href", in: body), !href.isEmpty {
-                openAnchors.append(href)
+                openAnchors.append(AnchorState(href: href, outputIndex: out.endIndex, imageMarkdown: ""))
                 out += "["
             } else {
                 openAnchors.append(nil)
@@ -317,9 +358,26 @@ public enum MarkdownHTML {
             //    而那在**纯文字**里是对的（没有替代文字的图没有落点）；
             //    现在图是真的要画出来的，缺 alt 只该丢读屏标签、不该丢那张图。
             //    见 `MarkdownSpan.Style.image` 与 `MarkdownBlock.image`。
+            //
+            // ⚠️ **`width` / `height` 不在这里处理**（2026-10-14）：改写出的 markdown
+            //    无处安放它们 ⇒ 由 `blocks(from:)` 在解析完之后按 `src` 回填
+            //    （见 `declaredImageSizes` 与 `MarkdownBlock.applyingImageSizes`）。
             let attributes = attributes(in: body)
             if let source = attributes["src"], !source.isEmpty {
-                out += "![\(attributes["alt"] ?? "")](\(source))"
+                let markdown = "![\(attributes["alt"] ?? "")](\(source))"
+                if let last = openAnchors.indices.last, var state = openAnchors[last] {
+                    // 在 `<a>` 内部：记录这张图，供闭合时判断"是不是只剩一张图"。
+                    let imageStart = out.endIndex
+                    out += markdown
+                    let contentBeforeImage = out[out.index(after: state.outputIndex)..<imageStart]
+                    // 图之前只允许空白；且之前不能已经放过图 / 放过文字。
+                    let stillImageOnly = state.imageMarkdown == ""
+                        && contentBeforeImage.allSatisfy({ $0.isWhitespace || $0.isNewline })
+                    state.imageMarkdown = stillImageOnly ? markdown : ""
+                    openAnchors[last] = state
+                } else {
+                    out += markdown
+                }
             }
 
         default:
@@ -334,7 +392,14 @@ public enum MarkdownHTML {
     ///
     /// ⚠️ **引号内的 `>` 不算收尾** —— `<img alt="a > b" src="x">` 里那个 `>`
     /// 是属性值的一部分。少了这条，标签会在中间被截断，剩下半截属性当正文打出来。
-    private static func tagEnd(in text: String, from start: String.Index) -> String.Index? {
+    ///
+    /// ⚠️ **2026-10-14 起它是 `internal` 的**：`MarkdownImageBytes.declaredSize`
+    /// 要扫 SVG 根标签的收尾 —— 那一处的 `aria-label` 里同样可能出现 `>`
+    /// （shields.io 就写着 `aria-label="written in: Rust"`），扫错就会静默读不到尺寸。
+    /// 这套引号处理只该有一份实现。
+    ///
+    /// - Parameter start: **`<` 的下标**。
+    static func tagEnd(in text: String, from start: String.Index) -> String.Index? {
         var index = text.index(after: start)
         var quote: Character?
 
@@ -369,12 +434,98 @@ public enum MarkdownHTML {
         return next.isWhitespace || next == "/"
     }
 
+    // MARK: - 图片尺寸（2026-10-14）
+
+    /// 扫一遍 HTML，收集每个 `<img>` 声明的尺寸 —— 键是 `src` 的 `absoluteString`。
+    ///
+    /// ## ⚠️ 三处有意"少做"
+    ///
+    /// 1. **注释整段跳过**（与 `rewrite` 同一处置）：注释里写一张 `<img width=…>`
+    ///    是常见写法（"示例：`<img src="x" width="16">`"），把它收进表会让正文里
+    ///    同地址的那张图**被补上一个不属于它的尺寸**；
+    /// 2. **只认纯数字**：`width="100%"` / `width="auto"` / `width="200.5"` 一律
+    ///    当作没写。比例与小数要跟着容器算，而"容器宽"在这一层不知道
+    ///    （`MarkdownBlock` 是纯结构，没有排版信息）；
+    /// 3. **同一个 `src` 出现两次时后一次覆盖前一次**：同一段 HTML 里同地址不同尺寸
+    ///    极罕见（真实 README 里几乎都是同一个 logo 复用），而"按出现顺序各配各的"
+    ///    要给每个 `src` 存一个队列、再与解析出的图片**按序配对** ——
+    ///    配对本身还会因为"两张图之间夹了一段文字"而错位。取简单的那一侧。
+    private static func declaredImageSizes(in html: String) -> [String: MarkdownImageSize] {
+        var result: [String: MarkdownImageSize] = [:]
+        var index = html.startIndex
+
+        while index < html.endIndex {
+            guard html[index] == "<" else {
+                index = html.index(after: index)
+                continue
+            }
+
+            if html[index...].hasPrefix("<!--") {
+                guard let end = html.range(of: "-->", range: index..<html.endIndex) else { break }
+                index = end.upperBound
+                continue
+            }
+
+            guard let close = tagEnd(in: html, from: index) else {
+                index = html.index(after: index)
+                continue
+            }
+            let body = String(html[html.index(after: index)..<close])
+            index = html.index(after: close)
+
+            guard isTagLike(body) else { continue }
+            let trimmed = body.trimmingCharacters(in: .whitespaces)
+            let isClosing = trimmed.hasPrefix("/")
+            guard !isClosing, !trimmed.hasPrefix("!"), !trimmed.hasPrefix("?") else { continue }
+
+            let name = trimmed.prefix { $0.isLetter || $0.isNumber || $0 == "-" }.lowercased()
+            guard name == "img" else { continue }
+
+            let attributes = attributes(in: body)
+            guard let source = attributes["src"], !source.isEmpty else { continue }
+
+            let size = MarkdownImageSize(
+                width: pixelValue(attributes["width"]),
+                height: pixelValue(attributes["height"])
+            )
+            guard !size.isEmpty else { continue }
+
+            result[sizeKey(for: source)] = size
+        }
+
+        return result
+    }
+
+    /// `width` / `height` 属性的值 → 整数像素。
+    ///
+    /// ⚠️ 只认**纯数字**：`100%` / `auto` / `12.5` / `-3` 全部返回 `nil`
+    /// （判据与理由见 `declaredImageSizes`）。
+    private static func pixelValue(_ text: String?) -> Int? {
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed.allSatisfy(\.isNumber) else { return nil }
+        return Int(trimmed)
+    }
+
+    /// 尺寸表的键 —— **两边（造表 / 查表）都过一遍同一个函数**。
+    ///
+    /// ⚠️ 不直接用 `src` 原文：`src` 里含空格之类要编码的字符时，
+    /// `parseLink` 造出的 `URL.absoluteString` 与原文不是同一串 ⇒
+    /// 拿原文当键会**静默 miss**（图照样画、只是尺寸没了，看起来像"作者没写"）。
+    private static func sizeKey(for source: String) -> String {
+        URL(string: source)?.absoluteString ?? source
+    }
+
     // MARK: - 属性
 
     /// 把标签内部那一段解析成属性表（键统一小写）。
     ///
     /// 标签名本身会被跳过；三种写法都认：`href="x"` / `href='x'` / `href=x`。
-    private static func attributes(in body: String) -> [String: String] {
+    ///
+    /// ⚠️ **2026-10-14 起它是 `internal` 的**：`MarkdownImageBytes.declaredSize`
+    /// 要读 SVG 根元素上的 `width` / `height` / `viewBox`，而"标签属性怎么解析"
+    /// 只该有一份实现（三引号、单引号、无引号那三种写法漏一处就会静默读不到尺寸）。
+    static func attributes(in body: String) -> [String: String] {
         var result: [String: String] = [:]
         let characters = Array(body)
         var index = 0
@@ -425,6 +576,32 @@ public enum MarkdownHTML {
 
     private static func attribute(_ name: String, in body: String) -> String? {
         attributes(in: body)[name.lowercased()]
+    }
+
+    /// 检查 `output` 从 `state.outputIndex` 到末尾是不是 "[<ws>imageMarkdown<ws>]" 的形状。
+    ///
+    /// 用于 `<a>` 闭合时判断能否安全剥掉外链包装。它只看**末尾这一段**，
+    /// 因为 `outputIndex` 就是 `<a>` 开标签写 `[` 的位置。
+    private static func isImageOnlyAnchor(
+        in output: String,
+        state: AnchorState,
+        imageMarkdown: String
+    ) -> Bool {
+        let slice = output[state.outputIndex...]
+        guard slice.first == "[" else { return false }
+
+        var index = slice.index(after: slice.startIndex)
+        // 跳过头部的空白（含换行）。
+        while index < slice.endIndex, slice[index].isWhitespace || slice[index].isNewline {
+            index = slice.index(after: index)
+        }
+
+        let rest = slice[index...]
+        guard rest.hasPrefix(imageMarkdown) else { return false }
+
+        let afterImage = rest.index(rest.startIndex, offsetBy: imageMarkdown.count)
+        let trailing = rest[afterImage...]
+        return trailing.allSatisfy { $0.isWhitespace || $0.isNewline }
     }
 
     // MARK: - 实体

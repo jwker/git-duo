@@ -70,4 +70,20 @@ struct CommitCopyTests {
         #expect(!checked.isEmpty)
         #expect(!unchecked.isEmpty)
     }
+
+    // MARK: - 图片占位文案（2026-10-14，走查第 64 条）
+
+    @Test("「是 SVG」与「取不到」必须是**两句不同的话** —— 混成一句会把排查方向指错")
+    func unsupportedFormatDiffersFromFailure() {
+        let svg = MarkdownCopy.imageUnsupportedFormatText(alt: "Rust")
+        let failure = MarkdownCopy.imageFailureText(alt: "Rust")
+
+        #expect(svg != failure)
+        // 两句都要点名是哪一张 —— 一屏里两张图都没出来时，同样的文案 ×2 分不出是谁。
+        #expect(svg.contains("Rust"))
+        #expect(failure.contains("Rust"))
+        // ⚠️ 没有 `alt` 时也要出得来：`![](a.png)` 是最常见的写法之一。
+        #expect(!MarkdownCopy.imageUnsupportedFormatText(alt: "").isEmpty)
+        #expect(!MarkdownCopy.imageFailureText(alt: "").isEmpty)
+    }
 }

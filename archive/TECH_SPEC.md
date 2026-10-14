@@ -883,6 +883,11 @@ enum GitHubError: Error {
 >   裸串会把 `evil-githubusercontent.com` 这种拼法一起放过去）：别的 host **原样请求**，
 >   不给它塞一个它不认识的参数（某些图床遇到未知参数会直接 400，那比慢更糟）。
 >   实测像素值：86pt→258 · 34pt→102 · 28pt→84（均 `@3x`）。
+> - ⚠️ **2026-10-14 起上面第一条有一处例外**（走查第 **64** 条）：markdown 正文里**仓库外的绝对地址图**
+>   不再走 `AsyncImage`，而是自己用 `URLSession.shared` 取字节（`MarkdownImage.fetchExternal`）——
+>   因为 `AsyncImage` 只给一个 `.failure`、**拿不到字节**，分不出"取不到"与"取到了但不是位图"（SVG）。
+>   ⚠️ **缓存语义不变**（`AsyncImage` 内部用的就是同一个会话），⚠️ 这条请求**不带凭据**
+>   ⇒ 它仍然符合上面那条"公开图片不必进自建通道"。**头像那条不变**（它不需要看字节）。
 
 ### 5.4 缓存失效与清理
 
@@ -2226,10 +2231,32 @@ GlassEffectContainer(spacing: 12) {
 > - **代码块直接交给 `CodeSurface`**，语言由 `CodeLanguage.named(fence 的 info string)` 决定，**认不出来就是纯文本**（不去猜 —— 按错的规则着色比不着色更让人怀疑内容本身）。
 > - 列表项的缩进 = `18 × (depth + 1)`（原型 `ul{margin-left:18px}`）；**嵌套是「规格未给」**（原型没有嵌套列表），故只复用那一个 18、不引入第二个数值。任务列表勾选框只靠图形表达勾选态、**不加颜色区分**，且**必须给读屏标签**（`MarkdownCopy.checkboxLabel`）。
 > - ⚠️ **文件查看页（§4.5）自 2026-10-12 起也用它渲染 `.md` / `.markdown`**（走查**第 57 条**，用户要求新增 —— 此前该页所有文本一律走 `CodeSurface`）：判据收在领域层 `MarkdownFile`（→ `FileContent.markdown`，解析在取数层做一次），视图按它分流；链接接线与 README 分区**同一套**（`RepoLinkResolver`，基准目录 = **文件所在目录**）。口径见 `PRD §4.5` 第 2 条。
-> - ⚠️ **图片自 2026-10-12 起真的画出来**（走查**第 58 条**；起于用户报回「`![](../images/x.png)` 这样引入的图片没有显示出来」）。**解析侧**：`MarkdownInline` 认 `![alt](地址)`（`MarkdownSpan.Style.image`，**允许空 `alt`**），**独占一段**的被 `MarkdownParser.soleImage` 提成 `MarkdownBlock.image`。**渲染侧**：`MarkdownImage` 分两条路 —— **仓库内**（`RepoLinkResolver` 判档 → `MarkdownImageStore` → `rawFile`，带令牌、分支跟着当前选的那个；字节缓存与 304 条件请求由 `HTTPTransport` 的 `HTTPResponseCache` 承担，**不再叠一层**）与**仓库外的绝对地址**（`AsyncImage`，Issue / PR 评论里那种），取不到落占位块。
+> - ⚠️ **图片自 2026-10-12 起真的画出来**（走查**第 58 条**；起于用户报回「`![](../images/x.png)` 这样引入的图片没有显示出来」）。**解析侧**：`MarkdownInline` 认 `![alt](地址)`（`MarkdownSpan.Style.image`，**允许空 `alt`**），**独占一段**的被 `MarkdownParser.soleImage` 提成 `MarkdownBlock.image`。**渲染侧**：`MarkdownImage` 分两条路 —— **仓库内**（`RepoLinkResolver` 判档 → `MarkdownImageStore.repositoryImage` → `rawFile`，带令牌、分支跟着当前选的那个；字节缓存与 304 条件请求由 `HTTPTransport` 的 `HTTPResponseCache` 承担，**不再叠一层**）与**仓库外的绝对地址**（`MarkdownImage` 自己取字节，见下面那组 2026-10-14 的改动），取不到落占位块。
+>   ⚠️ **2026-10-14：仓库外那条从 `AsyncImage` 换成"自己取字节"，并一口气改了四件事**（走查第 **64** 条；源于用户报回「readme 中的图片有一部分没有加载出来」）。取证结论是**三件事叠在一起**，而它们**都只表现为"图没出来"、一个都不报错**：
+>   1. **主因：SVG 解不出来。** 用户截图里失败的图**全都是 SVG**（`content-type: image/svg+xml`）—— 徽章类地址（`img.shields.io`、`api.star-history.com/svg`）**只出 SVG**，而 `UIImage(data:)` **画不了矢量图**（同一口径早在 2026-10-12 就存在于 `FilePreviewKind.imageExtensions`：那一侧把 `svg` 排除在"图片"之外）。⚠️ **这条不是本轮引入的**：`MarkdownBody` / `MarkdownHTML` / `MarkdownParser` / `MarkdownImage` 那一批一行没动，在代码页看 README 时症状完全一样；README 搬到首页只是让它出现在最常看的那一页。
+>      **处置（用户裁定）**：不真渲染，但**把原因说出来**。`MarkdownImageBytes.looksLikeSVG`（领域层、有单测）**按字节**判这段是不是 SVG —— ⚠️ **不能按扩展名判**：`https://img.shields.io/badge/Rust-100%25-orange` 这种地址**路径上没有任何提示**。⚠️ 顺序是**先 `UIImage(data:)`、后嗅探**：解码是确定的、嗅探是启发式，反过来的话"恰好含 `<svg` 字样的坏 PNG"会被报成 SVG。占位块据此改说「SVG 图片：xxx」（空 `alt` 时为「SVG 图片」）。⚠️ 2026-10-14 当晚用户要求把「暂不渲染」四字去掉，遂收成「SVG 图片：xxx」。⚠️ **有意不引 `WKWebView` 去真渲染**：那是每张 SVG 一个 webview + 异步截图 + 一套队列与缓存，与"这一版画不画一张徽章"不成比例。
+>   2. **取数结果从 `UIImage?` 升成三档**（`MarkdownImageOutcome`：`.loaded` / `.unsupportedFormat` / `.failed`）：`nil` 把两种失败合并了，而**下一步动作不同** —— 一个是"等一下再试"，一个是"这一版就是看不到"。占位块那两句话（`MarkdownCopy.imageFailureText` / `imageUnsupportedFormatText`）与两个图标（`imageFailure` / `unsupportedFile`）也随之分开。
+>   3. **`<img>` 的 `width` / `height` 不再丢**：markdown 图片语法**没有尺寸位** ⇒ `MarkdownHTML` 改写出来的 `![alt](src)` 无处安放它们。改法是**解析完再按 `src` 回填**（`MarkdownHTML.blocks(from:)` → `MarkdownBlock.applyingImageSizes`，表由 `declaredImageSizes` 造，键取 `URL.absoluteString` 而不是 `src` 原文；`width="100%"` / `auto` / 小数一律当没写）。视图侧两处用它：**渲染宽度上限**（**真实宽度与声明宽度取更小的那个** —— 声明只能往下压、不能往上拉）与**占位块尺寸**（见下条）。它治两个病：「小图被 `resizable` 放大到整屏宽」与「四张 20pt 高的徽章各占一个大块」。
+>      ⚠️ **2026-10-14 当天第三批：占位块尺寸按"这张图本该多大"走、保底可读**（用户报回「`storytold/pdfcraft` 这个仓库中有好几个标签 svg，但是占位图很大，尺寸不对」）。尺寸来源由**一条变三条** —— ① HTML 声明的 `width` / `height`（上一条）；② **SVG 字节里自己写的 `width` / `height` / `viewBox`**（`MarkdownImageBytes.declaredSize`，领域层、有单测；⚠️ **此前我们从没读过 SVG 字节，而浏览器就是读它来摆位的**）；③ 两者都缺一边时按宽高比补缺（`MarkdownImage.wouldBeSize` **逐维合并** —— 徽章是 HTML 全无、SVG 有 98×20；仓库里那张 logo 是 HTML 只写 `width="200"`、高度得拿 SVG 的宽高比算）。占位块再**保底**到 128 × 48（`Spacing.page × 8` / `× 3`；128 复用既有的那个数，**不新造**），高度用 `minHeight` 让文案折行时块自己长高。
+>        ⚠️ **同一天晚些这两个"保底"被第 5 条推翻了** —— 它们自己成了新的病（`98×20` 的徽章被抬到 `128 × 48`，四张叠起来还是一排灰条）。
+>        ⚠️ **不改之前**：占位块**宽度恒为满宽**、高度恒 128pt ⇒ 一排 20pt 高的徽章变成四条大白条（正是用户截图）。根因是**徽章地址的 HTML 里一个尺寸都没写**、而我们又不读 SVG 自己的尺寸、且宽度根本没有上限 —— 三件事叠在一起，缺一条都还是错的。
+>        ⚠️ **"SVG 不真渲染"这条口径不变，取证如下**（用户问「GitHub 官方 App 的方案也是 WKWebView 吗」）：**不是**。GitHub 官方 App 内嵌的是**原生 SVG 渲染库**（shields.io 维护者 2021-04-01 在 `badges/shields` Discussion #6337 里查证后写明的库名是 `BigBadaboom/androidsvg`），**同一帖还记录了它的不完美** —— 徽章左侧那类走 `xlink:href` 外部图片的 logo 在 App 里是空白；GitHub **网页版**则是浏览器原生渲染，那一环 GitHub 什么都没做。⇒ 两条路都不指向 `WKWebView`；iOS 侧也确实**没有系统公开 API** 能画 SVG（本机最小 Swift 程序实测：`CGImageSourceGetType` 对 SVG 返回 `nil`、`CGImageSourceCreateImageAtIndex` 失败）。此条只用来**记账**（免得下次又有人问"GitHub 都能显示、我们为什么不能"），**不改**本轮的处置。
+>   4. **`[![alt](图)](外链)` 取图、丢外链**：这个形状**不是人写的**，是 `MarkdownHTML` 把 `<a href="…"><img src="…"></a>` 改写成 `[` + `![alt](src)` + `](href)` 拼出来的（README 里"点徽章跳官网"到处都是）。旧 `parseLink` 找右括号用的是"**第一个** `]`"、不做嵌套计数 ⇒ 切在 `src` 那个 `]` 上：label 连前导 `!` 一起当文字、尾巴 `](href)` 漏成正文（用户第二张截图右下角那串原文就是它）。改成 `matchingBracket` **按层数配**。⚠️ 同日又补一条：`<a>` 与 `<img>` 跨行时，这个形状会被 `MarkdownParser` 按行拆成 `[` / `![alt](src)` / `](href)` 三段 ⇒ `MarkdownHTML` 在 `</a>` 闭合时回头检查：锚点里若只有空白 + 一张图，就**剥掉外链包装**，只输出图片 markdown。⚠️ **丢外链是有意的代价**：`MarkdownSpan` 是**平铺**的（类型说明"有意不嵌套"），没有"一张可点的图"这一档；GitHub 网页上两种都能点，这里只有图。⚠️ 不做转义与行内代码的例外（`` \] `` 仍计数）—— 那要跟反引号扫描一起判，是另一个量级的改动，而它错了的样子是"这一段原样显示"（看得见、不吞字），已登记。
+>   ⚠️ **仓库外那条换掉 `AsyncImage` 的理由与代价**：`AsyncImage` 只给一个 `.failure`，**我们看不到字节** ⇒ 分不出"取不到"与"取到了但解不了"（第 1、2 条就无从谈起）。换成 `URLSession.shared` 之后**缓存语义不变**（`AsyncImage` 内部用的就是同一个会话），只是字节过了一次我们的手。⚠️ 这条请求**不带任何凭据**（绝对地址是公开图）⇒ `§10.6` 那条例外适用；这也正是它**不塞进 `MarkdownImageStore`** 的原因（那个店手里握着令牌）。**仓库内那条不变**，仍走 `rawFile`。
 >   ⚠️ **段里与文字混着的图由 `MarkdownInline.runs(of:)` 切成一格、同样画出来**（`MarkdownRun` + `MarkdownBody.spanContent`）：排成"文字 / 图 / 文字"的**竖排**，图自成一行。`runs` 放在领域层是因为 `make test` 不编译 App target —— 它错了的样子（图掉行 / 多一行空白）很容易被当成排版问题放过去。
 >   ⚠️ **当天改过一次口径**：第一版只在"整段只有这一张图"时才画，其余一律降级成一个可点的「图片」二字 ⇒ 用户报回「现在效果是用『图片』两个字占位，然后点击跳转到图片详情」。判据太窄是**实现侧的错**（"图与文字同行"是一种**写法**，不是画不出来的理由）。现在唯一仍降级的是**标题**里的图（`heading` 仍是一个 `Text`：标题必须一行）。
 >   ⚠️ 原型 `.markdown` 一族**连一条 `img` 规则都没有**（正文里一次都没画过图）⇒「图片 / 加载中 / 取不到」三档外观**全部是「规格未给」**，取法与逐条理由见走查第 58 条；本仓 `MarkdownHTML` 原先那条「图片这一期不画、`alt` 为空整张丢掉」的降级**到此为止**（见 §6.7 那张表已改写的行）。
+>   5. **2026-10-14 当晚：徽章不再"取字节"、占位块做轻、图能并排**（走查第 **65** 条）。触发语是用户在模拟器上看完上面那一批之后的一句「**不好看**，还是讨论下如何显示的问题」。
+>      **诊断：难看是两个可以分开治的原因叠在一起** ——
+>      ① **排列（主因）**：`MarkdownBody.spanContent` 一贯是 `VStack`、**每张图自成一行**。那是 2026-10-12 为**大截图**定的口径，套在 20pt 高的徽章上是错的 —— 四张徽章 = 216pt，把正文挤得很长。
+>      ② **视觉重量**：占位块有底色 + 圆角 + 边框 + 竖排的图标与文字，一屏四个**像四条报错**。
+>      ③ **图没出来**（信息缺失）。
+>      ⚠️ **关键判断：真渲染 SVG 只治第 ③ 条，治不了第 ① 条** —— 四个 `WKWebView` 截图出来仍是四行、仍是 216pt。所以先做排版，渲染那条路留到"信息缺失"真的不能忍时再说（那三条路的优缺点、以及 GitHub 官方 App 的做法，见上面第 1 条那条取证与本文末尾的走查第 65 条）。
+>      **用户逐条裁定**：路线 = **横排 + 轻量化 + 徽章标签化**；"最刺眼的一点" = **四张徽章排成四行**；动态徽章 = **用 `alt` 画成灰标签**。
+>      ① **shields.io 徽章改成"解地址画出来"**（领域层 `MarkdownBadge` + 视图 `MarkdownBadgeView`）：静态 `/badge/<label>-<message>-<color>` 的**全部内容都写在地址里** ⇒ **不取字节、不打请求、离线也看得见**（这是它比真渲染省的三样东西）。⚠️ 解析规则三条都有出处：`--` 是字面 `-` 的转义、单个 `-` 是分隔符；`_` 与 `%20` 都是空格；**色名表照 `badge-maker/lib/color.js` 抄**（`brightgreen #4b0`、`green #67ac09`、`blue #007ec6` …，含 `success`/`critical` 那批别名），hex 只收 **3 / 6 位**（shields 的 `isHexColor` 正则就是 `^([\da-f]{3}){1,2}$` —— 放宽会让 `badge/foo-bar-1234` 把 message 吃掉）。**动态徽章**（`/github/stars/…`、`/npm/v/…` 这类**服务端算**的）地址里一个字都没有 ⇒ 用作者的 `alt` 画成**中性灰**标签（`isFromAddress == false`；⚠️ 那时显示的是一句**描述**而不是真实星数 —— 用户知情并选定），`alt` 也空 ⇒ 整条判否、回落成一张普通的图。**只认 `img.shields.io` 这一个 host**：别的徽章服务（`badgen.net` 等）地址规则不同，硬解出来的是**错的内容**（比不解析更糟）。
+>      ② **能并排的并排**：`MarkdownRun` 从"格"改成"行"（`.text` / `.item` / `.row`），判据是「**连续 ≥2 个"宽度已知"的格**」。⚠️ 刻意**不用尺寸阈值**（那要新造一个解释不清来源的数，而且判错的样子是"某张图莫名掉到下一行"），改用**作者自己写的东西**：把几张图连着写在一段里本来就是"要并排"的意思；写了宽度（`width="32"`）才排得进去，因为宽度未知的图**必须占满一行**。视图侧新增 `MarkdownFlowLayout`（`Layout` 协议 —— SwiftUI 没有内置的 flow 布局，`HStack` 不换行、`LazyVGrid` 要求等宽列）。真实数据逐条对得上：4 个徽章并排 ✓、12 张大截图各占一段不并排 ✓、表格里 7 个 `32×32` 图标不受影响 ✓；⚠️ 手写的 `![](a.png) ![](b.png)`（markdown 语法**没有尺寸位**）**不并排** —— 有意的降级，已登记。
+>      ③ **占位块做轻 + 尺寸口径再改一次**：去掉底色 / 圆角 / 边框，图标与说明**同一行**、`caption` 字号、次级色；`lineLimit(1)` + 尾部截断（长 `alt` 不再把块撑成两行，而**读屏标签仍是全文**）。尺寸从第 3 条那两个"保底"改成：**宽 = 图片本该的宽（不设下限，文字放不下就截断）、高 = `min(本该的高, 128)`；一处尺寸都不知道时不设下限**（由那一行文字决定）。⚠️ 128 就是原来那个 `defaultPlaceholderHeight`（`Spacing.page × 8`）—— **它从"最矮的占位块"变成了"最高的占位块"**，值没变、方向反了。
+>      ⚠️ **原型不需要跟**：`redesign/prototype/` 是写死的 HTML，没有"取图"这条链、也没有徽章 ⇒ jsdom 回归的断言数不变（仍 296 条），只作"没碰坏"的确认。
 
 > ### 6.7 补记：内嵌 HTML 与链接落点（2026-10-07 目视发现后改口径）
 >
@@ -2250,7 +2277,8 @@ GlassEffectContainer(spacing: 12) {
 > |---|---|---|
 > | `<h1>`–`<h6>` | `#`–`######` | 标题本来就有块类型 |
 > | `<br>` | **空行** | `MarkdownSpan.Style` 里没有"段内换行"这一档；单个 `\n` 会被段落收集那支用空格接起来，等于 `<br>` 消失 |
-> | `<img src alt>` | `![alt](src)` | **2026-10-12 起真的画出来**（走查第 58 条）：改写回图片语法 ⇒ **只要这一段里有图就画出来**（段里只有它 ⇒ `MarkdownBlock.image`；与文字同段 ⇒ 切成一格竖排，见 `MarkdownRun`）。⚠️ `alt` 缺失或为空**不再丢整张**（"纯文字里没有落点"那条理由在原图要画出来之后不成立了） |
+> | `<img src alt width height>` | `![alt](src)`，**尺寸另行回填** | **2026-10-12 起真的画出来**（走查第 58 条）：改写回图片语法 ⇒ **只要这一段里有图就画出来**（段里只有它 ⇒ `MarkdownBlock.image`；与文字同段 ⇒ 切成一格竖排，见 `MarkdownRun`）。⚠️ `alt` 缺失或为空**不再丢整张**（"纯文字里没有落点"那条理由在原图要画出来之后不成立了）。⚠️ 2026-10-14 起 `width` / `height` **不再丢**：markdown 语法里没有尺寸位，所以它们**不走这条字符串改写**，而是解析完按 `src` 回填（`MarkdownHTML.blocks(from:)` → `MarkdownBlock.applyingImageSizes`，见 §11.1 那组补记） |
+> | `<a href><img …></a>` | `[` + `![alt](src)` + `](href)` | 两条规则**叠在一起**的产物 —— 于是拼出 `[![alt](src)](href)` 这个**嵌套形状**。⚠️ `MarkdownInline.parseLink` 2026-10-14 起**按层数配**右括号，取到里面那张图、**丢掉外链**（`MarkdownSpan` 是平铺的，没有"一张可点的图"这一档） |
 > | `<a href>` | `[文字](href)` | 复用行内链接；仓库内的相对地址再由 `RepoLinkResolver` 解析 |
 > | `<b>/<strong>/<i>/<em>` | `**` / `*` | 复用行内粗斜体 |
 > | `<details>/<summary>` | 正文照常、`<summary>` 变粗体段落 | 折叠语义不做（`open` 本来就是展开态） |
