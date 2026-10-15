@@ -120,7 +120,7 @@ struct ThemeTests {
         }
 
         // 已知偏差【已定 2026-10-06，见 TECH_SPEC §10.7 末】：它确实达不到非文字图形 3:1 的门槛，
-        // 但它**不是唯一线索** —— 已 Star 同时由文案（`已 Star · n`）与星形是否填充表达。
+        // 但它**不是唯一线索** —— 已 Star 同时由文案（`Starred · n`）与星形是否填充表达。
         // 本断言是下界护栏：将来若把它调得更浅，必须连同 §10.7 的偏差一起重新评估。
         let onChip = contrastRatio(Theme.Palette.starActive, Theme.Palette.surfaceSunken)
         #expect(onChip >= 1.4, "星标金在控件底色上的对比度掉到了不可辨的程度：\(onChip)")

@@ -83,7 +83,7 @@ public enum ProfileCopy {
 
     /// 列表行那一颗按钮 —— 已 Star 时（原型 `SCR.stars.render` 逐字）。
     ///
-    /// ⚠️ 与 §4.13 详情页那颗 `已 Star · {n}` **不是同一句**：那一颗带计数，
+    /// ⚠️ 与 §4.13 详情页那颗 `Starred · {n}` **不是同一句**：那一颗带计数，
     /// 这一颗只表明状态（列表行上的星数在副标题里，按钮上再写一遍会挤）。
     public static let unstarAction = "已 Star"
 

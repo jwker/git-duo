@@ -12,7 +12,7 @@ import Testing
 /// 响应里**没有新计数** —— 所以本地 `±1` 必须先知道**操作前的状态**。
 /// 不加这一步的话，一个你已经 Star 过、共 100 星的仓库会按"未 Star"起手显示
 /// `Star · 100`；点一下发出的是被服务端忽略的幂等请求，界面却显示成
-/// `已 Star · 101` —— 既多算一颗，也把"你已经 Star 过"这件事说反了。
+/// `Starred · 101` —— 既多算一颗，也把"你已经 Star 过"这件事说反了。
 ///
 /// 另一件是**失败不许静默吞掉**：进页那次基准查询失败**不抛错**（不该让整页打不开），
 /// 但用户真去点的时候，补查询仍然失败就必须**带着错误收场**，且**一个计数也不许动**。
@@ -220,13 +220,14 @@ struct StarToggleTests {
 
     // MARK: - 文案
 
-    @Test("按钮文案：`Star · {n}` / `已 Star · {n}`，且**千分位全量、不缩写**")
-    func buttonTitleIsGroupedNotAbbreviated() {
+    @Test("Star 文案：`Star · {n}` / `Starred · {n}`，且**千分位全量、不缩写**")
+    func statTitleIsGroupedNotAbbreviated() {
         // ⚠️ 与仓库卡片上的 `2.3k` **有意不同**：卡片窄、要省宽度；
         //    头部这三个数是用户要读准的（2026-10-06 用户拍板）。
-        #expect(StarCopy.buttonTitle(isStarred: false, starCount: 2_341) == "Star · 2,341")
-        #expect(StarCopy.buttonTitle(isStarred: true, starCount: 2_341) == "已 Star · 2,341")
-        #expect(!StarCopy.buttonTitle(isStarred: false, starCount: 2_341).contains("k"))
+        #expect(StarCopy.statTitle(isStarred: false, starCount: 2_341) == "Star · 2,341")
+        // ⚠️ 已 Star 那一档是 `Starred`（2026-10-15 用户裁定），**不是** `已 Star`。
+        #expect(StarCopy.statTitle(isStarred: true, starCount: 2_341) == "Starred · 2,341")
+        #expect(!StarCopy.statTitle(isStarred: false, starCount: 2_341).contains("k"))
     }
 
     @Test("两句 toast 是「操作真的发生了」的唯一可见凭证（PRD §7）")
@@ -241,6 +242,19 @@ struct StarToggleTests {
     func accessibilityLabelStatesTheStatus() {
         #expect(StarCopy.accessibilityLabel(isStarred: true, starCount: 12).contains("已 Star"))
         #expect(StarCopy.accessibilityLabel(isStarred: false, starCount: 12).contains("点按加星"))
+    }
+
+    @Test("不是控件那一档**不念**「点按…」（走查第 67 条）")
+    func accessibilityLabelOmitsTapWhenNotAControl() {
+        // ⚠️ 写不了的仓库上那颗星是 `StatInfo`（裸信息）—— 对它说「点按取消」
+        //    会让读屏用户去双击一个**不是按钮**的东西（而它什么都不会发生）。
+        #expect(!StarCopy.accessibilityLabel(isStarred: true, starCount: 12, isControl: false).contains("点按"))
+        #expect(!StarCopy.accessibilityLabel(isStarred: false, starCount: 12, isControl: false).contains("点按"))
+        // 但**状态本身仍要念出来** —— 这一条与"是不是控件"无关（它正是本次要露出来的信息）。
+        #expect(StarCopy.accessibilityLabel(isStarred: true, starCount: 12, isControl: false).contains("已 Star"))
+        #expect(StarCopy.accessibilityLabel(isStarred: false, starCount: 12, isControl: false).contains("Star"))
+        // 可听文案仍是中文「已 Star」—— 可见文案改成了 `Starred`，两者**有意不同**。
+        #expect(!StarCopy.accessibilityLabel(isStarred: true, starCount: 12, isControl: false).contains("Starred"))
     }
 
     // MARK: - 写不了这个仓库时（TECH_SPEC §3.5.5、决策 #80）

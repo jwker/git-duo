@@ -24,7 +24,7 @@ public struct StarState: Sendable, Hashable {
     /// ⚠️ 它是决策 #41 的全部要点：`±1` 必须先知道**操作前的状态**。
     /// 不加这一步的话，一个你已经 Star 过、共 100 星的仓库会按"未 Star"起手显示
     /// `Star · 100`；点一下发出的是**幂等的请求**（服务端什么都没变），
-    /// 而界面把它当成"新增一颗" ⇒ 显示成 `已 Star · 101` —— 既多算一颗，
+    /// 而界面把它当成"新增一颗" ⇒ 显示成 `Starred · 101` —— 既多算一颗，
     /// 也把"你已经 Star 过"这件事说反了。
     ///
     /// 基准没拿到（断网 / 权限异常）时这里是 `false`：界面**不谎称已 Star**，
@@ -53,18 +53,31 @@ public enum StarAction: Sendable, Hashable {
 /// Star 相关的**可见文案**（PRD §7、原型 `10-explore-repo.js` 的 `toggleXStar`）。
 ///
 /// 放在领域层是因为两处都是契约：
-/// - 按钮文案 `Star · {n}` ↔ `已 Star · {n+1}` 出现在 PRD §4.13 第 1 条里；
+/// - 那颗星的文案 `Star · {n}` ↔ `Starred · {n+1}` 出现在 PRD §4.13 第 1 条里；
 /// - toast 两句是"操作真的发生了"的**唯一可见凭证**（harness 那侧断言过它的措辞）。
 public enum StarCopy {
 
-    /// 统计按钮上的文案。
+    /// 仓库头部那一颗 **Star** 的文案（Watch / Fork 不归本件 —— 它俩是裸信息，见走查第 66 条）。
+    ///
+    /// ## ⚠️ 名字是 `statTitle` 而不是 `buttonTitle`（2026-10-15，走查第 67 条）
+    ///
+    /// 它此前叫 `buttonTitle`，因为"那颗星恒是一个按钮"—— 走查第 **67** 条把这个前提改掉了：
+    /// **写不了的仓库上不画按钮**，那颗星改用 `StatInfo`（裸信息）。理由与 Watch / Fork
+    /// 那次（第 66 条）是同一条：**形状即信号**，一颗点不动的按钮等于承诺一件不会发生的事。
+    /// ⇒ 同一个函数现在**两种形状都可能承载**，"按钮"这个词就不再成立了
+    /// （同 `breadcrumbMenuAccessibilityLabel` → `operationsMenuAccessibilityLabel` 那次：
+    /// 名字不该继续描述一个已经不成立的处境）。
     ///
     /// ⚠️ `{n}` 用**千分位全量**（`2,341`），**不缩写**（2026-10-06 用户拍板，TECH_SPEC §9.11）：
     /// 与仓库卡片上的 `2.3k` **有意不同** —— 卡片窄、要省宽度；头部这三个数是用户要读准的。
     /// 原型的数据也是这么分的（卡片侧 `124k`，头部侧 `11,240`，后者超过一万也不缩写）。
-    public static func buttonTitle(isStarred: Bool, starCount: Int) -> String {
+    ///
+    /// ⚠️ 已 Star 那一档写的是 `Starred · {n}`（**2026-10-15 用户裁定**，原为 `已 Star · {n}`）：
+    /// `Star` 与 `Starred` 是同一个词的原形与过去分词，两颗摆在一起是**同族**的两种形态；
+    /// 原先那半句中文与另半句英文拼在一行，反而是两种写法混排。
+    public static func statTitle(isStarred: Bool, starCount: Int) -> String {
         let count = GroupedNumber.string(from: starCount)
-        return isStarred ? "已 Star · \(count)" : "Star · \(count)"
+        return isStarred ? "Starred · \(count)" : "Star · \(count)"
     }
 
     /// 切换后的轻提示。
@@ -80,8 +93,25 @@ public enum StarCopy {
     }
 
     /// 按钮的读屏标签（图标是星形，读屏念不出"已 Star"这个状态）。
-    public static func accessibilityLabel(isStarred: Bool, starCount: Int) -> String {
-        isStarred ? "已 Star，\(starCount) 个 Star，点按取消" : "Star，\(starCount) 个 Star，点按加星"
+    ///
+    /// ## ⚠️ `isControl` 决定要不要念「点按…」（2026-10-15，走查第 67 条）
+    ///
+    /// 写不了的仓库上它**不是控件**（`StatInfo`，见 `statTitle`），
+    /// 而一句「点按取消」对一个不是按钮的东西是**错的承诺** —— 读屏用户会去双击它。
+    /// ⇒ 只有能写那一档才带「点按…」。
+    ///
+    /// ⚠️ 屏幕上的字已改成 `Starred`（见 `statTitle`），这里**有意不改**：
+    /// 这一句是给耳朵的 —— `Starred` 是个英文过去分词，中文读屏念出来是外语词，
+    /// 而「已 Star」才是这句话该有的读音。**可见文案与可听文案本来就允许不同**。
+    public static func accessibilityLabel(
+        isStarred: Bool,
+        starCount: Int,
+        isControl: Bool = true
+    ) -> String {
+        let action = isControl ? (isStarred ? "，点按取消" : "，点按加星") : ""
+        return isStarred
+            ? "已 Star，\(starCount) 个 Star\(action)"
+            : "Star，\(starCount) 个 Star\(action)"
     }
 
     // MARK: - 写不了这个仓库时（TECH_SPEC §3.5.5、决策 #80）
@@ -94,7 +124,7 @@ public enum StarCopy {
     ///
     /// | 用在哪 | 形态 |
     /// |---|---|
-    /// | §4.4 / §4.13 的头部大卡 | **置灰说明**（统计按钮下面一行） |
+    /// | §4.4 / §4.13 的头部大卡 | **置灰说明**（统计行下面一行） |
     /// | 同上那颗按钮 | **读屏标签**（此刻"点按加星"是不成立的，那句要换掉） |
     /// | 三处共用的失败提示 | 用户真的点下去（范围还没查到 / `selected` 那一档）时的那句 toast |
     ///

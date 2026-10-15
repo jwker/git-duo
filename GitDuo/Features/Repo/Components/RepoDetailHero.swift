@@ -4,7 +4,7 @@ import SwiftUI
 
 /// 「我的仓库」详情页的头部大卡（PRD §4.4 第 1 条、原型 `scripts/05-repo.js` 的 `SCR.repoDetail`）。
 ///
-/// 内容：仓库图标 · 全名 · 描述 · 三个统计按钮（Star / Watch / Fork）。
+/// 内容：仓库图标 · 全名 · 描述 · 一组统计（**能写的那颗星是按钮**，其余是**信息**）。
 ///
 /// ## ⚠️ 它与 `RepoHeroCard`（§4.13）是**两张卡**，不是同一张的两种态
 ///
@@ -12,7 +12,7 @@ import SwiftUI
 /// |---|---|---|
 /// | 元信息行 `{更新时间} 更新 · {许可证} 许可证` | **没有** | 有 |
 /// | 话题标签 | **没有** | 有 |
-/// | 底部说明 | **没有** | `他人仓库 · 只读浏览，Fork 后可编辑与提交` |
+/// | 底部说明 | **没有** | 也**没有了**（原有一句「他人仓库 · 只读浏览…」，2026-10-15 走查第 68 条随用户裁定删掉） |
 /// | Star / Watch / Fork | 同（文案都取自领域层 `StarCopy` / `RepoCopy`） |
 ///
 /// 原型这两页的 `repo-hero` 块里就是这四行的差别，PRD §4.4 第 1 条也只列到描述为止。
@@ -20,11 +20,22 @@ import SwiftUI
 /// （给他人仓库加一行元信息，自己的仓库也跟着变了）——
 /// 而归属本来就是**路由**在进入前定下的（铁律 #7），这里不该再判一次。
 ///
-/// ## ⚠️ Watch 与 Fork 是**纯展示**的（决策见 PRD §4.4 / §4.13）
+/// ## ⚠️ Watch 与 Fork **不是按钮**（2026-10-15 起，走查第 66 条）
 ///
-/// 与 `RepoHeroCard` 同一处置：`allowsHitTesting(false)`（**不是** `.disabled`
-/// —— 后者会变灰、看起来像"暂时不可用"）+ 去掉 `.isButton` trait + 一句读屏 hint。
-/// 文案与 STAR 一致地取自领域层，两页共用一份。
+/// 它俩从来就点不动（PRD §4.4 原文只写"**展示** Watch 数"），但此前与 Star 共用
+/// `StatButton` 的形态（底色 + 圆角 + 边框），且刻意**不加灰**（当时的理由是"灰了
+/// 反而像暂时不可用"）⇒ 结果与那颗能点的长得一模一样，按下去却没有任何反应。
+/// 用户 2026-10-15 报回「没有必要做成按钮形状了」，打的正是这一点。
+///
+/// ⇒ 现在改用 `StatInfo`（裸信息：图标 + 文案，无底色 / 边框 / 圆角）——
+/// **形状本身就是信号**：有形状 = 点得动，没形状 = 只是一条信息。
+/// 这比"两颗都灰掉"更准：灰是"暂时不可用"，而它俩是**这一版压根没有这个动作**。
+/// 文案仍与 Star 一致地取自领域层，两页共用一份。
+///
+/// 连带删掉两句读屏 hint（`watchUnavailableHint` / `forkUnavailableHint`）——
+/// 它们解释的是"一个按下去没反应的按钮"，而它俩现在已经不是按钮了。
+/// 留着那句 hint，「这颗还不能点」在代码里就仍然看起来成立
+/// —— 同 `RepoCopy.addFileUnavailableHint` 被删时的先例。
 ///
 /// ## Star 按钮：基准未确认时按「未 Star」显示
 ///
@@ -32,25 +43,37 @@ import SwiftUI
 /// 时按未 Star 画 —— 这是 `StarState` 的既定降级（决策 #41），
 /// 本件不自己造第二套判断。
 ///
-/// ## ⚠️ Star 按钮的**第二档**：确定写不了 ⇒ 置灰 + 一行说明（决策 #80）
+/// ## ⚠️ Star 的**第二档**：确定写不了 ⇒ 那颗星**不再是按钮**（决策 #80 + 走查第 67 条）
 ///
 /// 2026-10-09 起（走查 #3 定案，`TECH_SPEC §3.5.5`）：GitHub App 的用户令牌
 /// **只能 Star 安装范围内（也就是在册账号名下）的仓库**，别人的仓库一律 403。
-/// 查到并确定不在范围内时，这里画成 `.disabled(true)` + 下方一行 `StarCopy.unavailableHint`。
+/// 查到并确定不在范围内时 —— **2026-10-15 起改用 `StatInfo`（裸信息）**，
+/// 不再是 `.disabled(true)` 的灰按钮；那一行「GitDuo 未被授权访问该仓库，暂不能 Star」
+/// 的说明也**一并去掉了**（2026-10-15 走查第 68 条：屏上没有 Star 动作了，
+/// 它就没的可解释 —— 与 `RepoHeroCard` 同日同裁）。
 ///
-/// ⚠️ 这一档与 `watchButton` / `forkButton` 的 `allowsHitTesting(false)` **有意不同**：
-/// 那两个是"**这一屏本来就只展示计数**"（点了也没这功能），Star 是"**本该能点、此刻不能**"
-/// —— 后者必须让用户看得出"是权限问题"，而不是"这功能还没做"。
+/// ## 为什么要拆掉那颗灰按钮
 ///
-/// | | Watch / Fork | Star（确定不可写） |
+/// 它点不动，却有**按钮的形状** —— 而"有形状 = 点得动"是本 App 唯一的形状信号
+/// （走查第 66 条刚为 Watch / Fork 定下的）。留着它，那条信号就弱一分。
+///
+/// 更要紧的是**已 Star 那一档**：`.disabled` 会把按钮上的**文字一起压暗**，
+/// 于是「我 star 过」与「我没 star 过」在屏幕上只差一串看不清的字。
+/// 而"我 star 过没有"恰恰是进这一页最想知道的事 —— 并且那个状态**本来就查得到**：
+/// `GET /user/starred/{o}/{r}` 在别人的仓库上也是通的（它读的是"你与仓库的关系"，
+/// 那是你账号上的数据，不受安装范围约束。2026-10-09 实测，见 `GitHubStarEndpoint`）。
+///
+/// | | 能写（自己名下的仓库） | 确定写不了（别人的仓库） |
 /// |---|---|---|
-/// | 修饰符 | `.allowsHitTesting(false)` | **`.disabled(true)`** |
-/// | 看起来 | 与可点的一模一样 | **灰的** |
-/// | 为什么 | 它**永远**不可点 ⇒ 灰了反而像"暂时不可用" | 它本来能点 ⇒ 必须显出这一档差别 |
-/// | 说明放哪 | 读屏 `hint` | **屏幕上那一行**（这一屏放得下） |
+/// | 用的件 | `StatButton`（星**是**按钮） | `StatInfo`（一条裸信息） |
+/// | 看起来 | 底色 + 圆角 + 边框 | 图标 + 文案，没有形状 |
+/// | 已 Star 时 | `Starred · {n}` + 实心金星 | `Starred · {n}` + 实心金星（图标吃 `starActive`） |
+/// | 在途时 | 禁用 + 内联 `ProgressView` | 不适用（它压根点不动） |
 ///
-/// ⚠️ 判据只有一条：**这一处放得下说明吗**。放得下就置灰（本件与 §4.13 的头部），
-/// 放不下就照常可点、失败时再说（§4.18 的列表行，见 `MyStarsViewModel.toggleStar`）。
+/// ⚠️ 两种形态的**唯一出处是 `StatStar`** —— 本件不自己判"该画哪个"。
+/// ⚠️ 「为什么写不了」这件事只走**读屏 hint**，屏上不再画说明行
+/// （2026-10-15 走查第 68 条，同 `RepoHeroCard`）。§4.18 的列表行仍**照常可点、
+/// 失败时再说**（`MyStarsViewModel.toggleStar`）—— 那里是操作入口，得给用户一个动作。
 struct RepoDetailHero: View {
 
     let detail: RepositoryDetail
@@ -80,7 +103,6 @@ struct RepoDetailHero: View {
             description
             statRow
                 .padding(.top, Theme.Spacing.m)
-            unavailableHint
         }
         // 原型 `.repo-hero{padding:16px;border-radius:16px}`。
         .padding(Theme.Spacing.l)
@@ -127,91 +149,63 @@ struct RepoDetailHero: View {
         }
     }
 
-    /// 三颗统计按钮。
+    /// 三颗统计 —— **一颗按钮（Star）+ 两条信息**（Watch / Fork）。
     ///
     /// ⚠️ 用 `FlowLayout`（**不是** `HStack`）：三颗的宽度随内容（2026-10-11 由
     /// "竖排 · 三等分整宽"改，见 `StatButton`），长数字或 Dynamic Type 放大时
     /// 应当**折行**；`HStack` 放不下只会把它们压扁，把那串数字截掉。
     private var statRow: some View {
         FlowLayout(spacing: Theme.Spacing.s) {
-            starButton
-            watchButton
-            forkButton
+            starStat
+            watchInfo
+            forkInfo
         }
     }
 
-    private var starButton: some View {
+    private var starStat: some View {
         let isStarred = star?.isStarred ?? false
         // 基准未确认时计数用详情里的那个数（`RepositoryDetail.starCount`）——
         // 它与基准是**两个不同的量**：没 Star 过的仓库那个数就是总数，Star 过的也是。
         let count = star?.starCount ?? detail.starCount
 
-        return StatButton(
-            systemImage: "star",
-            activeSystemImage: "star.fill",
-            title: StarCopy.buttonTitle(isStarred: isStarred, starCount: count),
-            isActive: isStarred,
-            activeTint: Theme.Palette.starActive,
+        return StatStar(
+            title: StarCopy.statTitle(isStarred: isStarred, starCount: count),
+            isStarred: isStarred,
+            // ⚠️ 决定"这颗星是按钮还是一条信息"的就是这一个参数（走查第 67 条）。
+            canStar: canStar,
+            isToggling: isTogglingStar,
             action: onToggleStar
         )
-        // 两档共用这一个修饰符：**在途**（§8.5"操作类"防重复提交）与**确定写不了**（§3.5.5）。
-        .disabled(isTogglingStar || !canStar)
-        .overlay {
-            if isTogglingStar {
-                ProgressView().controlSize(.small)
-            }
-        }
-        .accessibilityLabel(StarCopy.accessibilityLabel(isStarred: isStarred, starCount: count))
-        // ⚠️ 灰掉那一档把**原因**交给读屏 —— 否则用户只听到"一个变暗的按钮"，
-        //    而下面那行说明是**另一个**元素（要再滑一下才听得到）。
-        //    可点那一档不给 hint（空串 = 没有提示），否则每次念按钮都要多一句无用的。
+        .accessibilityLabel(
+            // ⚠️ `isControl` 传的是**这一档到底是不是控件** —— 写不了那一档若还念
+            //    "点按取消"，读屏用户会去双击一个不是按钮的东西（见 `StarCopy`）。
+            StarCopy.accessibilityLabel(isStarred: isStarred, starCount: count, isControl: canStar)
+        )
+        // ⚠️ 写不了那一档把**原因**交给读屏 —— 屏上已经没有那行说明
+        //    （2026-10-15 走查第 68 条删掉），读屏 hint 成了这件事**唯一**的承载：
+        //    否则用户只听到"Starred，N 个 Star"，无从知道为什么没有 Star 动作。
+        //    能写那一档不给 hint（空串 = 没有提示），否则每次念按钮都要多一句无用的。
         .accessibilityHint(canStar ? "" : StarCopy.unavailableHint)
     }
 
-    /// 「写不了」时按钮下方那一行（决策 #80）。
-    ///
-    /// ⚠️ 文案取自 `StarCopy.unavailableHint` —— 与**失败提示**是同一句，
-    /// 而这是有意的：用户在两处读到同一个原因，才不会再试第三次。
-    /// 两处说的是同一件事的两种到达方式（"事先拦下"与"写了被拒"）。
-    ///
-    /// ⚠️ 形态与 `RepoHeroCard` 那一处逐字相同（`caption` / `textTertiary`），
-    /// 差别只在**下面有没有页脚** —— 那边要多留一个 `Spacing.s` 把它与页脚隔开。
-    @ViewBuilder
-    private var unavailableHint: some View {
-        if !canStar {
-            Text(StarCopy.unavailableHint)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Palette.textTertiary)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, Theme.Spacing.s)
-        }
-    }
-
-    private var watchButton: some View {
-        StatButton(
+    /// Watch —— **一条信息，不是按钮**（2026-10-15，见类型说明）。
+    private var watchInfo: some View {
+        StatInfo(
             systemImage: "eye",
-            title: RepoCopy.watchLabel(count: detail.watcherCount),
-            action: {}
+            title: RepoCopy.watchLabel(count: detail.watcherCount)
         )
-        .allowsHitTesting(false)
-        .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(RepoCopy.watchUnavailableHint)
     }
 
-    private var forkButton: some View {
-        StatButton(
+    /// Fork —— **一条信息，不是按钮**（2026-10-15，见类型说明）。
+    private var forkInfo: some View {
+        StatInfo(
             // ⚠️ 走 `ForkIcon()` 而不是 SF Symbol：`GitHubIcon.fork` 只能拿到
             // `point.3.connected.trianglepath.dotted`（虚点连线），与用户给的参考图
             //（两个上圆点 + 一个下圆点 + 实线）相差太多。所以设计包里自绘了一个
             // `ForkIcon`，两处统一用它。
             icon: ForkIcon().frame(width: 12, height: 12),
-            title: RepoCopy.forkLabel(count: detail.forkCount),
-            action: {}
+            title: RepoCopy.forkLabel(count: detail.forkCount)
         )
-        .allowsHitTesting(false)
-        .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(RepoCopy.forkUnavailableHint)
     }
 }
 
@@ -251,7 +245,8 @@ struct RepoDetailHero: View {
                 onToggleStar: {}
             )
 
-            // 确定写不了 ⇒ Star 变灰 + 下方一行说明（决策 #80）。
+            // 确定写不了 ⇒ Star 是一条**裸信息**（**不是**按钮，也没有说明行 —— 走查第 67 / 68 条：
+            // 从前这里是一颗灰按钮 + 一行灰字，现已都拆掉）。
             // ⚠️ 本页真要看到这一档，得是"你对某个组织仓库有 push、而那个组织没装 GitDuo"
             //    —— 少见但可达，所以留一张在这儿当评审底图（走查单 #152 的对照组就在上面那张）。
             RepoDetailHero(

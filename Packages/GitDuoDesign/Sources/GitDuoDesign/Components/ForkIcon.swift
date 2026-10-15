@@ -111,7 +111,7 @@ public struct ForkIcon: View {
 
 #Preview {
     VStack(spacing: Theme.Spacing.l) {
-        // 与真机同尺寸（统计按钮里的那颗）。
+        // 与真机同尺寸（头部统计行里那颗 —— 它现在是一条**裸信息**，不是按钮）。
         HStack(spacing: Theme.Spacing.xs) {
             ForkIcon()
                 .frame(width: 12, height: 12)

@@ -91,7 +91,7 @@ public struct ProfileStatItem: Sendable, Hashable, Identifiable {
     /// 屏幕上那个数字 —— **千分位、不缩写**。
     ///
     /// ⚠️ 与仓库卡片上的 `2.3k` **有意不同**：卡片窄、要省宽度；
-    /// 头部这三个数是用户要**读准**的（同 `StarCopy.buttonTitle` 的口径，
+    /// 头部这三个数是用户要**读准**的（同 `StarCopy.statTitle` 的口径，
     /// 2026-10-06 已拍板，TECH_SPEC §9.11）。
     /// 原型那三个演示值（`42` / `318` / `126`）都不到四位，看不出这个差别。
     public var valueText: String { GroupedNumber.string(from: value) }

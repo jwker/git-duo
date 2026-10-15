@@ -54,7 +54,7 @@ struct GroupedNumberTests {
         // 卡片（窄，要省宽度）→ 缩写
         #expect(CompactNumber.string(from: 124_000) == "124k")
         #expect(CompactNumber.string(from: 11_240) == "11.2k")
-        // 头部统计按钮（用户要读准）→ 全量
+        // 头部那三个统计数（用户要读准）→ 全量
         #expect(GroupedNumber.string(from: 124_000) == "124,000")
         #expect(GroupedNumber.string(from: 11_240) == "11,240")
     }

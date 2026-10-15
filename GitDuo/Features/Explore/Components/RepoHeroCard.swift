@@ -6,26 +6,30 @@ import GitDuoKit
 /// 他人仓库详情的头部大卡（PRD §4.13 第 1 条、原型 `scripts/10-explore-repo.js` 的 `.repo-hero`）。
 ///
 /// 内容：仓库图标 · 全名 · `{更新时间} 更新 · {许可证} 许可证` · 描述 · 话题标签（链接色）·
-/// 三个统计按钮（Star / Watch / Fork）· 底部说明。
+/// 一组统计（**能写的那颗星是按钮**，其余是**信息**）。
 ///
-/// ## ⚠️ Watch 与 Fork 是**纯展示**的（2026-10-06 拍板）
+/// ## ⚠️ 那一排里**最多只有一颗是按钮**（2026-10-15，走查第 66 / 67 条）
 ///
-/// - **Watch**：PRD §4.13 只规定"展示订阅计数"（订阅动态依赖通知能力，本期不做）。
-/// - **Fork**：PRD 仍标 ⏳「行为待细化」。Fork 是**会改变账号状态的写操作**，
-///   在它的落地方案（真调还是跳网页端）定下来之前**不做半截**。
+/// 这一天连着定了两件事，原则是同一条 —— **形状即信号**：
+/// "有底色 + 边框"在这个 App 里 = **这块点得动**。
 ///
-/// 所以两个按钮照原型画出来（含计数），但用 `allowsHitTesting(false)` 去掉点击 ——
-/// **不是**用 `.disabled`：那会把它们变灰，看起来像"暂时不可用"，
-/// 而这一屏本来就只呈现"有多少人在订阅 / 有多少个 Fork"这两个数。
-/// 读屏用 hint 说明原因（否则用户只会听到一个点不动的按钮）。
+/// | | 用的件 | 为什么 |
+/// |---|---|---|
+/// | Watch / Fork | `StatInfo`（裸信息） | 它们**永远**点不动（PRD §4.13 原文只写"展示订阅计数"），画成按钮就是承诺一件不会发生的事 |
+/// | Star · **能写** | `StatButton` | 它本来点得动 —— 形状在这里是**兑现**，不是承诺 |
+/// | Star · **确定写不了** | `StatInfo`（裸信息） | 同第一条：一颗点不动的灰按钮，形状在撒谎 |
 ///
-/// ## Star 按钮的文案与图标由谁给
+/// （Fork 另有一条理由：它是**会改变账号状态的写操作**，PRD 仍标 ⏳「待细化」，
+/// 在落地方式定下来之前不做半截。）
 ///
-/// 文案走 `StarCopy.buttonTitle`（领域层，千分位全量 `2,341` —— 与卡片上的 `2.3k` 有意不同），
-/// 图标由这里显式给出 `star` / `star.fill`
-/// （⚠️ SF Symbols 里**不是每个符号都有 `.fill` 变体**，靠追加推导会静默拿到不存在的名字）。
+/// ⚠️ **本页是这条改动受益最明显的一屏**：这里出现的几乎都是别人的仓库
+/// （见下"Star 的第二档"），从前是**三颗按钮、三颗按不动** ——
+/// 现在那一排在常态下**一颗按钮都没有**，整行读起来真的只是一句统计。
 ///
-/// ## 🔴 Star 按钮的**第二档**：确定写不了 ⇒ 置灰 + 一行说明（决策 #80）
+/// ⚠️ 三颗该画成什么形状，判据**全部收在 `StatStar` / `StatInfo`**，本件不自己判 ——
+/// 这里只负责把 `canStar` / `isStarred` 传下去（文案仍取自领域层 `StarCopy` / `RepoCopy`）。
+///
+/// ## 🔴 Star 的**第二档**：确定写不了 ⇒ 那颗星**不再是按钮**（决策 #80 + 走查第 67 条）
 ///
 /// 2026-10-09 起（走查 #3 定案，`TECH_SPEC §3.5.5`）：GitHub App 的用户令牌**只能 Star
 /// 安装范围内（在册账号名下）的仓库**，别人的仓库一律 403。
@@ -34,17 +38,21 @@ import GitDuoKit
 /// （趋势榜 / 搜索点进来的 / 别人的 Star），也就是**几乎每一条都写不了**。
 /// 这不是异常分支，它就是这一页的常态。
 ///
-/// 形态与 §4.4 的 `RepoDetailHero` 一致（`.disabled(true)` + 下方一行 `StarCopy.unavailableHint`），
-/// 唯一的差别是**这一张卡下面有页脚**：
+/// ⇒ 2026-10-15 起那一档改用 `StatInfo`（裸信息），**不再是灰按钮**。
+/// 理由与 §4.4 的 `RepoDetailHero` 是同一份（**形状即信号** + `.disabled` 会把
+/// "已 Star"那几个字一起压暗）。
 ///
-/// ```
-/// statRow
-/// unavailableHint   ← 新增的这一行排在这里
-/// footer            ← 「他人仓库 · 只读浏览，Fork 后可编辑与提交」，PRD §4.13 逐字，一个字都不能动
-/// ```
+/// ## ⚠️ 本页**不再有**「不能 Star」的说明行与页脚（2026-10-15，走查第 68 条）
 ///
-/// ⚠️ 所以是**加一行**、不是改页脚那一句 —— 它与页脚的语义不冲突（页脚说"能做什么"，
-/// 这一行说"这一次为什么不能"）。
+/// 从前这一行是三段：`statRow` / 说明行（「GitDuo 未被授权访问该仓库，暂不能 Star」）/
+/// 页脚（「他人仓库 · 只读浏览，Fork 后可编辑与提交」，PRD §4.13 原文）。
+/// 用户同日用截图圈掉这两行灰字，裁定**都去掉**：
+///
+/// - **说明行**：它的解释对象（那颗灰按钮）第 67 条已经拆掉了 —— 屏上没有 Star 动作，
+///   「暂不能 Star」就没的可解释（同第 66 条删 Watch / Fork hint 的先例）。
+///   "为什么不能"这件事只保留在**读屏 hint**里（视觉上不再占一行）。
+/// - **页脚**：用户裁定一并去掉 ⇒ **PRD §4.13 那句一并撤了**（PRD 侧已加补记）。
+///   "这是别人的仓库、只读"这件事由页面本身的形态表达，不再用一行字重复。
 struct RepoHeroCard: View {
 
     let detail: RepositoryDetail
@@ -75,9 +83,6 @@ struct RepoHeroCard: View {
             topics
             statRow
                 .padding(.top, Theme.Spacing.m)
-            unavailableHint
-            footer
-                .padding(.top, Theme.Spacing.s)
         }
         .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,108 +143,68 @@ struct RepoHeroCard: View {
         }
     }
 
-    /// 三颗统计按钮。
+    /// 三颗统计 —— **一颗按钮（Star）+ 两条信息**（Watch / Fork）。
     ///
     /// ⚠️ 用 `FlowLayout`（**不是** `HStack`）：三颗的宽度随内容（2026-10-11 由
     /// "竖排 · 三等分整宽"改，见 `StatButton`），长数字或 Dynamic Type 放大时
     /// 应当**折行**；`HStack` 放不下只会把它们压扁，把那串数字截掉。
     private var statRow: some View {
         FlowLayout(spacing: Theme.Spacing.s) {
-            starButton
-            watchButton
-            forkButton
+            starStat
+            watchInfo
+            forkInfo
         }
     }
 
-    private var starButton: some View {
+    private var starStat: some View {
         // 基准未确认时按"未 Star"显示（`StarState` 的降级），计数用详情里的那个数。
         let isStarred = star?.isStarred ?? false
         let count = star?.starCount ?? detail.starCount
 
-        return StatButton(
-            systemImage: "star",
-            activeSystemImage: "star.fill",
-            title: StarCopy.buttonTitle(isStarred: isStarred, starCount: count),
-            isActive: isStarred,
-            activeTint: Theme.Palette.starActive,
+        return StatStar(
+            title: StarCopy.statTitle(isStarred: isStarred, starCount: count),
+            isStarred: isStarred,
+            // ⚠️ 决定"这颗星是按钮还是一条信息"的就是这一个参数（走查第 67 条）。
+            canStar: canStar,
+            isToggling: isTogglingStar,
             action: onToggleStar
         )
-        // ⚠️ §8.5「操作类」：在途时**禁用**（防重复提交）并给内联 loading。
-        //    与下面那一档共用同一个修饰符 —— 两者都表现为"灰"，但原因完全不同：
-        //    在途是**等一会儿就好**，不可写是**换个人来点也不行**。
-        .disabled(isTogglingStar || !canStar)
-        .overlay {
-            if isTogglingStar {
-                ProgressView().controlSize(.small)
-            }
-        }
-        .accessibilityLabel(StarCopy.accessibilityLabel(isStarred: isStarred, starCount: count))
-        // ⚠️ 灰掉那一档把**原因**交给读屏（否则只听到一个"变暗的按钮"，
-        //    而下面那行说明是另一个元素、要再滑一下才听到）。
+        .accessibilityLabel(
+            // ⚠️ `isControl` 传的是**这一档到底是不是控件** —— 写不了那一档若还念
+            //    "点按取消"，读屏用户会去双击一个不是按钮的东西（见 `StarCopy`）。
+            StarCopy.accessibilityLabel(isStarred: isStarred, starCount: count, isControl: canStar)
+        )
+        // ⚠️ 写不了那一档把**原因**交给读屏 —— 屏上已经没有那一行说明
+        //    （2026-10-15 走查第 68 条删掉），读屏 hint 成了这件事**唯一**的承载：
+        //    否则用户只听到一句不带动作的 "Starred，N 个 Star"，无从知道为什么没有 Star 动作。
+        //    能写那一档不给 hint（空串 = 没有提示），否则每次念按钮都要多一句无用的。
         .accessibilityHint(canStar ? "" : StarCopy.unavailableHint)
     }
 
-    /// 「写不了」时按钮下方那一行（决策 #80）。
-    ///
-    /// ⚠️ 它**排在 `statRow` 与 `footer` 之间** —— 页脚那句是 PRD §4.13 逐字给的原型文案，
-    /// 一个字都不能动，所以这里只**加一行**。
-    ///
-    /// ⚠️ 文案就是 `StarCopy.unavailableHint`（与失败提示同一句，有意如此 ——
-    /// 用户在两处读到同一个原因，才会接受"这不是偶发故障"）。
-    @ViewBuilder
-    private var unavailableHint: some View {
-        if !canStar {
-            Text(StarCopy.unavailableHint)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Palette.textTertiary)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, Theme.Spacing.s)
-        }
-    }
-
-    /// Watch —— **纯展示**。计数读 `subscribers_count`（`detail.watcherCount`），
-    /// ⚠️ 不是 `watchers_count`（那是 Star 数的历史别名，读错会让两个按钮显示同一个数）。
-    private var watchButton: some View {
-        StatButton(
+    /// Watch —— **一条信息，不是按钮**。计数读 `subscribers_count`（`detail.watcherCount`），
+    /// ⚠️ 不是 `watchers_count`（那是 Star 数的历史别名，读错会让两个数显示成同一个）。
+    private var watchInfo: some View {
+        StatInfo(
             systemImage: "eye",
-            title: RepoCopy.watchLabel(count: detail.watcherCount),
-            action: {}
+            title: RepoCopy.watchLabel(count: detail.watcherCount)
         )
-        .allowsHitTesting(false)
-        .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(RepoCopy.watchUnavailableHint)
     }
 
-    /// Fork —— **纯展示**（见类型说明）。
-    private var forkButton: some View {
-        StatButton(
+    /// Fork —— **一条信息，不是按钮**（见类型说明）。
+    private var forkInfo: some View {
+        StatInfo(
             // ⚠️ 走 `ForkIcon()` 而不是 SF Symbol：SF Symbols 里没有「实线 fork」这个字形，
             // 用户报回相差太多，所以设计包里自绘了 `ForkIcon`，与 `RepoDetailHero` 统一用。
             icon: ForkIcon().frame(width: 12, height: 12),
-            title: RepoCopy.forkLabel(count: detail.forkCount),
-            action: {}
+            title: RepoCopy.forkLabel(count: detail.forkCount)
         )
-        .allowsHitTesting(false)
-        .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(RepoCopy.forkUnavailableHint)
     }
 
-    private var footer: some View {
-        Text(Self.footerText)
-            .font(Theme.Font.caption)
-            .foregroundStyle(Theme.Palette.textTertiary)
-            .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - 文案（PRD §4.13 原文）
-
-    static let footerText = "他人仓库 · 只读浏览，Fork 后可编辑与提交"
-
-    // ⚠️ Watch / Fork 的按钮标题与读屏提示**已收拢到领域层** `RepoCopy`
-    //    （`watchLabel(count:)` / `forkLabel(count:)` / `watchUnavailableHint` / `forkUnavailableHint`）：
-    //    §4.4 的头部是同一个控件、同一个数、同一句话，两处各写一份迟早分叉
+    // ⚠️ Watch / Fork 的文案**已收拢到领域层** `RepoCopy`
+    //    （`watchLabel(count:)` / `forkLabel(count:)`）：
+    //    §4.4 的头部是同一个数、同一句话，两处各写一份迟早分叉
     //    —— 分叉的症状是同一个仓库在两页上显示成两个数，而两页单看都对。
+    //    （两句 `...UnavailableHint` 2026-10-15 已随"改成裸信息"一起删掉，见类型说明。）
 }
 
 #Preview {
@@ -262,8 +227,11 @@ struct RepoHeroCard: View {
                 star: StarState(
                     fullName: "kuda/ui-craft", isStarred: true, starCount: 11_241, baselineConfirmed: true
                 ),
-                // ⚠️ 置灰那一档**才是本页的常态**（这里装的都是别人的仓库）——
+                // ⚠️ **写不了那一档才是本页的常态**（这里装的都是别人的仓库）——
                 //    所以拿它当第一张预览图，而不是拿"能点"的那一档。
+                //    ⚠️ 2026-10-15 起它不再画成灰按钮，而是一条**裸信息**：
+                //    实心金星 + `Starred · 11,241` —— **不靠形状报状态**，
+                //    所以"已 Star"这件事终于读得出来了（从前被 `.disabled` 一起压暗）。
                 canStar: false,
                 isTogglingStar: false,
                 onToggleStar: {}
@@ -283,7 +251,7 @@ struct RepoHeroCard: View {
                 ),
                 now: Date(),
                 star: nil,
-                // 对照组：可写 ⇒ 按钮正常、**且没有那一行说明**（走查单 #152 的判据）。
+                // 对照组：可写 ⇒ 按钮正常（走查单 #152 的判据）。
                 canStar: true,
                 isTogglingStar: true,
                 onToggleStar: {}
