@@ -46,13 +46,11 @@ struct StarRow: View {
     /// 点「全名 / 副标题」那一块 → 去这个仓库。
     let onOpen: () -> Void
 
-    /// 顶上一条内嵌 hairline（方案 D 的 `.card+.card{border-top:…}`）——
-    /// 列表里**第一行传 `false`**。与 `MenuRow.showsSeparator` 同一条处置。
-    var showsTopSeparator: Bool = false
 
     var body: some View {
-        // 方案 D（2026-10-15，走查第 73 条）：`.card` 去形 ⇒ `CardBox` 默认（13/2，无底无边框）。
-        CardBox(showsTopSeparator: showsTopSeparator) {
+        // 方案 A（2026-10-15，走查第 76 条）：条目是一张**白卡** ⇒ `CardBox` 默认
+        //（padding 14 / 圆角 18 / 无边框）；卡与卡之间由列表给 10 的间距，不画线。
+        CardBox {
             HStack(spacing: 10) {
                 // 原型 `.row{gap:10px}`（10 不在 4pt 阶里 ⇒ 写原值，同 `SheetRow`）。
                 // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的

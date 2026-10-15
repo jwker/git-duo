@@ -51,26 +51,32 @@ struct SearchIdleSection: View {
         if history.isEmpty {
             EmptyBox(title: SearchCopy.emptyHistory)
         } else {
-            ForEach(Array(history.enumerated()), id: \.element) { index, term in
-                // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
-                SearchRowBox(showsSeparator: index > 0) {
-                    onUse(term)
-                } content: {
-                    Image(systemName: "clock")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Theme.Palette.textTertiary)
-                        .frame(width: 20)
-                        .accessibilityHidden(true)
+            // 方案 A：历史行装进**一张白卡**（与搜索结果、首页两组同构）。
+            CardBox(vertical: 0, horizontal: 0) {
+                ForEach(Array(history.enumerated()), id: \.element) { index, term in
+                    // 分隔线是顶上那条内嵌 hairline —— 首行不画。
+                    // ⚠️ 缩进 45：这一行是 **16pt 线稿图标**（不是头像），
+                    //    从文字起点算 = 卡内边距 14 + 图标槽 20 + gap 11（原型给 41，
+                    //    它的图标是 16 不带槽 ⇒ 14+16+11）。
+                    SearchRowBox(showsSeparator: index > 0, separatorInset: 45) {
+                        onUse(term)
+                    } content: {
+                        Image(systemName: "clock")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                            .frame(width: 20)
+                            .accessibilityHidden(true)
 
-                    // 原型 `.t1` 在这里被覆写成 `font-size:14px;font-weight:500`
-                    // ⇒ 取本仓最近的一档（`rowTitle` = `.subheadline`）再压一档字重。
-                    Text(term)
-                        .font(Theme.Font.rowTitle.weight(.medium))
-                        .foregroundStyle(Theme.Palette.textPrimary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // 原型 `.t1` 在这里被覆写成 `font-size:14px;font-weight:500`
+                        // ⇒ 取本仓最近的一档（`rowTitle` = `.subheadline`）再压一档字重。
+                        Text(term)
+                            .font(Theme.Font.rowTitle.weight(.medium))
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                    RowChevron()
+                        RowChevron()
+                    }
                 }
             }
         }

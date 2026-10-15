@@ -6,11 +6,13 @@
   .linkbtn{border:none;background:none;color:var(--link);font-size:12.5px;font-weight:650;font-family:inherit;cursor:pointer;padding:4px 2px}
   /* 2026-10-15 走查第 75 条：置顶从「2 列灰块网格」改为「单列平铺行」—— 与 .recent-row 同款。
      页面转白之后它是**唯一**一组还带灰底的块，且和同一页的最近访问长得不像一家人。 */
-  .pin-grid{display:block}
-  .pin-card{position:relative;display:flex;align-items:center;gap:11px;padding:12px 2px;cursor:pointer;transition:transform .1s}
+  /* 方案 A：置顶 / 最近访问各自是一张**白卡**，行坐在卡内（行间内嵌 hairline） */
+  .list-card{background:var(--card);border:none;border-radius:18px;overflow:hidden}
+  .pin-grid{display:block;background:var(--card);border:none;border-radius:18px;overflow:hidden}
+  .pin-card{position:relative;display:flex;align-items:center;gap:11px;padding:14px;cursor:pointer;transition:transform .1s}
   .pin-card:active{transform:scale(.985)}
   /* 内嵌 hairline：头像 30 + gap 11 + 缩进 2 = 43（同 .recent-row）；首行不画 */
-  .pin-card+.pin-card::before{content:"";position:absolute;top:0;left:43px;right:0;height:1px;background:var(--border-soft)}
+  .pin-card+.pin-card::before{content:"";position:absolute;top:0;left:55px;right:0;height:1px;background:var(--border-soft)}
   .pin-card .repo-avatar{width:30px;height:30px;border-radius:8px}
   .pin-card .pn{display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:700;min-width:0}
   .pin-card .pname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -19,37 +21,38 @@
   .pin-card .pd{font-size:11.5px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pin-card .pm{font-size:11px;color:var(--text3);white-space:nowrap;display:flex;align-items:center;gap:4px}
   .pin-card .pm svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
-  .recent-row{display:flex;align-items:center;gap:11px;padding:12px 2px;cursor:pointer;position:relative}
+  .recent-row{display:flex;align-items:center;gap:11px;padding:14px;cursor:pointer;position:relative}
   /* 方案 D：行间 hairline 从文字起点起（内嵌缩进），不再通栏 —— 图标 30 + gap 11 + 缩进 2 = 43 */
-  .recent-row+.recent-row::before{content:"";position:absolute;top:0;left:43px;right:0;height:1px;background:var(--border-soft)}
+  .recent-row+.recent-row::before{content:"";position:absolute;top:0;left:55px;right:0;height:1px;background:var(--border-soft)}
   .recent-row .repo-avatar{width:30px;height:30px;border-radius:8px}
   .recent-row .repo-avatar svg{width:16px;height:16px}
   .empty-box{border:1px dashed var(--border);border-radius:12px;padding:20px 14px;text-align:center;font-size:12.5px;color:var(--text3);line-height:1.7}
   .page-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .page-topbar .largetitle{padding:6px 2px 12px;margin:0}
-  .iconbtn{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:none;background:var(--chip);color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:inherit;padding:0;transition:transform .1s}
+  .iconbtn{width:38px;height:38px;flex-shrink:0;border-radius:12px;border:none;background:var(--card);color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:inherit;padding:0;transition:transform .1s}
   .iconbtn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
   .iconbtn:active{transform:scale(.93)}
 
   /* ============ Search screen ============ */
-  .searchfield{display:flex;align-items:center;gap:8px;background:var(--chip);border:none;border-radius:11px;padding:8px 10px;margin-bottom:10px}
+  .searchfield{display:flex;align-items:center;gap:8px;background:var(--card);border:none;border-radius:12px;padding:9px 12px;margin-bottom:10px}
   .searchfield>svg{width:16px;height:16px;stroke:var(--text3);fill:none;stroke-width:2;flex-shrink:0}
   .searchfield input{flex:1;min-width:0;border:none;outline:none;background:none;font-size:14.5px;font-family:inherit;color:var(--text)}
   .search-clr{width:19px;height:19px;flex-shrink:0;border-radius:50%;border:none;background:var(--border);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;font-family:inherit}
   .search-clr svg{width:11px;height:11px;stroke:#fff;fill:none;stroke-width:3}
-  .sr-item{display:flex;align-items:center;gap:11px;padding:12px 2px;cursor:pointer;position:relative}
+  .sr-item{display:flex;align-items:center;gap:11px;padding:14px;cursor:pointer;position:relative}
   /* 内嵌 hairline：头像 32 + gap 11 + 缩进 2 = 45（同 .recent-row） */
-  .sr-item+.sr-item::before{content:"";position:absolute;top:0;left:45px;right:0;height:1px;background:var(--border-soft)}
+  .sr-item+.sr-item::before{content:"";position:absolute;top:0;left:var(--inset,57px);right:0;height:1px;background:var(--border-soft)}
   .sr-item>svg{width:16px;height:16px;stroke:var(--text3);fill:none;stroke-width:2;flex-shrink:0}
   .sr-item .repo-avatar{width:32px;height:32px;border-radius:8px}
   .sr-item .state-row{margin-right:1px}
   .sr-code{font-family:"SF Mono",Menlo,monospace;font-size:11.5px;color:var(--text2);background:var(--code-bg);border-radius:6px;padding:5px 8px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* ============ Common components ============ */
-  /* ⚠️ 2026-10-15（走查第 73 条 · 方案 D）：卡片容器去形 —— 不再画白底+边框+圆角，
-     条目直接坐在白底页面上，行与行之间用 hairline 分隔（相邻兄弟选择器，容器卡不受影响）。 */
-  .card{background:none;border:none;border-radius:0;padding:13px 2px;margin:0;cursor:pointer;transition:transform .1s}
-  .card+.card{border-top:1px solid var(--border-soft)}
+  /* ⚠️ 2026-10-15（走查第 76 条 · 方案 A）：卡片容器**恢复形状** —— 白面 + 大圆角 18 +
+     大内边距 14，**不画边框**（靠「页面浅灰 vs 卡面白」的明度差区分，不靠描边）；
+     卡与卡之间用 10px 间距，不再 hairline（hairline 只留在**卡内**行之间）。 */
+  .card{background:var(--card);border:none;border-radius:18px;padding:14px;margin:0;cursor:pointer;transition:transform .1s}
+  .card+.card{margin-top:10px}
   .card:active{transform:scale(.985)}
   .row{display:flex;align-items:center;gap:10px}
   .grow{flex:1;min-width:0}
@@ -69,7 +72,7 @@
   .lbl-dot{width:12px;height:12px;border-radius:4px;display:inline-block;flex:none}
   .clr-swatch{width:30px;height:30px;border-radius:9px;cursor:pointer;border:2px solid transparent}
   .clr-swatch.on{border-color:var(--text);box-shadow:inset 0 0 0 2px #fff}
-  .fchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:6px 12px;border:1px solid transparent;border-radius:20px;background:var(--chip);color:var(--text);cursor:pointer}
+  .fchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:7px 13px;border:1px solid transparent;border-radius:20px;background:var(--card);color:var(--text);cursor:pointer}
   .fchip.on{border-color:var(--link);color:var(--link);background:#f0f6ff}
   .fchip svg{width:12px;height:12px;stroke:currentColor}
   .fnote{display:none;margin:16px 2px 6px;border:1px dashed var(--link);border-radius:10px;padding:10px 12px;font-size:12px;line-height:2;color:var(--text2);background:#f6f9ff}

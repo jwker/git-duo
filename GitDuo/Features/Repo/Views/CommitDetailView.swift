@@ -249,7 +249,12 @@ struct CommitDetailView: View {
                 }
                 .padding(Theme.Spacing.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // 方案 D：diff 卡去形（与 `DiffCard` 一致），不画底与边框。
+                // 方案 A：diff 卡是**白卡**（与 `DiffCard` 一致：圆角 18、无边框）。
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                        .fill(Theme.Palette.surface)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous))
             }
         }
         .accessibilityHidden(true)

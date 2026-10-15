@@ -23,10 +23,14 @@ struct PinRowsSkeleton: View {
     var rows: Int = 4
 
     var body: some View {
-        // 与 `PinRow` 同一条：hairline 画在**顶上**，首行不画。
-        VStack(spacing: 0) {
-            ForEach(0..<rows, id: \.self) { index in
-                row(showsTopSeparator: index > 0)
+        // 方案 A：与真实态同构 —— 一组行 = 一张白卡（`HomeView` 那两处也是这么包的），
+        // 否则数据到达时会"卡突然出现"跳一下。
+        CardBox(vertical: 0, horizontal: 0) {
+            // 与 `PinRow` 同一条：hairline 画在**顶上**，首行不画。
+            VStack(spacing: 0) {
+                ForEach(0..<rows, id: \.self) { index in
+                    row(showsTopSeparator: index > 0)
+                }
             }
         }
     }
@@ -50,15 +54,16 @@ struct PinRowsSkeleton: View {
 
             SkeletonBar(height: 12, width: 36)
         }
-        .padding(.vertical, Theme.Spacing.m)
-        .padding(.horizontal, Theme.Spacing.xxs)
+        // 方案 A（2026-10-15，走查第 76 条）：行回到**卡内** ⇒ 左右留白由行自己给 14
+        //（原型 `.recent-row{padding:14px}` / `.pin-card{padding:14px}`）。
+        .padding(14)
         .overlay(alignment: .topLeading) {
             if showsTopSeparator {
                 Rectangle()
                     .fill(Theme.Palette.borderSoft)
                     .frame(height: 1)
-                    // 与 `PinRow` 同一条内嵌缩进（2 + 30 + 12 = 44）。
-                    .padding(.leading, Theme.Spacing.xxs + RepoAvatar.row.diameter + Theme.Spacing.m)
+                    // 与 `PinRow` 同一条内嵌缩进（14 + 30 + 12 = 56）。
+                    .padding(.leading, 14 + RepoAvatar.row.diameter + Theme.Spacing.m)
             }
         }
     }

@@ -82,7 +82,7 @@ function searchBody(){
   if(!q) return searchIdleHTML();
   const rows = searchRows(q), label = SEARCH_SCOPES.find(s=>s[0]===searchState.scope)[1];
   if(!rows.length) return `<div class="empty-box">没有匹配「${esc(q)}」的${label}<br>换个关键词，或切换上方范围试试</div>`;
-  return `<div class="section-label" style="margin-top:2px">${label} · ${rows.length} 个结果</div>${rows.join('')}`;
+  return `<div class="section-label" style="margin-top:2px">${label} · ${rows.length} 个结果</div><div class="list-card">${rows.join('')}</div>`;
 }
 function searchIdleHTML(){
   const hist = SEARCH_HISTORY.length ? `
@@ -90,10 +90,10 @@ function searchIdleHTML(){
       <div class="section-label">最近搜索</div>
       <button class="linkbtn" onclick="clearSearchHistory()">清除</button>
     </div>
-    ${SEARCH_HISTORY.map((h,i)=>`
-      <div class="sr-item" onclick="useHistory(${i})">
+    <div class="list-card">${SEARCH_HISTORY.map((h,i)=>`
+      <div class="sr-item" style="--inset:41px" onclick="useHistory(${i})">
         ${svg(I.clock)}<span class="grow t1" style="font-size:14px;font-weight:500">${esc(h)}</span>${svg(I.chev)}
-      </div>`).join('')}` : `
+      </div>`).join('')}</div>` : `
     <div class="home-head" style="margin-top:2px"><div class="section-label">最近搜索</div></div>
     <div class="empty-box">还没有搜索记录</div>`;
   return `${hist}
@@ -229,7 +229,7 @@ function recentRow(v){
 }
 function recentList(){
   if(!RECENT.length) return `<div class="empty-box">暂无访问记录<br>打开任意仓库后会自动出现在这里</div>`;
-  return RECENT.map(recentRow).join('');
+  return `<div class="list-card">${RECENT.map(recentRow).join('')}</div>`;
 }
 function openClearRecent(){
   openSheet(`

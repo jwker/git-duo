@@ -153,16 +153,14 @@ struct RepoIssuesSection: View {
         let items = list.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: 0) {
+        return VStack(spacing: 10) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
                 Button {
                     onOpen(row.number)
                 } label: {
                     // ⚠️ `showsLabels: true` —— 这是本分区与 §4.14 在卡片上的**唯一**差别
                     //    （决策 #61 用参数表达，不复制组件）。
-                    //    方案 D：行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
-                    IssueCard(row: row, now: now, showsLabels: true,
-                              showsTopSeparator: index > 0)
+                    IssueCard(row: row, now: now, showsLabels: true)
                 }
                 .buttonStyle(.plain)
                 .onAppear {

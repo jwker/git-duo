@@ -503,10 +503,10 @@ struct PullDetailView: View {
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // 方案 D：气泡是浅灰面（与 `CommentBubble` 一致），无边框。
+        // 方案 A：气泡是**白卡**（与 `CommentBubble` 一致：圆角 18、无边框）。
         .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous)
-                .fill(Theme.Palette.surfaceSunken)
+            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                .fill(Theme.Palette.surface)
         )
     }
 
@@ -523,7 +523,12 @@ struct PullDetailView: View {
             .padding(.horizontal, Theme.Spacing.m)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // 方案 D：diff 卡去形（与 `DiffCard` 一致），不画底与边框。
+        // 方案 A：diff 卡是**白卡**（与 `DiffCard` 一致：圆角 18、无边框）。
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                .fill(Theme.Palette.surface)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous))
     }
 }
 

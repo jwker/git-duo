@@ -97,7 +97,7 @@ struct ExplorePRListView: View {
         let items = model.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: 0) {
+        return VStack(spacing: 10) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
                 Button {
                     // ⚠️ `readOnly: true` **显式传**（铁律 #7）：本页只可能来自探索入口，
@@ -107,7 +107,7 @@ struct ExplorePRListView: View {
                     )
                 } label: {
                     // 方案 D：行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
-                    PullCard(row: row, showsTopSeparator: index > 0)
+                    PullCard(row: row)
                 }
                 .buttonStyle(.plain)
                 .onAppear {

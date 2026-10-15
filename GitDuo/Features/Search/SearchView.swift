@@ -171,14 +171,18 @@ struct SearchView: View {
                     .padding(.bottom, Theme.Spacing.s)
             }
 
-            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                SearchRowView(
-                    row: row,
-                    now: model.loadedAt,
-                    // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
-                    showsSeparator: index > 0
-                ) {
-                    open(row)
+            // 方案 A（2026-10-15，走查第 76 条）：结果行装进**一张白卡**
+            //（原型 `searchBody()` 外面那层 `.list-card`），行间仍是顶上内嵌 hairline。
+            CardBox(vertical: 0, horizontal: 0) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    SearchRowView(
+                        row: row,
+                        now: model.loadedAt,
+                        // 分隔线是顶上那条内嵌 hairline —— 首行不画。
+                        showsSeparator: index > 0
+                    ) {
+                        open(row)
+                    }
                 }
             }
 

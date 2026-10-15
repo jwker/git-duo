@@ -228,7 +228,11 @@ struct ProfileView: View {
                 systemImage: GitHubIcon.star,
                 iconTone: .gold,
                 title: ProfileCopy.menuStars,
-                accessory: .chevron
+                accessory: .chevron,
+                // ⚠️ 分隔线画在**顶上**（原型 `.menu-item+.menu-item`）⇒ 要关掉的是
+                //    **第一行**，不是最后一行（2026-10-15 走查第 77 条修的正是这里：
+                //    照"最后一行关"写 ⇒ 首行顶上多一条、末行上面反而缺一条）。
+                showsSeparator: false
             ) {
                 env.router.push(.stars)
             }
@@ -242,13 +246,12 @@ struct ProfileView: View {
             ) {
                 env.router.push(.myConversations(kind: .pullRequest))
             }
+            // 末行**照旧画线** —— 它顶上坐着「我的 Pull Request」那一行。
             MenuRow(
                 systemImage: StateIcon.issueOpen,
                 iconTone: .green,
                 title: ProfileCopy.menuIssues,
-                accessory: .chevron,
-                // 最后一行不画分隔线（原型 `.menu-item+.menu-item`）。
-                showsSeparator: false
+                accessory: .chevron
             ) {
                 env.router.push(.myConversations(kind: .issue))
             }

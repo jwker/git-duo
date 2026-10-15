@@ -59,18 +59,16 @@ public struct CodeSpan: Sendable, Hashable {
 /// .markdown pre code{background:none;padding:0;font-size:12px;line-height:1.55}
 /// ```
 ///
-/// ## ⚠️ 底色由调用方给，不能写死（2026-10-15 走查第 75 条）
+/// ## ⚠️ 底色为什么是参数（2026-10-15 走查第 75 条的教训）
 ///
-/// 同一段代码块会坐在**两种不同的底**上，而它们要的形状信号是**相反**的：
-///
-/// | 坐在哪 | 底 | 代码块该垫 |
-/// |---|---|---|
-/// | 页面 / 弹层（正文档、文件页源码、弹层里的源码） | `background`（浅白 / 深 `0x0D1117`） | **面板色** `surfaceSunken`（浅 `0xEFF2F5` / 深 `0x161B22`） |
-/// | 评论气泡（`.compact`） | `surfaceSunken` | `markdownPreSurface`（浅白 / 深 `0x0D1117` —— 比气泡亮 / 暗一档） |
-///
-/// ⚠️ 方案 D 那一批把它写死成"白块"（那时它只出现在灰面板里）⇒ **文件页的源码块与
+/// 方案 D 那一批把它写死成"白块"（那时它只出现在灰面板里）⇒ **文件页的源码块与
 /// 提交弹层的代码块坐在页面 / 弹层底上，白块等于没有形状**（浅色白贴白、深色与页面同色）。
-/// 那两处不在面板里，是同一批"未目视"漏掉的 ⇒ 本条一并修回。
+/// 教训：**改一处令牌前先数清这一族落在几种底上**（页面 / 面板 / 弹层 / 气泡）——
+/// 同一色在两种底上要的形状信号可能方向相反。
+///
+/// 方案 A（第 76 条）下三种底**归一了**：README / 文件页 / 评论气泡都是**白卡**
+/// ⇒ 代码块一律垫 `surfaceSunken`（卡内凹面）。`fill` 保留为参数，
+/// 是为了将来再出现新底时不至于又写死一次。
 ///
 /// ## ⚠️ 横向滚动是**要点**，不是顺手加的
 ///
@@ -97,10 +95,10 @@ public struct CodeSurface: View {
     /// 每一行由若干 `CodeSpan` 组成（顺序即绘制顺序）。
     public let lines: [[CodeSpan]]
 
-    /// 代码块的**底色**。默认 `surfaceSunken`（"面板"那一档 —— 坐在页面 / 弹层底上时成立）。
+    /// 代码块的**底色**。默认 `surfaceSunken`（卡内凹面那一档）。
     ///
-    /// ⚠️ 为什么它是参数而不是写死：见类型说明那张表 —— 评论气泡里那段要的是
-    /// `markdownPreSurface`（白，垫在灰气泡上），方向正好相反。
+    /// ⚠️ 为什么它是参数而不是写死：见类型说明（第 75 条踩过一次"写死"的坑）。
+    /// 方案 A 下三种底都是白卡 ⇒ 目前只有一个值。
     public let fill: Color
 
     public init(lines: [[CodeSpan]], fill: Color = Theme.Palette.surfaceSunken) {
@@ -136,8 +134,8 @@ public struct CodeSurface: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            // 走查第 75 条（2026-10-15）起：`fill` 由调用方给 —— 坐在页面 / 弹层底上垫
-            // **面板色**（`surfaceSunken`），坐在评论气泡里才垫 `markdownPreSurface`。
+            // 走查第 75 条（2026-10-15）起由调用方给；方案 A（第 76 条）下三种底归一，
+            // 一律垫**卡内凹面**（`surfaceSunken`）。
             // 边框去掉（原型 `.markdown pre{border:none}`）：形状由底色表达，不画第二层。
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                 .fill(fill)

@@ -96,13 +96,11 @@ public struct CommentComposer: View {
         // "容器内边距 > 按钮纵向内边距(9)" 这个比例 —— 取 8 会让按钮比容器边距还厚。
         .padding(Theme.Spacing.m)
         .background(
-            // 原型 `border-radius:13px` 在圆角阶里**没有对应档**（12 与 14 各差 1）。
-            // 取 `container`(12)：它就在对话区（与 `Radius.bubble`(12) 同值），
-            // 差 1pt 属有意偏差第 12 条那一类。
-            // 方案 D（2026-10-15，走查第 73 条）：白卡 → 浅灰面，边框去掉
-            //（原型 `.composer{background:var(--chip);border:none}`）。
-            RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                .fill(Theme.Palette.surfaceSunken)
+            // 方案 A（2026-10-15，走查第 76 条）：输入区是**白卡**，边框去掉，圆角 18
+            //（原型 `.composer{background:var(--card);border:none;border-radius:18px}`）
+            // —— 与评论气泡同一档。方案 D 时它是浅灰面 + 圆角 12（`container`）。
+            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                .fill(Theme.Palette.surface)
         )
     }
 }

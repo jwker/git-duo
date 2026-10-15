@@ -307,14 +307,10 @@ struct FileView: View {
         .padding(.vertical, Theme.Spacing.s)
         .padding(.horizontal, Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // 方案 D：面包屑类条转浅灰面（同 `BreadcrumbBar`），无边框。
+        // 方案 A：面包屑类条是**白块**（同 `BreadcrumbBar`：原型 `--card`、圆角 12、无边框）。
         .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(Theme.Palette.surfaceSunken)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.Palette.surface)
         )
     }
 

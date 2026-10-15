@@ -24,26 +24,26 @@ public enum Theme {
     public enum Palette {
         // 深色列统一取自 Primer primitives v8.2.0 dark（出处标在各令牌下；见 Color.init(light:dark:) 的说明）。
 
-        /// 页面底。⚠️ **2026-10-15 起浅色转纯白**（走查第 73 条 · 方案 D「分组平铺」，
-        /// 原型 `01-base.css` 的 `--bg:#ffffff`）：层次不再靠「灰底 vs 白卡」的明度差，
-        /// 而靠排版与 hairline —— 卡片容器随之全部去形（见 `CardBox`）。
-        /// 深色档不动（原型未改深色；`#0d1117` 压 `#161b22` 面板的明度差本来就成立）。
-        public static let background      = Color(light: 0xFFFFFF, dark: 0x0D1117)  // 深 = bgColor-default
+        /// 页面底。⚠️ **2026-10-15 起浅色转浅灰**（走查第 76 条 · 方案 A「无框大卡」，
+        /// 原型 `01-base.css` 的 `--bg:#f6f8fa`）：层次回到「灰底 vs 白卡」的明度差，
+        /// 但**卡片不画边框** —— 与方案 D（页面纯白 + 条目去形）是两套相反的容器语言。
+        /// 三级层次：页面(灰) → 卡面 `surface`(白) → 卡内控件 `surfaceSunken`(灰)。
+        /// 深色档不动（`#0d1117` 压 `#161b22` 卡面的明度差本来就成立）。
+        public static let background      = Color(light: 0xF6F8FA, dark: 0x0D1117)  // 深 = bgColor-default
         public static let surface         = Color(light: 0xFFFFFF, dark: 0x161B22)  // 深 = bgColor-muted
         public static let surfaceRaised   = Color(light: 0xFFFFFF, dark: 0x161B22)  // 深 = bgColor-muted（同 surface）
-        /// **方案 D 的「内容面板 / 控件底」** —— 原型 `:root` 的 `--chip:#eff2f5`。
+        /// **方案 A 的「卡内控件底」** —— 原型 `:root` 的 `--chip:#eff2f5`。
         ///
-        /// 方案 D 把「白卡 + 边框」拆成了两路：**列表条目去形**（直接坐在白页上，
-        /// 行间 hairline —— `CardBox`），**内容块转浅灰面**（README / 评论气泡 / 输入区 /
-        /// 热力图 / 置顶卡 / 搜索框 / 统计块 / 筛选 chip —— 全部落到本令牌）。
-        /// 白底页面上，「面」就是内容块的表达方式。
+        /// 三级层次：页面 `background`（浅灰 `0xF6F8FA`）→ 卡面 `surface`（白）→ **本令牌**
+        /// （卡内的凹面：筛选 chip / 统计块 / 分段控件 / 搜索框 / 代码块 / 行内标签）。
+        /// 白卡上，「灰面」就是控件的表达方式。
         ///
-        /// ⚠️ **深色档 2026-10-15 随方案 D 改成 `#161b22`**（原 `#0d1117`）：
-        /// 旧值在"卡面比页面亮"的旧模型下表示"内凹 = 比卡面暗"，那时它嵌在白卡里；
-        /// 方案 D 下面板**直接坐在页面底上**，深色再取页面底就看不见了 ——
-        /// 方向反转成"面板比页面亮一档"（Primer `bgColor-muted`，与 `surface` 深色同值）。
+        /// ⚠️ **深色档一天内翻了两次**：方案 D（第 73 条）把它改成 `#161b22`（那时面板直接
+        /// 坐在页面底上，要"比页面亮一档"才看得见）；方案 A（第 76 条）把它**改回 `#0d1117`**
+        /// —— 它回到**卡内**（卡面 `#161b22`），要的是"比卡面暗一档"，方向又反转回来。
+        /// 两版方向相反、但意图一致：**它要和嵌着它的那个面分得开**。
         /// 浅色档的值没动（`#EFF2F5` 本来就是 `--chip`）。
-        public static let surfaceSunken   = Color(light: 0xEFF2F5, dark: 0x161B22)  // 深 = bgColor-muted：方案 D 面板比页面亮一档
+        public static let surfaceSunken   = Color(light: 0xEFF2F5, dark: 0x0D1117)  // 深 = bgColor-default：比卡面暗一档
         public static let border          = Color(light: 0xD0D7DE, dark: 0x30363D)  // 深 = borderColor-default
         public static let borderSoft      = Color(light: 0xE8ECEF, lightAlpha: 1, dark: 0x30363D, darkAlpha: 0.7)  // 深 = borderColor-muted (#30363db3)
 
@@ -104,23 +104,10 @@ public enum Theme {
         /// 但意图一致：**代码面要和嵌着它的面分得开**。
         ///
         /// ⚠️ **2026-10-15 起它不再服务 Markdown 代码块**（走查第 73 条 · 方案 D）：
-        /// 原型 `.markdown pre{background:#fff}` —— 灰面板（`--chip`）里垫**白**代码块才分得开，
-        /// 而本令牌的浅色 `#F6F8FA` 压在灰面板上就糊了。⇒ Markdown 代码块改走
-        /// `markdownPreSurface`；本令牌剩两个消费方：搜索结果的代码预览行（`.sr-code`，
-        /// 原型仍写 `--code-bg`）与文件内容页 —— 两处的原型都没动。
+        /// 那时原型 `.markdown pre{background:#fff}`（灰面板里垫白块）。**方案 A（第 76 条）
+        /// 把 README 翻回白卡**，代码块统一走 `surfaceSunken` ⇒ 本令牌剩两个消费方：
+        /// 搜索结果的代码预览行（`.sr-code`，原型仍写 `--code-bg`）与文件内容页 —— 两处原型都没动。
         public static let codeSurface    = Color(light: 0xF6F8FA, dark: 0x0D1117)
-
-        /// **Markdown 代码块**的底 —— 原型 `styles/04-screens.css` 的
-        /// `.markdown pre{background:#fff;border:none}`（2026-10-15 方案 D 改，走查第 73 条）。
-        ///
-        /// 方案 D 把 README 面板从「白卡」改成灰面（`--chip`）后，pre 若仍是
-        /// `--code-bg`（`#F6F8FA`）就与面板几乎同明度、糊成一片 ⇒ 原型改成了**纯白**：
-        /// 灰面板上"白块"是代码块唯一的形状信号（边框同时去掉了）。
-        ///
-        /// ⚠️ 深色档取 `#0d1117`（比面板 `#161b22` 深一档）—— 与浅色同一条意图：
-        /// **代码面要和嵌着它的面分得开**，只是两档的方向相反（浅色面板灰→块白，
-        /// 深色面板亮→块暗）。沿 `codeSurface` 那条"方向随主题反转、意图不变"的先例。
-        public static let markdownPreSurface = Color(light: 0xFFFFFF, dark: 0x0D1117)
 
         // MARK: 切片 6 新增 —— 语法高亮四色 + 两处浅底（出处见 TECH_SPEC §10.7）
 
@@ -441,6 +428,15 @@ public enum Theme {
         /// 沿 `Radius.segment`(8) 的先例：原型里确实存在的一档，就必须有名字，
         /// 否则只能写 `cornerRadius: 16`，而那正是"魔法值"。
         public static let hero: CGFloat = 16
+        /// **方案 A 的「大卡」圆角**（2026-10-15 走查第 76 条新增）。
+        ///
+        /// 原型 `styles/03-components.css` 的 `.card{border-radius:18px}`，与
+        /// `.menu-card` / `.markdown` / `.heatmap` / `.comment .bubble` / `.composer` **同为 18** ——
+        /// 方案 A 里"卡片"重新成为一级容器，圆角比 `hero`(16) 还大一档（越大越松）。
+        ///
+        /// ⚠️ 与 `sheet`(14) / `hero`(16) 都不同值：原型里确实是三处独立取值
+        /// （弹层 14、头部大卡 16、内容大卡 18），沿 `Radius.segment`(8) 的先例各给名字。
+        public static let cardLarge: CGFloat = 18
         /// 与容器同心（Liquid Glass 推荐，§10.3）
         public static let container: CGFloat = 12
         /// **评论气泡**那一档（切片 7 新增）。

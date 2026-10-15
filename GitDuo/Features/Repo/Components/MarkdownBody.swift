@@ -192,11 +192,16 @@ struct MarkdownBody: View {
     /// 整块的内边距。
     private var blockPadding: EdgeInsets {
         switch style {
-        // ⚠️ **零**，不是漏写（2026-10-15 走查第 75 条）：`.document` 不再是一块面板，
-        //    左右留白由**页面**给（仓库首页 / 文件页的 `Spacing.page`、弹层的内边距）。
-        //    这里再给一遍，正文会比同一页上的其它内容缩进 16 —— 而它看起来只是"这段窄了点"。
+        // 方案 A（2026-10-15，走查第 76 条）：`.document` 又是一块**白卡**
+        //    ⇒ 内边距回到原型 `.markdown{padding:16px}` = `Spacing.page`。
+        //    ⚠️ 方案 D 时这里是**零**（正文坐在白页面上、左右留白由页面给）——
+        //       页面转回浅灰后，正文需要一张卡把它聚起来，留白随之回到卡内。
+        //    ⚠️ 页面**不要**再给一遍左右留白：那会让卡比同页其它卡窄 16。
         case .document:
-            EdgeInsets()
+            EdgeInsets(
+                top: Theme.Spacing.page, leading: Theme.Spacing.page,
+                bottom: Theme.Spacing.page, trailing: Theme.Spacing.page
+            )
         // ⚠️ **零**，不是漏写：原型 `.bbody{padding:11px 13px}` 那对值由 **容器**
         //    （`CommentBubble` 的注入槽）给 —— 这里再加一遍就是 22/26（见类型说明）。
         case .compact:
@@ -220,10 +225,14 @@ struct MarkdownBody: View {
 
         switch style {
         case .document:
-            // 走查第 75 条（2026-10-15）：**不画面板** —— 正文直接坐在底上
-            //（原型 `.markdown{background:none;padding:0}`）。
-            // ⚠️ 别顺手补一个"为了可点区域"的透明底：可点的是链接，不是这一块。
+            // 方案 A（2026-10-15，走查第 76 条）：README 回到**白卡**
+            //（原型 `.markdown{background:var(--card);border:none;border-radius:18px;padding:16px}`）。
+            // ⚠️ 第 75 条那句"去掉背景色和内边距"是**白页面**下的判词，页面转回浅灰后不再成立。
             stack
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                        .fill(Theme.Palette.surface)
+                )
         case .compact:
             // 评论气泡**自己就是容器**（`.comment .bubble` 有底、有边、有圆角）
             // ⇒ 紧凑档不再画卡片框：画了就是"气泡里还套一张卡"，
@@ -427,27 +436,14 @@ struct MarkdownBody: View {
 
     // MARK: - 代码块
 
-    /// 代码块的底色（判据见 `CodeSurface.fill` 那张表）。
-    ///
-    /// **正文档坐在页面上** ⇒ 垫面板色（`surfaceSunken`），那是代码块在白底上唯一的形状信号；
-    /// **评论正文坐在气泡里**（气泡本身就是 `surfaceSunken`）⇒ 反过来垫
-    /// `markdownPreSurface`（浅白 / 深 `0x0D1117`），否则代码块会和气泡糊成一片。
-    private var codeFill: Color {
-        switch style {
-        case .document: Theme.Palette.surfaceSunken
-        case .compact: Theme.Palette.markdownPreSurface
-        }
-    }
-
     private func codeBlock(language: String?, lines: [String]) -> some View {
         // ⚠️ **紧凑档沿用同一份 `CodeSurface`** —— 也是「规格未给」（原型没给
         //    `.comment .bbody pre` 的规则）。它自成一块带底色的代码面，
         //    比正文大一点不算走形；真要改，改的是 `CodeSurface` 那一档令牌。
         // 语言认不出来 ⇒ `nil` ⇒ `CodeSurface` 走纯文本降级（不去猜语言）。
-        CodeSurface(
-            lines: CodeHighlighting.lines(lines, language: CodeHighlighting.language(language)),
-            fill: codeFill
-        )
+        // 方案 A：正文档与评论气泡都是**白卡** ⇒ 代码块一律垫 `surfaceSunken`
+        //（卡内凹面），不再分两档（判据见 `CodeSurface.fill`）。
+        CodeSurface(lines: CodeHighlighting.lines(lines, language: CodeHighlighting.language(language)))
         // 原型 `pre{margin-bottom:10px}`。
         .padding(.bottom, 10)
     }

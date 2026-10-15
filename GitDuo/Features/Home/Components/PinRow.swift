@@ -62,17 +62,18 @@ struct PinRow: View {
                 // Star 数不该被仓库名挤走 —— 挤掉之后这一行就看不出"置顶的这个有多热"。
                 .layoutPriority(1)
         }
-        .padding(.vertical, Theme.Spacing.m)
-        .padding(.horizontal, Theme.Spacing.xxs)
+        // 方案 A（2026-10-15，走查第 76 条）：行回到**卡内** ⇒ 左右留白由行自己给 14
+        //（原型 `.recent-row{padding:14px}` / `.pin-card{padding:14px}`）。
+        .padding(14)
         .contentShape(Rectangle())
         .overlay(alignment: .topLeading) {
             if showsSeparator {
                 Rectangle()
                     .fill(Theme.Palette.borderSoft)
                     .frame(height: 1)
-                    // 内嵌缩进（方案 D）：从文字起点起，缩进 = 行缩进 2 + 头像 30 + gap 12 = 44
-                    //（原型 `.pin-card+.pin-card::before{left:43px}`，App 的 gap 是 12 ⇒ 44）。
-                    .padding(.leading, Theme.Spacing.xxs + RepoAvatar.row.diameter + Theme.Spacing.m)
+                    // 内嵌缩进：从文字起点起，缩进 = **卡内边距 14** + 头像 30 + gap 12 = 56
+                    //（原型 `.pin-card+.pin-card::before{left:55px}`，App 的 gap 是 12 ⇒ 56）。
+                    .padding(.leading, 14 + RepoAvatar.row.diameter + Theme.Spacing.m)
             }
         }
         // 读屏：整行合成一句，而不是把四五个碎片逐个念出来。
@@ -130,6 +131,7 @@ struct PinRow: View {
                 description: "GitHub 客户端 · SwiftUI · 零第三方依赖",
                 language: "Swift", starCount: 128, forkCount: 12, isPrivate: false
             ),
+            // ⚠️ 分隔线画在**顶上** ⇒ 第一行不画（同 `MenuRow`，走查第 77 条）。
             showsSeparator: false
         )
         PinRow(

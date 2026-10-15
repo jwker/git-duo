@@ -292,8 +292,12 @@ struct RepoDetailView: View {
                 }
                 .padding(.top, Theme.Spacing.s)
             }
-            .padding(.top, 6)
-            .padding(.horizontal, 2)
+            // 方案 A：头部骨架也是一张白卡（与 `RepoDetailHero` 同形状）。
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                    .fill(Theme.Palette.surface)
+            )
 
             // 四行入口的骨架：与 `MenuRow` 对齐（40pt 色块 + 14pt 标题行）。
             CardBox(vertical: 0, horizontal: 0) {
@@ -303,8 +307,8 @@ struct RepoDetailView: View {
                         SkeletonBar(height: 14, width: 120)
                         Spacer(minLength: 0)
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 2)
+                    // 方案 A：行回到卡内 ⇒ padding 14（与 `MenuRow` 一致）。
+                    .padding(14)
                 }
             }
             .padding(.top, Theme.Spacing.m)

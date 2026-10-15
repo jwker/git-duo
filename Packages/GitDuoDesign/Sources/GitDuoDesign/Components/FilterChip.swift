@@ -63,7 +63,7 @@ public struct FilterChip: View {
             .background(
                 // 方案 D（2026-10-15，走查第 73 条）：未选档白卡 → 浅灰面（原型
                 // `.fchip{background:var(--chip);border:1px solid transparent}`）。
-                Capsule().fill(isHighlighted ? Theme.Palette.accentSurface : Theme.Palette.surfaceSunken)
+                Capsule().fill(isHighlighted ? Theme.Palette.accentSurface : Theme.Palette.surface)
             )
             .overlay(
                 // 原型 `border-radius:20px` 在 26pt 高的 chip 上就是胶囊。

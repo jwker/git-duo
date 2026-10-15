@@ -128,17 +128,20 @@ struct HomeView: View {
         if items.isEmpty {
             EmptyBox(title: HomeCopy.pinnedEmptyTitle, hint: HomeCopy.pinnedEmptyHint)
         } else {
-            // ⚠️ 2026-10-15 走查第 75 条：置顶从 **2 列灰块网格**改成**单列平铺行**
-            //    （页面转白后它是唯一一组还带灰底的块，且与同页的最近访问不像一家人）
-            //    ⇒ 行间 hairline 由行自己画在顶上，首行不画（同 `StarRow` / `RecentRow`）。
-            LazyVStack(spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, summary in
-                    Button {
-                        openPinned(summary)
-                    } label: {
-                        PinRow(summary: summary, showsSeparator: index > 0)
+            // ⚠️ 2026-10-15 走查第 75 条：置顶从 **2 列灰块网格**改成**单列平铺行**；
+            //    走查第 76 条（方案 A）又把这一组**装回一张白卡** —— 页面转回浅灰后，
+            //    一组行需要一张卡聚起来（原型 `.pin-grid` 现在就是那张卡）。
+            //    行间 hairline 由行自己画在顶上，首行不画（同 `RecentRow`）。
+            CardBox(vertical: 0, horizontal: 0) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, summary in
+                        Button {
+                            openPinned(summary)
+                        } label: {
+                            PinRow(summary: summary, showsSeparator: index > 0)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -161,29 +164,32 @@ struct HomeView: View {
         if hasVisits {
             // ⚠️ 不做本地去重 / 裁剪：上限 6 与"同一仓库只留一条"都在存储那一侧保证
             //    （`RecentVisitStore`），这里重做一遍就等于有了两份规则。
-            VStack(spacing: 0) {
-                ForEach(visits.indices, id: \.self) { index in
-                    let visit = visits[index]
-                    Button {
-                        openVisit(visit)
-                    } label: {
-                        RecentRow(
-                            fullName: visit.fullName,
-                            // ⚠️ 描述与私有性**本机确实没有** —— `RecentVisit` 只存
-                            //    全名 / 时刻 / 当时是否可写（PRD §3.13）。传 `nil`
-                            //    是"陈述事实"，不是"忘了填"：`RecentRow` 的说明里写了
-                            //    这两格表达的就是"调用方手上有没有"。
-                            description: nil,
-                            isPrivate: nil,
-                            timeLabel: visit.timeLabel(now: .now),
-                            // 记录访问时落盘的 owner 头像地址（走查第 72 条）；
-                            // 旧记录没有这个字段 ⇒ `nil` ⇒ 行内首字母兜底圆。
-                            ownerAvatarURL: visit.ownerAvatarURL,
-                            // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
-                            showsSeparator: index > 0
-                        )
+            // 方案 A：与置顶同构 —— 一组行 = 一张白卡（卡内行间内嵌 hairline）。
+            CardBox(vertical: 0, horizontal: 0) {
+                VStack(spacing: 0) {
+                    ForEach(visits.indices, id: \.self) { index in
+                        let visit = visits[index]
+                        Button {
+                            openVisit(visit)
+                        } label: {
+                            RecentRow(
+                                fullName: visit.fullName,
+                                // ⚠️ 描述与私有性**本机确实没有** —— `RecentVisit` 只存
+                                //    全名 / 时刻 / 当时是否可写（PRD §3.13）。传 `nil`
+                                //    是"陈述事实"，不是"忘了填"：`RecentRow` 的说明里写了
+                                //    这两格表达的就是"调用方手上有没有"。
+                                description: nil,
+                                isPrivate: nil,
+                                timeLabel: visit.timeLabel(now: .now),
+                                // 记录访问时落盘的 owner 头像地址（走查第 72 条）；
+                                // 旧记录没有这个字段 ⇒ `nil` ⇒ 行内首字母兜底圆。
+                                ownerAvatarURL: visit.ownerAvatarURL,
+                                // 分隔线是顶上那条内嵌 hairline —— 首行不画。
+                                showsSeparator: index > 0
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         } else {

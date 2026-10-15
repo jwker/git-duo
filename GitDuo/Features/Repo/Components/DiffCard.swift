@@ -52,8 +52,14 @@ struct DiffCard: View {
             header
             if isExpanded { content }
         }
-        // 方案 D（2026-10-15，走查第 73 条）：容器去形 —— 不画底、边框、圆角。
-        // add/del 行的底色本身就是形状；头部那条下分隔线（`header` 里）负责收边。
+        // 方案 A（2026-10-15，走查第 76 条）：diff 面板回到**白卡**
+        //（原型 `.diffcard{background:var(--card);border:none;border-radius:18px}`），
+        // 并**裁圆角** —— add/del 行是通栏底色，不裁会从圆角外露出两个直角。
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                .fill(Theme.Palette.surface)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous))
         // 默认展开的那一种也要走一次解析 —— 它没经过 `toggle()`。
         // ⚠️ 解析**只在这里与 `toggle()` 两处**发生，`body` 里不做任何解析
         //    （在 `body` 里算就等于"每次重绘都扫一遍"，那正是 §11.2 要避免的）。

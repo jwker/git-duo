@@ -164,18 +164,19 @@ struct SettingsView: View {
             SectionHeader(title: ProfileCopy.sectionAccount)
             MenuCard {
                 // 登录名取自 `authState`，**不再打一次 `/user`**（§9.15）。
-                MenuRow(title: ProfileCopy.appRow(login: model.login), value: ProfileCopy.authorizationValue)
+                // ⚠️ 分隔线画在**顶上** ⇒ 本组第一行把线关掉（原型 `.menu-item+.menu-item`）。
+                MenuRow(
+                    title: ProfileCopy.appRow(login: model.login),
+                    value: ProfileCopy.authorizationValue,
+                    showsSeparator: false
+                )
 
                 // 撤销失败的兜底入口（见类型说明）。⚠️ 它**常驻**，不是"失败后才出现"。
                 // ⚠️ 它**不跟着「退出登录」搬走**（决策 #78）：两者语义虽相连，但这个是**兜底**
                 //    （只有撤销失败的人才用），与"登出"这个主动作分开摆更接近它本来的位置。
-                // ⚠️ 现在**它是本卡片最后一行** ⇒ 分隔线交给它关掉
-                //    （原型 `.menu-item:last-child{border-bottom:none}`）——
-                //    这条规则只认"谁在最后"，与谁搬去别处无关。
-                MenuRow(
-                    title: ProfileCopy.manualRevokeAction,
-                    showsSeparator: false
-                ) {
+                // ⚠️ 它**照旧画顶线** —— 上面那行是「GitHub App · {账号}」，
+                //    与"谁在最后"无关（2026-10-15 走查第 77 条）。
+                MenuRow(title: ProfileCopy.manualRevokeAction) {
                     openManualRevoke()
                 }
             }
@@ -190,15 +191,16 @@ struct SettingsView: View {
                     title: ProfileCopy.clearCacheRow,
                     // ⚠️ 还没量过时**不画值**（`nil` ⇒ 右侧什么都没有），
                     //    不是画一个 `0.0 MB` —— "还没量"与"确实是零"是两件事。
-                    value: model.cacheBytes.map { ProfileCopy.cacheSize(bytes: $0) }
+                    value: model.cacheBytes.map { ProfileCopy.cacheSize(bytes: $0) },
+                    // 本组第一行 ⇒ 顶上的线不画（同上，走查第 77 条）。
+                    showsSeparator: false
                 ) {
                     Task { await model.clearCache() }
                 }
 
                 MenuRow(
                     title: ProfileCopy.versionRow,
-                    value: model.versionText,
-                    showsSeparator: false
+                    value: model.versionText
                 )
             }
         }
@@ -234,9 +236,9 @@ struct SettingsView: View {
                 //    ⇒ 零新形态、页面结构一点不动。
                 value: isSigningOut ? ProfileCopy.signingOutValue : nil,
                 titleTone: .destructive,
-                // ⚠️ 它是本卡片**唯一的一行**（也就是最后一行）⇒ 按原型
-                //    `.menu-item:last-child{border-bottom:none}` 把线关掉；
-                //    不关的话卡片底边上方会多出一条线，看着像"下面还有内容"。
+                // ⚠️ 它是本卡片**唯一的一行** ⇒ 顶上那条线不画（原型
+                //    `.menu-item+.menu-item`：线属于"我上面还有一行"这件事）；
+                //    不关的话卡片顶边下方会多出一条线，看着像"上面还有内容"。
                 showsSeparator: false,
                 action: open
             )

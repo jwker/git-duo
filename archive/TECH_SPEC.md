@@ -2047,6 +2047,24 @@ GlassEffectContainer(spacing: 12) {
 > ③ **顺手修掉第 74 条的一处回归**：`CodeSurface` 的底色当时被写死成"白块"（它那时只出现在灰面板里），
 > 而**文件页的源码块**与**提交弹层的「查看最新版」**不在面板里 ⇒ 浅色白贴白、深色与页面同色。
 > 现在底色做成参数 `fill`（默认 `surfaceSunken` = 面板色，评论气泡里才传 `markdownPreSurface`）。
+>
+> 🔴 **2026-10-15 当晚第三走（第 76 条）：新开分支 `redesign/option-a`，按方案 A「无框大卡」另做一版
+> （与已提交推送的方案 D 对照，两版并存）。** 原型 + App 同步，方向**与上面两段相反**：
+> **令牌层**——`background` 浅色回到浅灰 `0xF6F8FA`；三级层次改为「页面灰 → 卡面 `surface`(白) →
+> 卡内控件 `surfaceSunken`(灰)」；`surfaceSunken` 深色档改回 `0x0D1117`（它回到卡内，要"比卡面暗一档"；
+> 一天内方向翻了两次，两版意图一致：**它要和嵌着它的那个面分得开**）；
+> `markdownPreSurface` **删除**（代码块三种底归一为 `surfaceSunken`）；新增 `Radius.cardLarge`(18)。
+> **组件层**——`CardBox` 恢复形状（白面 + 圆角 18 + padding 14 + `clipShape`，保留 `showsTopSeparator`
+> 但只服务**卡内**的行）；`PanelBox` 转白卡；`MenuRow` / `PinRow` / `RecentRow` / `SearchRowBox`
+> 行回到卡内（padding 14），内嵌 hairline 缩进整族 **+14**（54→66 · 44→56 · 45→57，
+> 搜索历史行图标是 16pt 线稿 ⇒ 单给 45）；`CommentBubble` / `CommentComposer` / `BreadcrumbBar` /
+> `FilterChip` / `SearchField` / `DiffCard` / 两个详情头翻回白卡（⚠️ `BreadcrumbBar` 的**分支胶囊**是
+> 卡内控件，仍是 `surfaceSunken`，不能跟着条一起翻白）。
+> **视图层**——列表 `spacing: 0` → **10** 且条目不再传 `showsTopSeparator`（该参数在 `RepoCard` /
+> `TrendCard` / `IssueCard` / `PullCard` / `StarRow` 与四个骨架件上**整批退休**）；
+> 置顶 / 最近访问 / 搜索结果 / 搜索历史各自**包进一张卡容器**（`CardBox(vertical:0, horizontal:0)`）；
+> README 回到白卡（`padding:16`，**推翻第 75 条**——那条判词是"白页面"下成立的）。
+> ⚠️ **未目视**：App 侧这套"浅灰页面 + 白卡"一次都没在模拟器 / 真机上看过（含深色档三级层次）。
 
 > ⚠️ **2026-10-09（切片 10 逐条核实）：上面点名的那三个封装组件，至今一个都不存在 —— 因为一次都没被需要过。**
 > 全 App 的玻璃**全部来自系统导航层**（`NavigationStack` 的导航栏 / `TabView` 的 Tab 栏 / 工具栏 / Sheet 外框），

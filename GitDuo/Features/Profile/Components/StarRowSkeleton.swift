@@ -18,16 +18,16 @@ struct StarRowSkeleton: View {
 
     var body: some View {
         // 方案 D：行间 hairline 由行自己画（顶上那条），骨架同样首行不画。
-        VStack(spacing: 0) {
+        VStack(spacing: 10) {
             ForEach(0..<rows, id: \.self) { index in
-                card(showsTopSeparator: index > 0)
+                card()
             }
         }
     }
 
-    private func card(showsTopSeparator: Bool) -> some View {
-        // 方案 D（2026-10-15，走查第 73 条）：与 `StarRow` 的 `CardBox()`（13/2 去形）逐字对齐。
-        CardBox(showsTopSeparator: showsTopSeparator) {
+    private func card() -> some View {
+        // 方案 A：与 `StarRow` 的 `CardBox()` 逐字对齐（骨架也是白卡）。
+        CardBox {
             HStack(spacing: 10) {
                 SkeletonBar(
                     height: RepoAvatar.standard.diameter,

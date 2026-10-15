@@ -68,10 +68,10 @@ struct SearchField: View {
         .padding(.vertical, Theme.Spacing.s)
         .padding(.horizontal, 10)
         .background(
-            // 方案 D（2026-10-15，走查第 73 条）：白卡 → 浅灰面，边框去掉
-            //（原型 `.searchfield{background:var(--chip);border:none}`）。
-            RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
-                .fill(Theme.Palette.surfaceSunken)
+            // 方案 A（2026-10-15，走查第 76 条）：搜索框是**页面上的白块**
+            //（原型 `.searchfield{background:var(--card);border:none;border-radius:12px}`）。
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.Palette.surface)
         )
     }
 

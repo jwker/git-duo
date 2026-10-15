@@ -183,14 +183,12 @@ struct ExploreView: View {
         let items = model.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: 0) {
+        return VStack(spacing: 10) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
                 Button {
                     open(row)
                 } label: {
-                    // 方案 D：条目去形，行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
-                    TrendCard(summary: row.summary, badges: badges(row),
-                              showsTopSeparator: index > 0)
+                    TrendCard(summary: row.summary, badges: badges(row))
                 }
                 .buttonStyle(.plain)
                 .onAppear {

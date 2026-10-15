@@ -84,11 +84,14 @@ struct RepoHeroCard: View {
             statRow
                 .padding(.top, Theme.Spacing.m)
         }
-        // 方案 D（2026-10-15，走查第 73 条）：头部去卡形 —— 名字与统计直接排版在页面上
-        //（原型 `.repo-hero{background:none;border:none;border-radius:0;padding:6px 2px}`）。
-        .padding(.top, 6)
-        .padding(.horizontal, 2)
+        // 方案 A（2026-10-15，走查第 76 条）：头部是一张**白卡**
+        //（原型 `.repo-hero{background:var(--card);border:none;border-radius:18px;padding:14px}`）。
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                .fill(Theme.Palette.surface)
+        )
     }
 
     // MARK: - 组成

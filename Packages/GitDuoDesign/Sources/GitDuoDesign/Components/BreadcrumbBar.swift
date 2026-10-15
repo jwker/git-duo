@@ -98,11 +98,10 @@ public struct BreadcrumbBar: View {
         .padding(.vertical, Theme.Spacing.s)
         .padding(.horizontal, Theme.Spacing.m)
         .background(
-            // 方案 D（2026-10-15，走查第 73 条）：白卡 → 浅灰面，边框去掉
-            //（原型 `.crumb{background:var(--chip);border:none}`）。
-            // 分支胶囊的底也是 `--chip` 同值 —— 面上胶囊只靠圆角读形（原型如此）。
-            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(Theme.Palette.surfaceSunken)
+            // 方案 A（2026-10-15，走查第 76 条）：面包屑条是**页面上的白块**，边框去掉
+            //（原型 `.crumb{background:var(--card);border:none;border-radius:12px}`）。
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.Palette.surface)
         )
     }
 
@@ -124,6 +123,8 @@ public struct BreadcrumbBar: View {
         .padding(.vertical, 3)
         .padding(.horizontal, Theme.Spacing.s)
         .background(
+            // ⚠️ 分支胶囊是**卡内控件**（原型 `.branch-chip{background:var(--chip)}`）——
+            // 它坐在白面包屑条上 ⇒ 保持 `surfaceSunken`（灰），不跟着条一起翻白。
             RoundedRectangle(cornerRadius: Theme.Radius.branchChip, style: .continuous)
                 .fill(Theme.Palette.surfaceSunken)
         )

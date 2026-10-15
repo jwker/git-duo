@@ -4,25 +4,28 @@ import SwiftUI
 /// （PRD §4.17 第 4/5 条、§4.20）。
 ///
 /// ```css
-/// /* 2026-10-15 方案 D 起（走查第 73 条）—— 组不再画卡，行直接铺在页面上 */
-/// .menu-card{background:none;border:none;border-radius:0;margin:0 0 10px}
+/// /* 2026-10-15 方案 A 起（走查第 76 条）—— 组又是一张**白卡**，行坐在卡内 */
+/// .menu-card{background:var(--card);border:none;border-radius:18px;overflow:hidden;margin:0 0 10px}
 /// ```
 ///
-/// ## ⚠️ 方案 D：它退化成了"一组行的编组名"
+/// ## ⚠️ 方案 A：它又装"卡"了
 ///
-/// 白底 + 边框 + 圆角全没了 —— 行与行之间是**内嵌 hairline**（由 `MenuRow` 画），
-/// 组与组之间靠 `SectionHeader` 的 22pt 上边距分开。保留这个类型是因为
-/// "这几行是一组"这件事仍要一个名字（同 `CardBox` 去形后留名的理由）。
+/// 页面转回浅灰后，一组行需要一张白卡把它们聚起来 —— 行与行之间仍是
+/// **内嵌 hairline**（由 `MenuRow` 画），组与组之间靠 `SectionHeader` 的 22pt 上边距分开。
 ///
 /// ## ⚠️ 它与 `CardBox` 的关系
 ///
-/// 本件仍是 `CardBox(vertical: 0, horizontal: 0)` —— 去形后的 `CardBox` 也什么都不画，
-/// 两者在"容器"这层已经没有差别；保留一层包装是为了语义（"一组菜单行"）。
+/// 本件 = `CardBox(vertical: 0, horizontal: 0)` —— 卡的形状由 `CardBox` 给，
+/// 本件只是说"这几行是一组"（语义层）。
 ///
 /// ## 行之间的内嵌 hairline 由**行**画
 ///
-/// 卡片不知道自己在装几行 ⇒ 由行的 `showsSeparator` 决定，**最后一行传 `false`**。
-/// 沿 `LinkRow` 的同一条处置（那里也是调用方传）。
+/// 卡片不知道自己在装几行 ⇒ 由行的 `showsSeparator` 决定。
+/// ⚠️ 线在**顶上** ⇒ **关掉的是第一行**（`false`），其余各行都传 `true`
+/// —— 与 `LinkRow` / `BranchRow` 那两件**相反**：它们的线在底上，那里才是"最后一行关"。
+/// 照"最后一行关"写在这里，画面上就是"首行顶上多一条、末行上面缺一条"
+/// （2026-10-15 走查第 **77** 条：「我的」页那组与设置页两组都写反过一次）。
+/// 只有一行的卡片自然也是第一行 ⇒ 同样传 `false`。
 ///
 /// ## 它是内容层
 ///
@@ -48,9 +51,10 @@ public struct MenuCard<Content: View>: View {
 /// （原型 `styles/04-screens.css` 的 `.menu-item`，2026-10-15 方案 D 重穿）。
 ///
 /// ```css
-/// .menu-item{display:flex;align-items:center;gap:12px;padding:12px 2px;
+/// /* 2026-10-15 方案 A 起（走查第 76 条）—— 行回到**卡内**：padding 14、缩进 66 */
+/// .menu-item{display:flex;align-items:center;gap:12px;padding:14px;
 ///            font-size:15px;font-weight:600;position:relative}
-/// .menu-item+.menu-item::before{content:"";position:absolute;top:0;left:54px;right:0;
+/// .menu-item+.menu-item::before{content:"";position:absolute;top:0;left:66px;right:0;
 ///                               height:1px;background:var(--border-soft)}
 /// .menu-item>svg{width:40px;height:40px;padding:10px;border-radius:12px;
 ///                background:var(--ic,var(--slate));color:#fff;stroke:#fff}
@@ -61,13 +65,16 @@ public struct MenuCard<Content: View>: View {
 /// 卡片去形后，行上唯一有分量的元素就是这块色 —— 它同时是"这一行是什么类别"的
 /// 颜色编码（`IconTone`）。字形的白由 `foregroundStyle` 给（SF Symbol 整体白色）。
 ///
-/// ## ⚠️ 分隔线**内嵌缩进 54**，由行画在**顶上**
+/// ## ⚠️ 分隔线**内嵌缩进 66**，由行画在**顶上**
 ///
-/// `54 = 色块 40 + gap 12 + 行缩进 2`（ hairline 从文字起点起，不再通栏）。
-/// ⚠️ 原型的选择器是 `.menu-item+.menu-item::before{left:54px}` —— **固定 54**，
-/// 没有图标的行（设置页那些）也一样缩进 54（文字从 2 起）—— 这是原型的写法，
+/// `66 = 卡内边距 14 + 色块 40 + gap 12`（hairline 从文字起点起，不再通栏）。
+/// ⚠️ 方案 D 时是 54（那时行坐在页面上、左右只缩进 2），**方案 A 把行搬回卡内**
+/// ⇒ 缩进要跟着加卡内边距那 14，否则线会落在文字左边的空白里、对不齐。
+/// ⚠️ 原型的选择器是 `.menu-item+.menu-item::before{left:66px}` —— **固定 66**，
+/// 没有图标的行（设置页那些）也一样缩进 66 —— 这是原型的写法，
 /// 照做；哪天要改成"无图标行缩到文字"，改原型与这里两处。
-/// 最后一行不画（调用方传 `showsSeparator: false`）。
+/// ⚠️ 第一行不画（调用方给第一行传 `showsSeparator: false`）——“线在顶上”，
+/// 它说的是"我上面还有一行"，所以例外落在**首行**而不是末行。
 ///
 /// ## ⚠️ 它与 `LinkRow` **不是同一件**
 ///
@@ -185,7 +192,8 @@ public struct MenuRow: View {
 
     public let titleTone: TitleTone
 
-    /// 顶部内嵌 hairline。**最后一行传 `false`**（原型 `.menu-item+.menu-item`）。
+    /// 顶部内嵌 hairline。**第一行传 `false`**（原型 `.menu-item+.menu-item`：
+    /// 线属于"我上面还有一行"，所以第一行没有）。
     public let showsSeparator: Bool
 
     private let action: (() -> Void)?
@@ -236,9 +244,9 @@ public struct MenuRow: View {
                 Rectangle()
                     .fill(Theme.Palette.borderSoft)
                     .frame(height: 1)
-                    // 原型 `left:54px`（色块 40 + gap 12 + 缩进 2）—— 固定值，
+                    // 原型 `left:66px`（卡内边距 14 + 色块 40 + gap 12）—— 固定值，
                     // 没有图标的行也一样（见类型说明）。
-                    .padding(.leading, 54)
+                    .padding(.leading, 66)
             }
         }
     }
@@ -282,9 +290,8 @@ public struct MenuRow: View {
                 chevron
             }
         }
-        // 原型 `padding:12px 2px`（方案 D 从 13/14 改 —— 行直接坐在页面上）。
-        .padding(.vertical, 12)
-        .padding(.horizontal, 2)
+        // 原型 `padding:14px`（方案 A：行回到卡内，左右留白由行自己给）。
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         // 整行可点（否则只有色块与文字那两小块响应点击）。
         .contentShape(Rectangle())
@@ -301,23 +308,24 @@ public struct MenuRow: View {
 #Preview {
     ScrollView {
         VStack(alignment: .leading, spacing: 0) {
-            // ① 「我的」页第一组：三行都有色块与尖角，最后一行的分隔线要关掉
+            // ① 「我的」页第一组：三行都有色块与尖角，**第一行**的分隔线要关掉
             //（PR 与 Issue 两行取 `StateIcon` 那两个常量，见 `GitHubIcon` 尾巴上的说明）
             SectionHeader(title: "菜单组一")
             MenuCard {
                 // 原型逐字「Star 管理」；2026-10-15 起改「我的 Star」（走查第 71 条，
                 // 设计包拿不到 `ProfileCopy`，预览写字面量 —— 改文案记得这里跟着改）。
                 MenuRow(systemImage: GitHubIcon.star, iconTone: .gold,
-                        title: "我的 Star", accessory: .chevron, action: {})
+                        title: "我的 Star", accessory: .chevron,
+                        showsSeparator: false, action: {})
                 MenuRow(systemImage: StateIcon.pullRequestOpen, iconTone: .blue,
                         title: "我的 Pull Request", accessory: .chevron, action: {})
                 MenuRow(systemImage: StateIcon.issueOpen, iconTone: .green,
-                        title: "我的 Issue", showsSeparator: false, action: {})
+                        title: "我的 Issue", action: {})
             }
 
             // ② 设置页「外观 / 账户 / 关于」+ 末尾一张**无标题**组：六行一个图标都没有
             //   （原型那五行就是这样，另两处见偏差第 40 / 46 条）。
-            //   分隔线仍固定缩进 54（原型 CSS 如此，见类型说明）。
+            //   分隔线仍固定缩进 66（方案 A 起卡内 14 + 色块 40 + gap 12；没有图标的行也一样）。
             SectionHeader(title: "外观")
             MenuCard {
                 Menu {
@@ -333,13 +341,13 @@ public struct MenuRow: View {
             }
             SectionHeader(title: "账户")
             MenuCard {
-                MenuRow(title: "GitHub App · jiangjiang", value: "已授权")
-                MenuRow(title: "前往 GitHub 手动撤销授权", showsSeparator: false, action: {})
+                MenuRow(title: "GitHub App · jiangjiang", value: "已授权", showsSeparator: false)
+                MenuRow(title: "前往 GitHub 手动撤销授权", action: {})
             }
             SectionHeader(title: "关于")
             MenuCard {
-                MenuRow(title: "清除缓存", value: "12.4 MB", action: {})
-                MenuRow(title: "版本", value: "2.0 (1)", showsSeparator: false)
+                MenuRow(title: "清除缓存", value: "12.4 MB", showsSeparator: false, action: {})
+                MenuRow(title: "版本", value: "2.0 (1)")
             }
             // 末尾那张**无标题**组：分区标题那 22pt 上边距它没有 ⇒ 自己补，否则会
             // 贴着「关于」那张、看着像多出来的一行（偏差第 46 条）。

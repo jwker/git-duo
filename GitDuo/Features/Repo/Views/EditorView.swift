@@ -207,10 +207,10 @@ struct EditorView: View {
             }
             .padding(Theme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            // 方案 D：编辑器容器是浅灰面（与 `CodeTextArea` 一族一致），无边框。
+            // 方案 A：编辑器容器是**白卡**（与页面上的其它内容块同形状），无边框。
             .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                    .fill(Theme.Palette.surfaceSunken)
+                RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                    .fill(Theme.Palette.surface)
             )
 
             SkeletonBar(height: 42)

@@ -44,8 +44,8 @@ struct ReleaseNotesSheet: View {
             //    不滚动的话它会从弹层底部溢出去，而溢出的部分**看起来像"说明就到这儿"**。
             ScrollView {
                 MarkdownBody(blocks: release.notesBlocks)
-                    // ⚠️ 2026-10-15 走查第 75 条起 `.document` 档**没有内边距**
-                    //    （正文不再是一块面板）⇒ 左右由外面那圈弹层内边距给，这里只补上下两段。
+                    // ⚠️ 2026-10-15 走查第 76 条起 `.document` 档**自带 16 内边距**
+                    //    （方案 A 把 README 一族翻回白卡）⇒ 这里只补上下两段。
                     .padding(.top, Theme.Spacing.s)
                     .padding(.bottom, Theme.Spacing.l)
             }

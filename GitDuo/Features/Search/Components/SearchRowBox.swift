@@ -40,6 +40,12 @@ struct SearchRowBox<Content: View>: View {
     /// 组件不知道自己在不在首位，所以由调用方传 —— 那正是它已经知道的事。
     let showsSeparator: Bool
 
+    /// 分隔线的**左缩进**。默认 57 = 卡内边距 14 + 头像 32 + gap 11（原型 `left:57px`）。
+    ///
+    /// ⚠️ 搜索历史那几行的图标是 **16pt 线稿**（不是 32pt 头像）⇒ 传 45。
+    /// 原型对这一支单给 `--inset:41px`（它的图标 16 不带槽），App 的图标槽是 20 ⇒ 45。
+    let separatorInset: CGFloat
+
     let action: () -> Void
 
     private let content: Content
@@ -47,11 +53,13 @@ struct SearchRowBox<Content: View>: View {
     init(
         alignment: VerticalAlignment = .center,
         showsSeparator: Bool,
+        separatorInset: CGFloat = 57,
         action: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.alignment = alignment
         self.showsSeparator = showsSeparator
+        self.separatorInset = separatorInset
         self.action = action
         self.content = content()
     }
@@ -61,10 +69,9 @@ struct SearchRowBox<Content: View>: View {
             HStack(alignment: alignment, spacing: 11) {
                 content
             }
-            // 12 / 2：原型原值（`padding:12px 2px`，方案 D 从 11 提到 12）。
-            // 左右那 2pt 在 4pt 阶里就是 `Spacing.xxs`，不是魔法值。
-            .padding(.vertical, 12)
-            .padding(.horizontal, Theme.Spacing.xxs)
+            // 方案 A（2026-10-15，走查第 76 条）：行回到**卡内** ⇒ padding 14
+            //（原型 `.sr-item{padding:14px}`）。
+            .padding(14)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -73,9 +80,10 @@ struct SearchRowBox<Content: View>: View {
                 Rectangle()
                     .fill(Theme.Palette.borderSoft)
                     .frame(height: 1)
-                    // 方案 D：hairline 内嵌缩进，从文字/头像起点起，不再通栏。
-                    // 原型固定 `left:45px`（头像 32 + gap 11 + 缩进 2），16pt 线稿行也一样。
-                    .padding(.leading, 45)
+                    // hairline 内嵌缩进，从文字/头像起点起，不再通栏。
+                    // 原型固定 `left:57px`（卡内边距 14 + 头像 32 + gap 11）；
+                    // 搜索历史那几行是 16pt 线稿图标 ⇒ 单给 `left:41px`（14+16+11）。
+                    .padding(.leading, separatorInset)
             }
         }
     }

@@ -1,29 +1,28 @@
 import SwiftUI
 
-/// **内容面板** —— 方案 D 里"嵌在页面里的浅灰面"那一族容器
-/// （原型 `--chip` 面板：`.heatmap` / `.markdown` / `.pin-card` 等，2026-10-15 走查第 73 条）。
+/// **内容面板** —— 自成一块的内容容器：README / 热力图 / 评论气泡 / 输入区
+/// （原型 `.heatmap` / `.markdown` / `.comment .bubble` / `.composer`）。
 ///
 /// ```css
-/// .heatmap{background:var(--chip);border:none;border-radius:14px;padding:14px}
-/// .markdown{background:var(--chip);border:none;border-radius:12px;padding:16px}
+/// /* 2026-10-15 方案 A 起（走查第 76 条）—— 面板与卡片同为「白面」 */
+/// .heatmap{background:var(--card);border:none;border-radius:18px;padding:16px}
+/// .markdown{background:var(--card);border:none;border-radius:18px;padding:16px}
 /// ```
 ///
-/// ## 方案 D 的两路分工
+/// ## 方案 A：面板与卡片**同形状**，只是语义不同
 ///
-/// 白底页面上，「卡」拆成了两种表达：
+/// 页面底转回浅灰（第 76 条）后，层次是「页面灰 → 卡面白 → 卡内控件灰」：
+/// 面板和 `CardBox` 画的都是**白面 + 圆角 18**，靠内边距与语义分开 ——
+/// 本件装"自成一块的内容"，`CardBox` 装"列表里的一条 / 一行"。
 ///
-/// | | 条目（`CardBox`） | 面板（本件） |
-/// |---|---|---|
-/// | 画什么 |什么都不画，行间 hairline | **一块浅灰面**（无边框） |
-/// | 装什么 | 列表里的一行 / 一条 | 自成一块的内容：README、热力图、置顶卡、气泡… |
-/// | 底色 | 无（坐在页面上） | `surfaceSunken`（`--chip`） |
-///
-/// 边框在两路上都**不存在**了 —— "面"本身就是形状，再包一圈线就回到了旧世界。
+/// ⚠️ 方案 D 时两者是**对立**的（条目去形、面板灰面），本条把它们拉回同一形状；
+/// 拆成两个类型是为了"这块是内容、那块是条目"这件事仍有个名字
+/// （沿 `CardBox` 去形后留名的同一条理由）。
 ///
 /// ## 圆角随原型逐处取值
 ///
-/// 原型的面板圆角不是一个值（热力图 14 / markdown 12 / 置顶卡 12），所以收参数；
-/// 默认取 `sheet`(14)（热力图那档）。
+/// 原型的面板圆角现在统一是 18（`Radius.cardLarge`），仍收参数是为了
+/// 弹层里那些需要跟弹层同心的小面板（默认取 `cardLarge`）。
 ///
 /// ## 它是内容层
 ///
@@ -36,7 +35,7 @@ public struct PanelBox<Content: View>: View {
     private let content: Content
 
     public init(
-        cornerRadius: CGFloat = Theme.Radius.sheet,
+        cornerRadius: CGFloat = Theme.Radius.cardLarge,
         vertical: CGFloat = 14,
         horizontal: CGFloat = 14,
         @ViewBuilder content: () -> Content
@@ -56,7 +55,7 @@ public struct PanelBox<Content: View>: View {
         .padding(.horizontal, horizontalPadding)
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Theme.Palette.surfaceSunken)
+                .fill(Theme.Palette.surface)
         )
     }
 }

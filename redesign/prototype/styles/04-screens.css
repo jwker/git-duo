@@ -2,7 +2,8 @@
 
   /* ============ Repo detail ============ */
   /* 方案 D：详情头去卡形 —— 名字与统计直接排版在页面上 */
-  .repo-hero{background:none;border:none;border-radius:0;padding:6px 2px;margin-bottom:4px}
+  /* 方案 A：头部也是一张白卡（方案 D 时它去形了） */
+  .repo-hero{background:var(--card);border:none;border-radius:18px;padding:14px;margin-bottom:10px}
   .repo-hero h2{font-size:19px;font-weight:750;margin-bottom:4px}
   .repo-hero .desc{font-size:13px;color:var(--text2);line-height:1.5;margin:6px 0 12px}
   .stat-row{display:flex;gap:8px;margin-top:12px}
@@ -14,12 +15,13 @@
   .file-row svg{width:17px;height:17px;stroke:var(--text3);fill:none;stroke-width:1.8;flex-shrink:0}
   .file-row .fname{font-size:14.5px;font-weight:550}
   .file-row .fmsg{font-size:11.5px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .crumb{font-size:12.5px;color:var(--text2);background:var(--chip);border:none;border-radius:9px;padding:8px 12px;margin-bottom:8px}
+  .crumb{font-size:12.5px;color:var(--text2);background:var(--card);border:none;border-radius:12px;padding:9px 13px;margin-bottom:8px}
   .crumb b{color:var(--link);font-weight:600}
   /* 内容面板（README）：白卡+边框 → 浅灰面（无边框）—— 白底页面上用「面」表达内容块 */
-  /* 2026-10-15 走查第 75 条：正文**不再是一块面板** —— 去背景、去内边距，文字直接坐在底上
-     （灰面 + 圆角在转白的页面上显得像一块贴上去的旧卡片，GitHub 网页的 README 也没有它） */
-  .markdown{background:none;border:none;padding:0;font-size:14px;line-height:1.65}
+  /* 2026-10-15 走查第 76 条：README 回到**白卡**（方案 A 的容器语言：页面浅灰 → 卡面白）。
+     ⚠️ 第 75 条那句「去掉背景色和内边距」是**方案 D 白页面**下的判词 —— 页面转回浅灰后，
+        正文需要一张卡把它聚起来，否则文字直接悬在灰底上没有容器。 */
+  .markdown{background:var(--card);border:none;border-radius:18px;padding:16px;font-size:14px;line-height:1.65}
   .markdown h1{font-size:22px;font-weight:750;margin:4px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border-soft)}
   .markdown h2{font-size:17px;font-weight:700;margin:14px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border-soft)}
   .markdown p{margin-bottom:9px}
@@ -32,21 +34,21 @@
   .kw{color:#cf222e}.fn{color:#8250df}.st{color:#0a3069}.cm{color:#6e7781}
 
   /* ============ Issue / PR ============ */
-  .conv-head{background:none;border:none;border-radius:0;padding:12px 2px;margin-bottom:6px}
+  .conv-head{background:var(--card);border:none;border-radius:18px;padding:14px;margin-bottom:10px}
   .conv-head h2{font-size:17.5px;font-weight:720;line-height:1.35;margin:8px 0}
   .comment{display:flex;gap:9px;margin-bottom:12px}
-  .comment .bubble{flex:1;background:var(--chip);border:none;border-radius:12px;overflow:hidden}
+  .comment .bubble{flex:1;background:var(--card);border:none;border-radius:18px;overflow:hidden}
   .comment .bhead{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#f9fafb;border-bottom:1px solid var(--border-soft);font-size:12px}
   .comment .bhead .author{font-weight:700}
   .comment .bbody{padding:11px 13px;font-size:13.5px;line-height:1.6}
   .comment .bbody p{margin-bottom:7px}
-  .composer{background:var(--chip);border:none;border-radius:13px;padding:10px;display:flex;gap:8px;align-items:flex-end}
+  .composer{background:var(--card);border:none;border-radius:18px;padding:12px;display:flex;gap:8px;align-items:flex-end}
   .composer textarea{flex:1;border:none;resize:none;font-family:inherit;font-size:14px;height:38px;background:transparent;outline:none;line-height:1.5}
   .prtabs{display:flex;background:var(--chip);border-radius:9px;padding:3px;margin-bottom:12px}
   .prtabs button{flex:1;border:none;background:transparent;border-radius:7px;padding:7px 0;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit}
   .prtabs button.on{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
   /* diff 面板去边框：add/del 行底色本身构成形状，白底上不再包框 */
-  .diffcard{background:none;border:none;border-radius:0;overflow:hidden;margin-bottom:12px}
+  .diffcard{background:var(--card);border:none;border-radius:18px;overflow:hidden;margin-bottom:10px}
   .diffcard .dhead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border-soft);cursor:pointer}
   .diffcard .dhead .fn{font-family:Menlo,monospace;font-size:12.5px;font-weight:600;color:var(--text)}
   .dstat{font-size:11px;font-weight:700}
@@ -72,14 +74,15 @@
   .pstat{text-align:center;cursor:pointer}
   .pstat b{display:block;font-size:17px;font-weight:750}
   .pstat span{font-size:11.5px;color:var(--text2)}
-  .heatmap{background:var(--chip);border:none;border-radius:14px;padding:14px;margin:12px 0}
+  .heatmap{background:var(--card);border:none;border-radius:18px;padding:16px;margin:12px 0}
   .hm-grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:2.5px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
   .hm-cell{width:11px;height:11px;border-radius:2.5px;background:#ebedf0}
   .hm-cell.l1{background:#9be9a8}.hm-cell.l2{background:#40c463}.hm-cell.l3{background:#30a14e}.hm-cell.l4{background:#216e39}
   /* 方案 D：菜单组不再画卡，行直接铺在页面上；行间 hairline 内嵌缩进（图标 40 + gap 12 + 缩进 2 = 54） */
-  .menu-card{background:none;border:none;border-radius:0;overflow:visible;margin:0 0 10px}
-  .menu-item{display:flex;align-items:center;gap:12px;padding:12px 2px;cursor:pointer;font-size:15px;font-weight:600;position:relative}
-  .menu-item+.menu-item::before{content:"";position:absolute;top:0;left:54px;right:0;height:1px;background:var(--border-soft)}
+  .menu-card{background:var(--card);border:none;border-radius:18px;overflow:hidden;margin:0 0 10px}
+  /* 方案 A：行回到**卡内**（padding 14）；hairline 内嵌缩进随之改 14+40+12 = 66 */
+  .menu-item{display:flex;align-items:center;gap:12px;padding:14px;cursor:pointer;font-size:15px;font-weight:600;position:relative}
+  .menu-item+.menu-item::before{content:"";position:absolute;top:0;left:66px;right:0;height:1px;background:var(--border-soft)}
   /* 图标色块：线稿 svg 直接垫 40pt 实底圆角块、描边转白（--ic 由各行内联给出，缺省灰）。
    ⚠️ color:#fff 同时喂给 issueO 那类内联 fill="currentColor" 的子元素（内点要跟着白）；
       stroke:#fff 管其余线稿路径。 */

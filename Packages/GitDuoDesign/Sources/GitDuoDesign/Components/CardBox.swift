@@ -3,25 +3,32 @@ import SwiftUI
 /// 列表条目 / 内容块的**容器**（原型 `styles/03-components.css` 的 `.card`）。
 ///
 /// ```css
-/// /* 2026-10-15 方案 D 起（走查第 73 条）—— 卡片容器去形：
-///    不再画白底 + 边框 + 圆角，条目直接坐在白底页面上，
-///    行与行之间用 hairline 分隔（相邻兄弟选择器）。 */
-/// .card{background:none;border:none;border-radius:0;padding:13px 2px;margin:0}
-/// .card+.card{border-top:1px solid var(--border-soft)}
+/// /* 2026-10-15 方案 A 起（走查第 76 条）—— 卡片容器**恢复形状**：
+///    白面 + 大圆角 18 + 内边距 14，**不画边框**（靠「页面浅灰 vs 卡面白」的明度差）；
+///    卡与卡之间 10px 间距，hairline 只留在**卡内**行之间。 */
+/// .card{background:var(--card);border:none;border-radius:18px;padding:14px;margin:0}
+/// .card+.card{margin-top:10px}
 /// ```
 ///
-/// ## 方案 D：它是「条目」，不再是「卡」
+/// ## 方案 A：它又是「卡」了（与方案 D 相反）
 ///
-/// 白底页面上，层次靠**排版与 hairline** 表达（方案 D「分组平铺」）：
-/// 本件只剩「内边距 + 相邻行之间的一条 hairline」。**内容面板**（README / 热力图 /
-/// 气泡那类"浅灰面"）不要用它 —— 那一族是 `PanelBox`。
+/// 页面底转回浅灰（走查第 76 条）后，层次回到「灰底 vs 白卡」的明度差：
+/// 本件画**白面 + 圆角 18 + 内边距 14**，**不画边框**。
+/// **内容块**（README / 热力图 / 气泡）走 `PanelBox`（同形状，语义不同）。
+///
+/// ⚠️ 方案 D 那版把它去形（无底/无框/无圆角、行间 hairline 通栏），
+/// 本条只把"形状"翻回来；**内嵌 hairline 那套机制保留** —— 它现在服务的是
+/// "**卡内**的行"（置顶 / 最近访问 / 菜单 / 搜索结果），不再是"条目之间"。
 ///
 /// ## 相邻 hairline 由**调用方**决定（`showsTopSeparator`）
 ///
-/// 原型的 `.card+.card` 是相邻兄弟选择器 —— 第一张卡不画。组件不知道自己在不在
-/// 首位（`ForEach` 里判断"是不是第一个"的依据调用方最清楚），所以由调用方传
-/// `index > 0` —— 沿 `MenuRow` / `LinkRow` 的 `showsSeparator` 同一条处置，
-/// 只是方案 D 的 `.card` 把线画在**顶上**（原型如此）。
+/// 原型的 `.menu-item+.menu-item` / `.recent-row+.recent-row` 是相邻兄弟选择器
+/// —— 第一行不画。组件不知道自己在不在首位（`ForEach` 里判断"是不是第一个"
+/// 的依据调用方最清楚），所以由调用方传 `index > 0` —— 沿 `MenuRow` /
+/// `LinkRow` 的 `showsSeparator` 同一条处置，线画在**顶上**（原型如此）。
+///
+/// ⚠️ **方案 A 起列表条目不再传它**：条目各自是一张卡，卡与卡之间是**间距**不是线
+/// （原型 `.card+.card{margin-top:10px}`）。传了就会在白卡顶上多画一条线。
 ///
 /// ## 为什么值得单独抽一个容器
 ///
@@ -40,12 +47,13 @@ public struct CardBox<Content: View>: View {
     private let content: Content
 
     /// - Parameters:
-    ///   - vertical: 方案 D 的 `.card{padding:13px 2px}` —— 纵向 13（不在 4pt 阶里，写原值）。
-    ///   - horizontal: 同上，横向 2（条目只缩进一点，行间 hairline 从页面内边距起通栏）。
-    ///   - showsTopSeparator: 原型 `.card+.card{border-top:…}` —— 列表里**第一张传 `false`**。
+    ///   - vertical: 方案 A 的 `.card{padding:14px}` —— 纵向 14。
+    ///   - horizontal: 同上，横向 14（卡内的左右留白；**行容器传 0**，由行自己给 14）。
+    ///   - showsTopSeparator: 卡**内**相邻行的 hairline —— **第一行传 `false`**。
+    ///     ⚠️ 独立成卡的列表条目不要传（卡间是间距，不是线）。
     public init(
-        vertical: CGFloat = 13,
-        horizontal: CGFloat = 2,
+        vertical: CGFloat = 14,
+        horizontal: CGFloat = 14,
         showsTopSeparator: Bool = false,
         @ViewBuilder content: () -> Content
     ) {
@@ -62,6 +70,16 @@ public struct CardBox<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, verticalPadding)
         .padding(.horizontal, horizontalPadding)
+        // 方案 A（2026-10-15，走查第 76 条）：白面 + 大圆角，不画边框 ——
+        // 卡片靠「页面浅灰 vs 卡面白」的明度差立起来（原型 `.card{background:var(--card);
+        // border:none;border-radius:18px}`）。
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                .fill(Theme.Palette.surface)
+        )
+        // ⚠️ 卡内行的 hairline 是**通栏到卡的右缘**的（`Rectangle` 铺满宽度再 `padding(.leading)`），
+        // 不裁的话会在圆角外露出两个直角的小尖。行容器（`vertical/horizontal: 0`）尤其明显。
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous))
         .overlay(alignment: .top) {
             if showsTopSeparator {
                 Rectangle()
@@ -73,17 +91,27 @@ public struct CardBox<Content: View>: View {
 }
 
 #Preview {
-    VStack(spacing: 0) {
-        CardBox(showsTopSeparator: false) {
+    VStack(spacing: 10) {
+        // 方案 A：条目各自成卡，卡间是 10 的间距、不画线。
+        CardBox {
             Text("语言构成")
                 .font(Theme.Font.body)
                 .foregroundStyle(Theme.Palette.textPrimary)
         }
-        // 相邻条目：顶上一条 hairline（原型 `.card+.card`）。
-        CardBox(showsTopSeparator: true) {
-            Text("Latest Release")
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textPrimary)
+        CardBox(vertical: 0, horizontal: 0) {
+            VStack(spacing: 0) {
+                // 卡内的行：顶上一条内嵌 hairline（第一行不画）。
+                CardBox(vertical: 14, horizontal: 14, showsTopSeparator: false) {
+                    Text("置顶 · my-git/gitduo")
+                        .font(Theme.Font.body)
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                }
+                CardBox(vertical: 14, horizontal: 14, showsTopSeparator: true) {
+                    Text("置顶 · vercel/next.js")
+                        .font(Theme.Font.body)
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                }
+            }
         }
     }
     .padding(.horizontal, Theme.Spacing.page)

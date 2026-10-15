@@ -132,13 +132,13 @@ struct ReposView: View {
         let items = model.visibleItems
         let lastID = items.last?.id
 
-        return LazyVStack(spacing: 0) {
+        return LazyVStack(spacing: 10) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, repository in
                 Button {
                     open(repository)
                 } label: {
-                    // 方案 D：条目去形，行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
-                    RepoCard(repository: repository, showsTopSeparator: index > 0)
+                    // 方案 A：条目各自成卡，卡与卡之间是列表给的 10 间距、不画线。
+                    RepoCard(repository: repository)
                 }
                 .buttonStyle(.plain)
                 .onAppear {

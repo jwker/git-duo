@@ -153,12 +153,15 @@ struct RepoReadmeSection: View {
             SkeletonBar(height: 13, width: 84)
                 .padding(.top, Theme.Spacing.l)
 
-            // ⚠️ **不画 `CardBox`**（2026-10-15 走查第 75 条）：README 正文已不再是一块面板
-            //    ⇒ 骨架画一块卡的话，数据到达时会"灰底突然消失"跳一下。
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                SkeletonBar(height: 15)
-                SkeletonBar(height: 15)
-                SkeletonBar(height: 15, width: 240)
+            // ⚠️ 骨架要**画白卡**（2026-10-15 走查第 76 条）：方案 A 把 README 翻回一张
+            //    白卡 ⇒ 骨架不画卡的话，数据到达时会"卡突然出现"跳一下
+            //    （第 75 条那句"不画"是白页面下正文无面板时的结论，本条已反转）。
+            PanelBox {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    SkeletonBar(height: 15)
+                    SkeletonBar(height: 15)
+                    SkeletonBar(height: 15, width: 240)
+                }
             }
         }
         .accessibilityHidden(true)

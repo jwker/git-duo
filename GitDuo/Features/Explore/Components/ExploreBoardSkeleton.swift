@@ -17,14 +17,14 @@ struct ExploreBoardSkeleton: View {
 
     var body: some View {
         // 方案 D：行间 hairline 由行自己画（顶上那条），骨架同样首行不画。
-        VStack(spacing: 0) {
+        VStack(spacing: 10) {
             ForEach(0..<count, id: \.self) { index in
-                card(showsTopSeparator: index > 0)
+                card()
             }
         }
     }
 
-    private func card(showsTopSeparator: Bool) -> some View {
+    private func card() -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             // 尺寸跟着 `TrendCard` 一起改（那里用的是 `RepoAvatar.standard`）。
             SkeletonBar(
@@ -40,17 +40,14 @@ struct ExploreBoardSkeleton: View {
             }
             Spacer(minLength: 0)
         }
-        // 方案 D（2026-10-15，走查第 73 条）：与 `TrendCard` 的去形内边距逐字对齐。
-        .padding(.vertical, 13)
-        .padding(.horizontal, 2)
+        // 方案 A（2026-10-15，走查第 76 条）：与 `TrendCard` 逐字对齐 —— 骨架也是白卡
+        //（否则数据到达时会"卡突然出现"跳一下）。
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) {
-            if showsTopSeparator {
-                Rectangle()
-                    .fill(Theme.Palette.borderSoft)
-                    .frame(height: 1)
-            }
-        }
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
+                .fill(Theme.Palette.surface)
+        )
     }
 }
 

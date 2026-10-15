@@ -131,7 +131,7 @@ struct ExploreIssueListView: View {
         let items = model.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: 0) {
+        return VStack(spacing: 10) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
                 Button {
                     // ⚠️ `readOnly: true` —— 这一页是**他人仓库**的 Issue（页脚那句就写着
@@ -141,7 +141,7 @@ struct ExploreIssueListView: View {
                     env.router.push(.issueDetail(fullName: fullName, number: row.number, readOnly: true))
                 } label: {
                     // 方案 D：行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
-                    IssueCard(row: row, now: now, showsTopSeparator: index > 0)
+                    IssueCard(row: row, now: now)
                 }
                 .buttonStyle(.plain)
                 .onAppear {

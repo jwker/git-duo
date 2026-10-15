@@ -46,7 +46,8 @@ struct RecentRow: View {
     /// 行内回退 owner 登录名的首字母兜底圆（走查第 72 条）。
     var ownerAvatarURL: URL? = nil
 
-    /// 最后一行不画分隔线（原型 `.recent-row:last-child{border-bottom:none}`）。
+    /// 首行不画分隔线（线画在**顶上**，原型 `.recent-row+.recent-row::before`
+    /// —— 相邻才画，第一条上面没有东西）。同 `MenuRow` 那条口径（走查第 77 条）。
     var showsSeparator: Bool = true
 
     var body: some View {
@@ -78,18 +79,19 @@ struct RecentRow: View {
                 // 时间戳不该被说明文字挤走 —— 挤掉之后这一行就看不出"多久以前"了。
                 .layoutPriority(1)
         }
-        .padding(.vertical, Theme.Spacing.m)
-        .padding(.horizontal, Theme.Spacing.xxs)
+        // 方案 A（2026-10-15，走查第 76 条）：行回到**卡内** ⇒ 左右留白由行自己给 14
+        //（原型 `.recent-row{padding:14px}` / `.pin-card{padding:14px}`）。
+        .padding(14)
         .contentShape(Rectangle())
         .overlay(alignment: .topLeading) {
             if showsSeparator {
                 Rectangle()
                     .fill(Theme.Palette.borderSoft)
                     .frame(height: 1)
-                    // 方案 D（2026-10-15，走查第 73 条）：hairline 内嵌缩进 ——
-                    // 从文字起点起，不再通栏。缩进 = 行缩进 2 + 头像 30 + gap 12 = 44
-                    //（原型 `.recent-row+.recent-row::before{left:43px}`，App 的 gap 是 12 ⇒ 44）。
-                    .padding(.leading, Theme.Spacing.xxs + RepoAvatar.row.diameter + Theme.Spacing.m)
+                    // 内嵌 hairline：从文字起点起，不再通栏。
+                    // 缩进 = **卡内边距 14** + 头像 30 + gap 12 = 56
+                    //（原型 `.recent-row+.recent-row::before{left:55px}`，App 的 gap 是 12 ⇒ 56）。
+                    .padding(.leading, 14 + RepoAvatar.row.diameter + Theme.Spacing.m)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -159,15 +161,16 @@ struct RecentRow: View {
             description: "The React Framework",
             isPrivate: false,
             timeLabel: "昨天",
-            ownerAvatarURL: URL(string: "https://avatars.githubusercontent.com/u/14985020?v=4")
+            ownerAvatarURL: URL(string: "https://avatars.githubusercontent.com/u/14985020?v=4"),
+            // ⚠️ 分隔线画在**顶上** ⇒ 第一行不画（同 `MenuRow`，走查第 77 条）。
+            showsSeparator: false
         )
         // 头像取不到（旧记录 / 地址失效）⇒ 首字母兜底圆 —— 也是一行合法的样子。
         RecentRow(
             fullName: "my-git/notes",
             description: nil,
             isPrivate: true,
-            timeLabel: "2 天前",
-            showsSeparator: false
+            timeLabel: "2 天前"
         )
     }
     .padding(.horizontal, Theme.Spacing.page)

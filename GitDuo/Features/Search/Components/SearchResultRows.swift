@@ -362,7 +362,8 @@ struct RowChevron: View {
                     language: "Swift",
                     starCount: 2_341
                 )),
-                now: now, showsSeparator: true
+                // ⚠️ 分隔线画在**顶上** ⇒ 第一条不画（同 `MenuRow`，走查第 77 条）。
+                now: now, showsSeparator: false
             ) {}
 
             SearchRowView(
@@ -422,7 +423,7 @@ struct RowChevron: View {
                     kind: .pullRequest, number: 51, title: "fix: OAuth 回调地址校验",
                     repoFullName: "my-git/gitduo", state: .merged, updatedAt: now.addingTimeInterval(-259_200)
                 )),
-                now: now, showsSeparator: false
+                now: now, showsSeparator: true
             ) {}
         }
         .padding(.horizontal, Theme.Spacing.page)

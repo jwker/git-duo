@@ -1,9 +1,10 @@
 /* ══ GitDuo 2.0 原型 · 01 · CSS 变量与全局重置 ══ */
 
   :root{
-    /* ⚠️ 2026-10-15 起页面底转纯白（走查第 73 条 · 方案 D「分组平铺」）：
-       层次不再靠「灰底 vs 白卡」的明度差，而靠排版与 hairline —— 卡片容器随之全部去形。 */
-    --bg:#ffffff; --card:#ffffff; --border:#d0d7de; --border-soft:#e8ecef;
+    /* ⚠️ 2026-10-15 起页面底转**浅灰**（走查第 76 条 · 方案 A「无框大卡」）：
+       层次回到「灰底 vs 白卡」的明度差，但**卡片不画边框** —— 与方案 D（页面纯白 + 条目去形）相反。
+       三级层次：页面 `--bg`(灰) → 卡面 `--card`(白) → 卡内控件 `--chip`(灰)。 */
+    --bg:#f6f8fa; --card:#ffffff; --border:#d0d7de; --border-soft:#e8ecef;
     --text:#1f2328; --text2:#656d76; --text3:#8b949e;
     --link:#0969da; --green:#1f883d; --open:#1a7f37; --closed-i:#8250df;
     --closed-p:#cf222e; --merge:#8250df;

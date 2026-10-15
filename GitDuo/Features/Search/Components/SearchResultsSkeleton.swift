@@ -19,27 +19,29 @@ struct SearchResultsSkeleton: View {
     var count = 6
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(0..<count, id: \.self) { index in
-                HStack(alignment: .center, spacing: 11) {
-                    SkeletonBar(height: 32, width: 32, cornerRadius: Theme.Radius.segment)
+        // 方案 A：与真实结果同构 —— 一组行 = 一张白卡（`SearchView` 那处也这么包）。
+        CardBox(vertical: 0, horizontal: 0) {
+            VStack(spacing: 0) {
+                ForEach(0..<count, id: \.self) { index in
+                    HStack(alignment: .center, spacing: 11) {
+                        SkeletonBar(height: 32, width: 32, cornerRadius: Theme.Radius.segment)
 
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        SkeletonBar(height: 14)
-                        SkeletonBar(height: 11, width: 150)
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            SkeletonBar(height: 14)
+                            SkeletonBar(height: 11, width: 150)
+                        }
+
+                        Spacer(minLength: 0)
                     }
-
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 12)
-                .padding(.horizontal, Theme.Spacing.xxs)
-                // 方案 D：与 `SearchRowBox` 一致 —— 分隔线画在顶上、内嵌缩进 45。
-                .overlay(alignment: .topLeading) {
-                    if index > 0 {
-                        Rectangle()
-                            .fill(Theme.Palette.borderSoft)
-                            .frame(height: 1)
-                            .padding(.leading, 45)
+                    // 方案 A：与 `SearchRowBox` 一致（padding 14 / 内嵌缩进 57）。
+                    .padding(14)
+                    .overlay(alignment: .topLeading) {
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Theme.Palette.borderSoft)
+                                .frame(height: 1)
+                                .padding(.leading, 57)
+                        }
                     }
                 }
             }
