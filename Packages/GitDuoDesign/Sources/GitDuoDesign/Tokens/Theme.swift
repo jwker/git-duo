@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// 设计令牌 —— 颜色 / 字号 / 间距 / 圆角的**唯一定义处**。
 ///
@@ -6,37 +11,42 @@ import SwiftUI
 /// 铁律：
 /// 1. 业务代码**禁止写魔法值**（颜色、字号、间距、圆角一律引用本文件的令牌）。
 /// 2. 令牌按**用途**命名，不按色相命名（禁 `gray600` / `blue500` 这类）。
-/// 3. 色值**只在 `light` 一处定义**：本期只交付浅色；将来补深色时只需增加一份映射，不必逐页返工。
+/// 3. 每个色令牌**浅深两列都在本文件**（`Color(light:dark:)`），深色列统一取自
+///    Primer primitives v8.2.0 dark —— 2026-10-15 接通（走查第 69 条）；
+///    此前的口径"只定义浅色、深色只补一列映射"就是照这条路预留的，兑现时没有动任何视图。
 /// 4. ⚠️ Liquid Glass 深浅色的 tint 混合比例不同（浅 ≈30% / 深 ≈50%，§10.4 #4），
 ///    因此**玻璃着色值也必须走令牌**（`glassTint`），不得内联色值。
 public enum Theme {
 
-    // MARK: - 颜色（浅色为唯一实现，取值与原型 `redesign/prototype/styles/01-base.css` 的 `:root` 一致）
+    // MARK: - 颜色（浅深双列；浅色取值与原型 `redesign/prototype/styles/01-base.css` 的 `:root` 一致，
+    //        深色列统一取自 Primer primitives v8.2.0 dark —— 出处标在各令牌行尾）
 
     public enum Palette {
-        public static let background      = Color(hex: 0xF6F8FA)
-        public static let surface         = Color(hex: 0xFFFFFF)
-        public static let surfaceRaised   = Color(hex: 0xFFFFFF)
-        public static let surfaceSunken   = Color(hex: 0xEFF2F5)
-        public static let border          = Color(hex: 0xD0D7DE)
-        public static let borderSoft      = Color(hex: 0xE8ECEF)
+        // 深色列统一取自 Primer primitives v8.2.0 dark（出处标在各令牌下；见 Color.init(light:dark:) 的说明）。
 
-        public static let textPrimary     = Color(hex: 0x1F2328)
-        public static let textSecondary   = Color(hex: 0x656D76)
-        public static let textTertiary    = Color(hex: 0x8B949E)
+        public static let background      = Color(light: 0xF6F8FA, dark: 0x0D1117)  // 深 = bgColor-default
+        public static let surface         = Color(light: 0xFFFFFF, dark: 0x161B22)  // 深 = bgColor-muted
+        public static let surfaceRaised   = Color(light: 0xFFFFFF, dark: 0x161B22)  // 深 = bgColor-muted（同 surface）
+        public static let surfaceSunken   = Color(light: 0xEFF2F5, dark: 0x0D1117)  // 深 = 页面底一档（bgColor-default）：深色下"内凹"= 比卡面暗
+        public static let border          = Color(light: 0xD0D7DE, dark: 0x30363D)  // 深 = borderColor-default
+        public static let borderSoft      = Color(light: 0xE8ECEF, lightAlpha: 1, dark: 0x30363D, darkAlpha: 0.7)  // 深 = borderColor-muted (#30363db3)
 
-        public static let accent          = Color(hex: 0x0969DA)   // 链接 / 强调
-        public static let accentStrong    = Color(hex: 0x1F883D)   // 主按钮（GitHub 绿）
-        public static let destructive     = Color(hex: 0xCF222E)   // 危险操作（删除 / 退出登录）
+        public static let textPrimary     = Color(light: 0x1F2328, dark: 0xE6EDF3)  // 深 = fgColor-default
+        public static let textSecondary   = Color(light: 0x656D76, dark: 0x8D96A0)  // 深 = fgColor-muted
+        public static let textTertiary    = Color(light: 0x8B949E, dark: 0x6E7681)  // 深 = fg.subtle（v8 已无该 token；#6E7681 同其 bgColor-neutral-emphasis 真值）
+
+        public static let accent          = Color(light: 0x0969DA, dark: 0x4493F8)  // 深 = fgColor-accent // 链接 / 强调
+        public static let accentStrong    = Color(light: 0x1F883D, dark: 0x238636)  // 深 = button-primary-bgColor-rest // 主按钮（GitHub 绿）
+        public static let destructive     = Color(light: 0xCF222E, dark: 0xF85149)  // 深 = fgColor-danger // 危险操作（删除 / 退出登录）
 
         /// 状态色沿用 GitHub 语义（PRD §1 / §10.7 一致口径）：
         /// 开放 = 绿 · 已合并 = 紫 · 已关闭 = 红 · 已发布 = 紫
         /// ⚠️ 已合并与已发布**有意同色**——它们同属"完成 / 发布"紫族，
         /// 靠**文案与图标**区分而非颜色（GitHub 网页端同样如此）。改色前先读 ThemeTests 的不变式。
-        public static let stateOpen       = Color(hex: 0x1A7F37)   // 开放 = 绿
-        public static let stateMerged     = Color(hex: 0x8250DF)   // 已合并 = 紫
-        public static let stateReleased   = Color(hex: 0x8250DF)   // 已发布 = 紫（与 merged 同色，见上）
-        public static let stateClosed     = Color(hex: 0xCF222E)   // 已关闭 / 未合并 = 红
+        public static let stateOpen       = Color(light: 0x1A7F37, dark: 0x3FB950)  // 深 = fgColor-open // 开放 = 绿
+        public static let stateMerged     = Color(light: 0x8250DF, dark: 0xAB7DF8)  // 深 = fgColor-done // 已合并 = 紫
+        public static let stateReleased   = Color(light: 0x8250DF, dark: 0xAB7DF8)  // 深 = fgColor-done（与 merged 同色，见上）// 已发布 = 紫
+        public static let stateClosed     = Color(light: 0xCF222E, dark: 0xF85149)  // 深 = fgColor-closed // 已关闭 / 未合并 = 红
 
         // MARK: 状态**胶囊**的底与边（切片 5 新增）
 
@@ -49,18 +59,20 @@ public enum Theme {
         /// ⚠️ **只有三族**：原型里 `.pill.closed-i`（已关闭的 Issue）与 `.pill.merged`
         /// 的底与边**完全相同**（紫族），故不另立一组同值异名的 token
         /// （沿 `stateCompletedIcon` 那条"按族命名、不按单个状态命名"的先例）。
-        public static let stateOpenSurface   = Color(hex: 0xF0FFF4)   // `.pill.open` 底
-        public static let stateOpenBorder    = Color(hex: 0xA4D8B0)   // `.pill.open` 边
-        public static let stateMergedSurface = Color(hex: 0xFAF5FF)   // `.pill.merged` / `.pill.closed-i` 底
-        public static let stateMergedBorder  = Color(hex: 0xD1BCF5)   // 同上，边
-        public static let stateClosedSurface = Color(hex: 0xFFF1F2)   // `.pill.closed-p` 底
-        public static let stateClosedBorder  = Color(hex: 0xF1B8BF)   // `.pill.closed-p` 边
+        // ⚠️ 深色档的"浅底"不再是浅色 —— Primer dark 把 subtle 底定义成**同色相低透明**
+        //（`#2ea0431a` 这类）压在深卡面上。透明度照抄 Primer 的十六进制 alpha 位。
+        public static let stateOpenSurface   = Color(light: 0xF0FFF4, lightAlpha: 1, dark: 0x2EA043, darkAlpha: 0.10)  // `.pill.open` 底（深 = bgColor-open-muted #2ea0431a）
+        public static let stateOpenBorder    = Color(light: 0xA4D8B0, lightAlpha: 1, dark: 0x2EA043, darkAlpha: 0.40)  // `.pill.open` 边（深 = borderColor-open-muted #2ea04366）
+        public static let stateMergedSurface = Color(light: 0xFAF5FF, lightAlpha: 1, dark: 0xAB7DF8, darkAlpha: 0.15)  // `.pill.merged` / `.pill.closed-i` 底（深 = bgColor-done-muted #ab7df826）
+        public static let stateMergedBorder  = Color(light: 0xD1BCF5, lightAlpha: 1, dark: 0xAB7DF8, darkAlpha: 0.40)  // 同上，边（深 = borderColor-done-muted #ab7df866）
+        public static let stateClosedSurface = Color(light: 0xFFF1F2, lightAlpha: 1, dark: 0xF85149, darkAlpha: 0.10)  // `.pill.closed-p` 底（深 = bgColor-closed-muted #f8514926）
+        public static let stateClosedBorder  = Color(light: 0xF1B8BF, lightAlpha: 1, dark: 0xF85149, darkAlpha: 0.40)  // 同上，边（深 = borderColor-closed-muted #f8514966）
 
-        /// diff 行底色 / 文字色
-        public static let diffAddedSurface   = Color(hex: 0xDAFBE1)
-        public static let diffAddedText      = Color(hex: 0x116329)
-        public static let diffDeletedSurface = Color(hex: 0xFFEBE9)
-        public static let diffDeletedText    = Color(hex: 0xCF222E)
+        /// diff 行底色 / 文字色（深色底同样走"同色相低透明"，深色文字取对应 fg 亮档）
+        public static let diffAddedSurface   = Color(light: 0xDAFBE1, lightAlpha: 1, dark: 0x2EA043, darkAlpha: 0.15)  // 深 = bgColor-success-muted #2ea04326
+        public static let diffAddedText      = Color(light: 0x116329, dark: 0x3FB950)  // 深 = fgColor-success
+        public static let diffDeletedSurface = Color(light: 0xFFEBE9, lightAlpha: 1, dark: 0xF85149, darkAlpha: 0.10)  // 深 = bgColor-danger-muted #f851491a
+        public static let diffDeletedText    = Color(light: 0xCF222E, dark: 0xF85149)  // 深 = fgColor-danger
 
         /// 代码面底色 —— 搜索结果「代码」范围的等宽预览行（原型
         /// `styles/01-base.css` 的 `--code-bg:#f6f8fa`，用于 `.sr-code`）。
@@ -70,7 +82,11 @@ public enum Theme {
         /// 一个是页面底，一个是"嵌在白色卡片里的一小块代码面"。将来补深色时两者未必同步变化
         /// （代码面通常要比页面底再深一档才分得出来），届时合并会逼着一起改。
         /// 沿 `repoAvatarSurface` 那条"接近但不是同一个值 ⇒ 两处独立取色"的先例。
-        public static let codeSurface    = Color(hex: 0xF6F8FA)
+        ///
+        /// 深色档兑现了上面的预告：代码面比卡面（`#161b22`）**再深一档**，取页面底
+        /// `#0d1117`（bgColor-default）—— 与浅色的"比卡面浅一档"方向相反，
+        /// 但意图一致：**代码面要和嵌着它的卡面分得开**。
+        public static let codeSurface    = Color(light: 0xF6F8FA, dark: 0x0D1117)
 
         // MARK: 切片 6 新增 —— 语法高亮四色 + 两处浅底（出处见 TECH_SPEC §10.7）
 
@@ -88,10 +104,10 @@ public enum Theme {
         /// ⚠️ 四色**互不相同、且都不等于 `textPrimary`**：
         /// 取错一个（例如把 `syntaxString` 写成 `syntaxComment` 的灰）不会报错，
         /// 只会让代码看起来"颜色怪怪的"。`Slice6ComponentTests` 把这两条都钉住了。
-        public static let syntaxKeyword  = Color(hex: 0xCF222E)
-        public static let syntaxFunction = Color(hex: 0x8250DF)
-        public static let syntaxString   = Color(hex: 0x0A3069)
-        public static let syntaxComment  = Color(hex: 0x6E7781)
+        public static let syntaxKeyword  = Color(light: 0xCF222E, dark: 0xFF7B72)  // 深 = prettylights.syntax.keyword
+        public static let syntaxFunction = Color(light: 0x8250DF, dark: 0xD2A8FF)  // 深 = prettylights.syntax.entity
+        public static let syntaxString   = Color(light: 0x0A3069, dark: 0xA5D6FF)  // 深 = prettylights.syntax.string
+        public static let syntaxComment  = Color(light: 0x6E7781, dark: 0x8B949E)  // 深 = prettylights.syntax.comment
 
         /// **强调色的浅底** —— 原型 `styles/04-screens.css` 的
         /// `.hunk{background:#ddf4ff}` **与** `.sha{background:#ddf4ff}`。
@@ -103,7 +119,11 @@ public enum Theme {
         ///
         /// ⚠️ 它与 `accentSurface`（`#F0F6FF`，筛选 chip 选中态）**不是**同一个值：
         /// 这个偏青一档、那个偏灰一档。混用会让 hunk 头与"已选 chip"看起来像同一族控件。
-        public static let accentSubtle   = Color(hex: 0xDDF4FF)
+        ///
+        /// ⚠️ **深色档两处同值**（都取 `bgColor-accent-muted` 的 `#388bfd1a`）—— 有意的合并：
+        /// Primer dark 只给了这一档"强调淡底"，浅色下那 0.06 的色相差在深底上不可辨。
+        /// 两个令牌**仍然分开定义**（沿"同值不是同一个令牌"的判例），将来要拆随时能拆。
+        public static let accentSubtle   = Color(light: 0xDDF4FF, lightAlpha: 1, dark: 0x388BFD, darkAlpha: 0.10)
 
         /// **行内代码**的底 —— 原型 `styles/04-screens.css` 的
         /// `.markdown code{background:rgba(175,184,193,.35)}`。
@@ -111,7 +131,10 @@ public enum Theme {
         /// ⚠️ 它是**半透明**的：行内代码嵌在正文段落里，底必须能透出下面的卡片白
         /// （照 `toastSurface` 那条"带透明度是刻意的"先例）。换成不透明色会让这一小段
         /// 看起来像贴上去的贴纸。
-        public static let codeInlineSurface = Color(hex: 0xAFB8C1).opacity(0.35)
+        ///
+        /// 深色取 `bgColor-neutral-muted`（`#6e768166`，alpha 0.4）—— 透出的是**深卡面**，
+        /// 透明度照抄 Primer 的 `66` 位。
+        public static let codeInlineSurface = Color(light: 0xAFB8C1, lightAlpha: 0.35, dark: 0x6E7681, darkAlpha: 0.4)
 
         // MARK: 状态**图标**的配色（与上面那组"状态胶囊"的配色**不是**同一套值）
 
@@ -122,6 +145,9 @@ public enum Theme {
         /// 原型里这两套颜色是分开的，对应 GitHub 自家的做法：octicon 的图标色比标签色亮一档。
         /// 混用的后果不是"报错"，而是"图标与旁边那颗状态点颜色微妙地不一致"——
         /// 看起来像渲染坏了，而排查时很难想到是取错了 token。
+        ///
+        /// ⚠️ **深浅同值**（`#3fb950`）：GitHub 深色下 octicon 的开放绿就是它
+        /// —— 浅色档本来就是从深色那档借来的亮绿，两档恰好归一。
         public static let stateOpenIcon     = Color(hex: 0x3FB950)
 
         /// 「完成」紫的**图标**色 —— 原型 `.ic-closed-i` / `.ic-merge{fill:#a371f7}`。
@@ -131,7 +157,9 @@ public enum Theme {
         /// 所以它按**族**命名，不按单个状态命名 —— 按状态命名会让下一次"另一张卡也要用它"
         /// 时冒出一个同值不同名的新 token。
         /// ⚠️ 同样与状态胶囊的紫 `stateMerged`（`#8250DF`）不是同一个值。
-        public static let stateCompletedIcon = Color(hex: 0xA371F7)
+        /// 深色取 `fgColor-done`（`#ab7df8`）—— 深色下它反而与 `stateMerged` 同值了
+        /// （Primer dark 把 fg 与 icon 两档合并），图标与标签的一致性由 GitHub 自己背书。
+        public static let stateCompletedIcon = Color(light: 0xA371F7, dark: 0xAB7DF8)
 
         // MARK: 切片 4 新增（出处与理由见 TECH_SPEC §10.7）
 
@@ -140,13 +168,19 @@ public enum Theme {
         /// ⚠️ 只用于**星形图标的填充 / 描边**，绝不用作文字色或背景色：
         /// 金色在白底上的对比度不足 2:1，承载正文必然读不清。
         /// 它与 `stateOpen`（开放 = 绿）毫无语义关系，别因为"都是好看的颜色"而合并。
-        public static let starActive     = Color(hex: 0xEAC54F)
+        ///
+        /// 深色取 `#e3b341`（GitHub Dark 的 yellow，`primer/github-vscode-theme` 官方表）
+        /// —— GitHub 深色下"已 Star"的星就是这一档，比浅色金再亮半档。
+        public static let starActive     = Color(light: 0xEAC54F, dark: 0xE3B341)
 
         /// 语言构成占比条里**「其他」段**的中性填充（原型 `scripts/10-explore-repo.js` 的 `#d1d5da`）。
         ///
         /// 它只表示"这里是若干语言的合计"，**不表示任何状态** ——
         /// 所以既不复用状态色，也不走 `LanguageColor`（那个表的每一项都对应一个真实语言）。
-        public static let shareNeutral   = Color(hex: 0xD1D5DA)
+        ///
+        /// 深色取 `#6e7681`（v8.2.0 `bgColor-neutral-emphasis` 真值）：深色下"不抢眼"
+        /// 的方向是**更暗**（浅色下是更浅），见 `ThemeTests` 的双档断言。
+        public static let shareNeutral   = Color(light: 0xD1D5DA, dark: 0x6E7681)
 
         /// 筛选 chip 的**已选**底色（原型 `styles/03-components.css` 的 `.fchip.on{background:#f0f6ff}`）。
         ///
@@ -154,7 +188,9 @@ public enum Theme {
         /// 它是"强调色的极浅底"——与 `accent`（`#0969DA`）成对使用：
         /// chip 选中时**底 + 边框 + 文字**三处都是强调色的不同浓淡。
         /// ⚠️ 不要拿 `surfaceSunken` 顶替：那是中性灰，会让"已选"看起来像"禁用"。
-        public static let accentSurface  = Color(hex: 0xF0F6FF)
+        ///
+        /// ⚠️ **深色档与 `accentSubtle` 同值**（`#388bfd1a`）—— 有意合并，见那边的说明。
+        public static let accentSurface  = Color(light: 0xF0F6FF, lightAlpha: 1, dark: 0x388BFD, darkAlpha: 0.10)
 
         // MARK: 轻提示（Toast）—— 原型 `styles/05-overlays.css` 的 `.toast`
 
@@ -163,10 +199,14 @@ public enum Theme {
         /// ⚠️ 它**不是** `repoAvatarSurface`（`#24292F`）——两个值很接近但来源不同：
         /// 那个是图标块的实色底，这个是**带 8% 透明**的浮层底（要能透出一点下面的内容，
         /// 才不至于像一块贴上去的不透明补丁）。混用会让 Toast 显得比原型"实"。
-        public static let toastSurface   = Color(hex: 0x1C2024).opacity(0.92)
+        ///
+        /// 深色取 `#292e36`（v8.2.0 `control-bgColor-hover`）压 0.92：深色页面上 Toast
+        /// 要比页面底（`#0d1117`）**亮**才浮得起来，取"浮起控件"那一档的真值。
+        public static let toastSurface   = Color(light: 0x1C2024, lightAlpha: 0.92, dark: 0x292E36, darkAlpha: 0.92)
 
         /// Toast 上的文字色。**一个不透明纯白** —— 它压在 `toastSurface` 上，
         /// 对比度约 15:1，远超 AA；但也正因如此它**只能**用在深底上（放白底上读不出来）。
+        /// ⚠️ **深浅同值**：两档的 Toast 底都是深色（深色档取亮一档的 `#292e36`），白字两档都成立。
         public static let toastText      = Color(hex: 0xFFFFFF)
 
         /// 仓库图标块的底色（原型 `.repo-avatar{background:#24292f}`，白色字形压在上面）。
@@ -174,19 +214,25 @@ public enum Theme {
         /// ⚠️ 它与 `textPrimary`（`#1F2328`）**接近但不是同一个值**，是两处独立取色：
         /// 一个是"正文最深的字"，一个是"图标块的底"。混用会在将来补深色时
         /// 把两者一起改掉，而它们并不该同步变化。
-        public static let repoAvatarSurface = Color(hex: 0x24292F)
+        ///
+        /// 深色取 `#21262d`（v8.2.0 `control-bgColor-rest`）：深卡面（`#161b22`）上
+        /// 亮一档的灰块，白字形照旧压得读出（≥ 14:1）。
+        public static let repoAvatarSurface = Color(light: 0x24292F, dark: 0x21262D)
 
         /// 头像图片**取不到时**的兜底配色（原型 `scripts/10-explore-repo.js` 的 8 色）。
         ///
         /// 取色下标由登录名的稳定哈希决定 —— **不要用 `hashValue`**（Swift 的哈希每个进程随机化，
         /// 同一账号会在每次启动后换色，甚至在一次会话里因列表重绘而换色）。
+        ///
+        /// ⚠️ **深浅同值**：这是**内容色**（GitHub 语言色系），GitHub 深色界面直接沿用
+        /// 同一套 —— 不走主题映射。
         public static let avatarFallback: [Color] = [
             Color(hex: 0x1F883D), Color(hex: 0x8250DF), Color(hex: 0xD73A4A), Color(hex: 0xE16F24),
             Color(hex: 0x0075CA), Color(hex: 0xDB61A2), Color(hex: 0x5B3A8E), Color(hex: 0x0E8A16),
         ]
 
-        /// 玻璃着色值（浅色约 30% 混合 —— §10.4 #4）
-        public static let glassTint       = Color(hex: 0xFFFFFF).opacity(0.30)
+        /// 玻璃着色值（浅色约 30% 混合，**深色 50%** —— §10.4 #4：两种模式混合比例不同）
+        public static let glassTint       = Color(light: 0xFFFFFF, lightAlpha: 0.30, dark: 0xFFFFFF, darkAlpha: 0.50)
 
         // MARK: 切片 7 新增（出处与理由见 TECH_SPEC §10.7）
 
@@ -204,7 +250,10 @@ public enum Theme {
         /// 混用（例如拿 `background` 顶替）不会报错，只会让气泡的头看起来**和卡片外的页面底
         /// 一模一样**，于是"气泡从哪开始"这件事在白底上失去线索。
         /// 沿 `codeSurface` / `background` 那条"接近但不是同一个值 ⇒ 两处独立取色"的先例。
-        public static let bubbleHeaderSurface = Color(hex: 0xF9FAFB)
+        ///
+        /// 深色取 `#21262d`（v8.2.0 `control-bgColor-rest`）：深色下分层方向反转，
+        /// 头条要比气泡体（卡面 `#161b22`）**亮**一档才分得出来。
+        public static let bubbleHeaderSurface = Color(light: 0xF9FAFB, dark: 0x21262D)
 
         /// **色值读不出来时**的兜底填充（标签胶囊 / 色块）。
         ///
@@ -225,6 +274,9 @@ public enum Theme {
         /// 沿 `codeSurface` / `background` 那条"同值不是同一个令牌、将来未必同步变化"的判例。
         /// ⚠️ 别拿 `textSecondary`（`#656D76`）顶替 —— 那是个**文字**令牌，
         /// 让"按用途命名"这条规矩当场失效（下次有人想改正文次级色就会动到标签的底）。
+        ///
+        /// ⚠️ **深浅同值**：它的判据是"**白字压上去读得出来**"（≥ 4.8:1），
+        /// 这一条在深底上同样成立（`#6A737D` 压 `#161b22` 也分得开）⇒ 不需要深色变体。
         public static let labelFallbackSurface = Color(hex: 0x6A737D)
 
         // MARK: 切片 9 新增（出处与理由见 TECH_SPEC §9.14 / 决策 #74③）
@@ -261,12 +313,16 @@ public enum Theme {
         /// 领域层那边 `translate` 会按"有没有贡献"兜底（不会崩），
         /// 这里 `ContributionHeatmap` 会把越界的档位夹到最后一个颜色（也不会崩）——
         /// 两处都不报错，只是图变得不准。**改档位数时请两边一起改**。
+        ///
+        /// 深色档取 GitHub 贡献日历官方深色五档
+        ///（`#161b22 #0e4429 #006d32 #26a641 #39d353`，2026-10-15 多源核对）——
+        /// 它不在 Primer functional tokens 里，是日历组件的专属配色。
         public static let heatmapLevels: [Color] = [
-            Color(hex: 0xEBEDF0),   // 无贡献（`.hm-cell` 的底色）
-            Color(hex: 0x9BE9A8),   // `.l1`
-            Color(hex: 0x40C463),   // `.l2`
-            Color(hex: 0x30A14E),   // `.l3`
-            Color(hex: 0x216E39),   // `.l4`
+            Color(light: 0xEBEDF0, dark: 0x161B22),   // 无贡献（`.hm-cell` 的底色）
+            Color(light: 0x9BE9A8, dark: 0x0E4429),   // `.l1`
+            Color(light: 0x40C463, dark: 0x006D32),   // `.l2`
+            Color(light: 0x30A14E, dark: 0x26A641),   // `.l3`
+            Color(light: 0x216E39, dark: 0x39D353),   // `.l4`
         ]
     }
 
@@ -480,3 +536,99 @@ extension Color {
         )
     }
 }
+
+/// **双列动态色**（TECH_SPEC §10.7 预留的那条路，2026-10-15 接通）：
+/// 每个语义令牌给浅 / 深两列十六进制，运行时按系统的 trait collection 求值。
+///
+/// ## 为什么走 `UIColor`/`NSColor` 的 dynamic provider，而不是资产目录
+///
+/// - 两列色值**都留在本文件里**：review 时一眼看到一对值，`ThemeTests` 也能
+///   直接读分量做对比度断言（资产目录方案要把 56 个色值搬进 `Contents.json`，
+///   色值离开代码，断言就只能去读 JSON）。
+/// - 视图层**零改动**：令牌名一个不变，`Theme.Palette.x` 依旧是一个 `Color`，
+///   只是它不再是一个常量 —— SwiftUI 会在每次取色时按当前 scheme 求。
+///
+/// ## ⚠️ 深色列的唯一来源
+///
+/// 全部取自 **Primer primitives v8.2.0 `dist/docs/functional/themes/dark.json`**
+/// （2026-10-15 实抓；这一版与浅色令牌的出处同期、成套自洽）。**不要凭记忆改深色值**
+/// —— 语法四色与热力图五档是 GitHub 代码页 / 贡献日历的专属配色（不在 functional
+/// tokens 里），出处见各自注释。深浅两列都写死在这份表里 ⇒ 调整必须成对出现。
+extension Color {
+    /// 不带透明度的双列色。
+    init(light: UInt32, dark: UInt32) {
+        self.init(light: light, lightAlpha: 1, dark: dark, darkAlpha: 1)
+    }
+
+    /// 带透明度的双列色（`toastSurface` / `codeInlineSurface` / `glassTint` 那三档）。
+    ///
+    /// ⚠️ 透明度也必须**进表**：深浅两档的底色与"透出多少"要一起调
+    /// （例：玻璃 tint 浅 30% / 深 50%，§10.4 #4）—— 所以四个参数一次给全。
+    init(light: UInt32, lightAlpha: Double, dark: UInt32, darkAlpha: Double) {
+        #if canImport(UIKit)
+        self.init(uiColor: dynamicUIColor(light: light, lightAlpha: lightAlpha,
+                                          dark: dark, darkAlpha: darkAlpha))
+        #elseif canImport(AppKit)
+        self.init(nsColor: dynamicNSColor(light: light, lightAlpha: lightAlpha,
+                                          dark: dark, darkAlpha: darkAlpha))
+        #else
+        // 兜底（当前 platforms 只有 iOS / macOS，理论上走不到）：退化为浅色静态值。
+        self.init(
+            .sRGB,
+            red: Double((light >> 16) & 0xFF) / 255,
+            green: Double((light >> 8) & 0xFF) / 255,
+            blue: Double(light & 0xFF) / 255,
+            opacity: lightAlpha
+        )
+        #endif
+    }
+}
+
+#if canImport(UIKit)
+/// 十六进制 → `UIColor`（供 dynamic provider 闭包用 —— 闭包必须返回 `UIColor`，
+/// 不能直接构造 SwiftUI 的 `Color`，否则运行时拿到的是"已解析死"的静态色）。
+private func uiColor(hex: UInt32, alpha: Double) -> UIColor {
+    UIColor(
+        red: CGFloat((hex >> 16) & 0xFF) / 255,
+        green: CGFloat((hex >> 8) & 0xFF) / 255,
+        blue: CGFloat(hex & 0xFF) / 255,
+        alpha: CGFloat(alpha)
+    )
+}
+
+/// 深浅双列 → 按 trait collection 现场求值的 `UIColor`。
+private func dynamicUIColor(light: UInt32, lightAlpha: Double,
+                            dark: UInt32, darkAlpha: Double) -> UIColor {
+    UIColor { trait in
+        let isDark = trait.userInterfaceStyle == .dark
+        let hex = isDark ? dark : light
+        let alpha = isDark ? darkAlpha : lightAlpha
+        return uiColor(hex: hex, alpha: alpha)
+    }
+}
+#endif
+
+#if canImport(AppKit) && !canImport(UIKit)
+private func nsColor(hex: UInt32, alpha: Double) -> NSColor {
+    NSColor(
+        srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+        green: CGFloat((hex >> 8) & 0xFF) / 255,
+        blue: CGFloat(hex & 0xFF) / 255,
+        alpha: CGFloat(alpha)
+    )
+}
+
+private func dynamicNSColor(light: UInt32, lightAlpha: Double,
+                            dark: UInt32, darkAlpha: Double) -> NSColor {
+    // ⚠️ 实测（2026-10-15 探针，.workbuddy/probe-dynamic-color.swift）：这条 provider
+    //    的 resolve 在**非主线程会死锁**（后台线程"resolving…"后不再返回；主线程毫秒级完成）。
+    //    本 App 的 target 是 iOS（走 UIColor 那条，不受影响）；macOS 只是包级声明
+    //    （swift test 跑 macOS 变体，测试已在 `ThemeTests` 标 `@MainActor` 绕开）。
+    //    若哪天真的构建 macOS App：所有取色必须发生在主线程，否则渲染线程一碰就挂。
+    NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return nsColor(hex: isDark ? dark : light,
+                       alpha: isDark ? darkAlpha : lightAlpha)
+    }
+}
+#endif

@@ -14,7 +14,7 @@ import SwiftUI
 ///
 /// | 行 | 动作 |
 /// |---|---|
-/// | 主题 | **没有**（本期仅浅色，不提供切换器 —— §4.20） |
+/// | 主题 | **有** → 三档 `Menu`（跟随系统 / 浅色 / 深色；2026-10-15 起，走查第 **69** 条 —— 旧口径"本期仅浅色、不提供切换器"同日推翻补记） |
 /// | GitHub App · 账号 | **没有**（它显示的是一个事实） |
 /// | 前往 GitHub 手动撤销授权 | 有 → 开浏览器 |
 /// | 清除缓存 | 有 → 清接口缓存 |
@@ -64,6 +64,12 @@ struct SettingsView: View {
     /// ⇒ 不需要重置逻辑，也没有可测的领域数据要交给 ViewModel。
     @State private var isSigningOut = false
 
+    /// 外观偏好（走查第 69 条）。⚠️ **裸键、非账号命名空间**（§3.8：登出不删 UI 偏好），
+    /// 详见 `AppAppearance`。这里只写回存储 —— 真正把它变成界面的是
+    /// `GitDuoApp` 根部的 `.preferredColorScheme`（它也在读同一个键），
+    /// 本页自己**不挂**任何 scheme 修饰符：挂了会把切换效果限制在设置页这一棵子树里。
+    @AppStorage(AppAppearance.storageKey) private var appearanceRaw = AppAppearance.system.rawValue
+
     init(login: String, cache: HTTPResponseCache, toast: ToastCenter) {
         _model = State(initialValue: SettingsViewModel(
             login: login,
@@ -111,10 +117,45 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: ProfileCopy.sectionAppearance)
             MenuCard {
-                // ⚠️ 纯展示：本期仅浅色（§4.20）。`action` 不给 ⇒ 不是按钮。
-                MenuRow(title: ProfileCopy.themeRow, value: ProfileCopy.themeValue)
+                // ⚠️ 2026-10-15 起是切换器（走查第 69 条）：整行一个 `Menu`，
+                //    弹三档 `Picker`。行本身还是 `MenuRow` 的样子（值 + 尖角），
+                //    `Menu` 负责点击 —— 尖角是"这行能点开"的信号（形状即信号，走查第 66 条）。
+                //    ⚠️ 它是本卡片**唯一的一行** ⇒ 分隔线关掉。
+                Menu {
+                    Picker(ProfileCopy.themeRow, selection: appearanceBinding) {
+                        ForEach(AppAppearance.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                } label: {
+                    themeRow
+                }
             }
         }
+    }
+
+    /// 「主题」那一行。右侧值显示**用户选的档**（不是当前实际生效的模式 ——
+    /// "跟随系统"选中时若写"浅色"，用户就找不到那个跟着系统变的开关在哪儿）。
+    private var themeRow: some View {
+        let appearance = AppAppearance.stored(appearanceRaw)
+        let isDark = colorScheme == .dark
+        return MenuRow(
+            title: ProfileCopy.themeRow,
+            value: ProfileCopy.appearanceValue(isFollowingSystem: appearance == .system, isDark: isDark),
+            accessory: .chevron,
+            showsSeparator: false
+        )
+    }
+
+    /// 当前**实际生效**的深浅（跟系统档时读系统）—— 只用于右侧值的展示语义。
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// 三档的写回绑定（`@AppStorage` 存的是 rawValue 字符串）。
+    private var appearanceBinding: Binding<AppAppearance> {
+        Binding(
+            get: { AppAppearance.stored(appearanceRaw) },
+            set: { appearanceRaw = $0.rawValue }
+        )
     }
 
     /// 「账户」分区 —— ⚠️ **「退出登录」已经不在这一张卡片里**（搬去了 `signOutSection`）。

@@ -44,17 +44,22 @@ struct Slice8ComponentTests {
 
         // ⚠️ 两档**必须真的不同** —— 混用不会报错，只会让 §5.9 那条提示
         //（"将创建新分支…改动不直接进 main"）看起来像一条报错。
-        #expect(add.foreground != danger.foreground)
-        #expect(add.surface != danger.surface)
+        // （动态色时代 `!=` 比实例身份 ⇒ 改比 resolve 分量，两档各钉一次。）
+        #expect(ColorResolve.distinct(add.foreground, danger.foreground, .light))
+        #expect(ColorResolve.distinct(add.foreground, danger.foreground, .dark))
+        #expect(ColorResolve.distinct(add.surface, danger.surface, .light))
+        #expect(ColorResolve.distinct(add.surface, danger.surface, .dark))
     }
 
     @Test("⚠️ 四色与原型 `01-base.css` 的值**逐字相同**（值冻结在这里，改动必须过这一关）")
     func noticeBarToneColoursAreFrozen() {
         // 原型：`--add-bg:#dafbe1; --add-tx:#116329; --del-bg:#ffebe9; --del-tx:#cf222e;`
-        #expect(Theme.Palette.diffAddedSurface == Color(hex: 0xDAFBE1))
-        #expect(Theme.Palette.diffAddedText == Color(hex: 0x116329))
-        #expect(Theme.Palette.diffDeletedSurface == Color(hex: 0xFFEBE9))
-        #expect(Theme.Palette.diffDeletedText == Color(hex: 0xCF222E))
+        // ⚠️ 动态色时代 `Color ==` 比实例身份 ⇒ 比浅色列的 resolve 分量
+        //（冻结的是**浅色**列 = 原型值；深色列出处见 `Theme.swift` 行尾）。
+        #expect(ColorResolve.same(Theme.Palette.diffAddedSurface, Color(hex: 0xDAFBE1), .light))
+        #expect(ColorResolve.same(Theme.Palette.diffAddedText, Color(hex: 0x116329), .light))
+        #expect(ColorResolve.same(Theme.Palette.diffDeletedSurface, Color(hex: 0xFFEBE9), .light))
+        #expect(ColorResolve.same(Theme.Palette.diffDeletedText, Color(hex: 0xCF222E), .light))
 
         // ⚠️ "借 diff 那两对"这件事本身是**已登记待评审**的（见 `NoticeBar` 抬头）——
         // 这一条只是把"借的是哪两对"钉住，不改变那个待评审状态。
@@ -75,14 +80,19 @@ struct Slice8ComponentTests {
         // —— `--closed-p` 正是本仓的 `Palette.destructive`（`0xCF222E`）。
         let row = SheetRow(title: "删除文件", titleTone: .destructive, action: {})
         #expect(row.titleColor == Theme.Palette.destructive)
-        #expect(row.titleColor == Color(hex: 0xCF222E))
+        // （动态色时代 `Color ==` 比实例身份 ⇒ 冻结值改比浅色列的 resolve 分量。）
+        #expect(ColorResolve.same(row.titleColor, Color(hex: 0xCF222E), .light))
 
         // 写成 `textPrimary` / `textSecondary` 不会报错，只会让"这是破坏性操作"
         // 这条信息在画面上**完全消失**（点进去才知道）。
-        #expect(row.titleColor != Theme.Palette.textPrimary)
-        #expect(row.titleColor != Theme.Palette.textSecondary)
+        // （动态色时代 `!=` 比实例身份 ⇒ 改比 resolve 分量，两档各钉一次。）
+        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textPrimary, .light))
+        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textPrimary, .dark))
+        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textSecondary, .light))
+        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textSecondary, .dark))
         // 也别被标签兜底色串了（那是"白字压上去的底"，这里是"深色压在白底上的字"）。
-        #expect(row.titleColor != Theme.Palette.labelFallbackSurface)
+        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.labelFallbackSurface, .light))
+        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.labelFallbackSurface, .dark))
     }
 
     @Test("⚠️ 危险色只改**标题** —— 图标仍是次级色（原型 `.sheet-row svg{stroke:var(--text2)}` 写死）")

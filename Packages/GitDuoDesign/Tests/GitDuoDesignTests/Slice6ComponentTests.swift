@@ -35,12 +35,14 @@ struct Slice6ComponentTests {
     func syntaxColorsAreFrozen(_ hex: UInt32, _ name: String) {
         // 取错一个（例如把 `syntaxString` 写成 `syntaxComment` 的灰）不会报错，
         // 只会让代码看起来"颜色怪怪的" ⇒ 把四个值钉死，改了必须过这一关。
+        // ⚠️ 动态色时代 `Color ==` 比实例身份 ⇒ 改比 resolve 分量。
+        // 冻结的是**浅色**列（= 原型值）；深色列的出处见 `Theme.swift` 行尾。
         let expected = Color(hex: hex)
         switch name {
-        case "syntaxKeyword": #expect(Theme.Palette.syntaxKeyword == expected)
-        case "syntaxFunction": #expect(Theme.Palette.syntaxFunction == expected)
-        case "syntaxString": #expect(Theme.Palette.syntaxString == expected)
-        default: #expect(Theme.Palette.syntaxComment == expected)
+        case "syntaxKeyword": #expect(ColorResolve.same(Theme.Palette.syntaxKeyword, expected, .light))
+        case "syntaxFunction": #expect(ColorResolve.same(Theme.Palette.syntaxFunction, expected, .light))
+        case "syntaxString": #expect(ColorResolve.same(Theme.Palette.syntaxString, expected, .light))
+        default: #expect(ColorResolve.same(Theme.Palette.syntaxComment, expected, .light))
         }
     }
 
@@ -52,14 +54,18 @@ struct Slice6ComponentTests {
             Theme.Palette.syntaxString,
             Theme.Palette.syntaxComment,
         ]
-        // 逐对比而不是塞进 `Set`：失败时能直接指出是哪一对撞了。
-        for (index, lhs) in colors.enumerated() {
-            for rhs in colors[(index + 1)...] {
-                #expect(lhs != rhs)
+        // ⚠️ 动态色时代 `!=` 比实例身份 ⇒ 改比 resolve 分量，**两档各钉一次**
+        //（深色四色 `#ff7b72 / #d2a8ff / #a5d6ff / #8b949e` 同样两两互异）。
+        for scheme in [ColorScheme.light, .dark] {
+            // 逐对比而不是塞进 `Set`：失败时能直接指出是哪一对撞了。
+            for (index, lhs) in colors.enumerated() {
+                for rhs in colors[(index + 1)...] {
+                    #expect(ColorResolve.distinct(lhs, rhs, scheme))
+                }
+                // 任何一档都不许退化成"不着色"（那就等于这一档没有实现）。
+                #expect(ColorResolve.distinct(lhs, Theme.Palette.textPrimary, scheme))
+                #expect(ColorResolve.distinct(lhs, .clear, scheme))
             }
-            // 任何一档都不许退化成"不着色"（那就等于这一档没有实现）。
-            #expect(lhs != Theme.Palette.textPrimary)
-            #expect(lhs != Color.clear)
         }
     }
 
@@ -72,14 +78,21 @@ struct Slice6ComponentTests {
         #expect(CodeSurface.color(.function) == Theme.Palette.syntaxFunction)
     }
 
-    @Test("⚠️ `accentSubtle`（hunk 头的底）与 `accentSurface`（筛选 chip 选中态）**不是同一个值**")
+    @Test("⚠️ `accentSubtle`（hunk 头的底）与 `accentSurface`（筛选 chip 选中态）：浅色两个值，深色**有意同值**（已登记）")
     func accentSubtleIsNotAccentSurface() {
-        // 两个都是"强调色的浅底"，值很接近但来源不同（`#DDF4FF` 偏青 / `#F0F6FF` 偏灰）。
-        // 混用会让 diff 的 hunk 头与"已选 chip"看起来像同一族控件。
-        #expect(Theme.Palette.accentSubtle != Theme.Palette.accentSurface)
+        // 浅色两档是两个值（`#DDF4FF` 偏青 / `#F0F6FF` 偏灰）：混用会让 diff 的
+        // hunk 头与"已选 chip"看起来像同一族控件。
+        // ⚠️ 2026-10-15 深色列两档**有意合并**（都是 `#388BFD@0.10`，Primer 深色
+        // 本就只有一档"强调浅底"）—— 已在 `Theme.swift` 登记，所以深色档反过来
+        // 钉"就是同值"，哪天有人想拆开必须先看见这条。
+        // （动态色时代 `==` / `!=` 比实例身份 ⇒ 全部改比 resolve 分量。）
+        #expect(ColorResolve.distinct(Theme.Palette.accentSubtle, Theme.Palette.accentSurface, .light))
+        #expect(ColorResolve.same(Theme.Palette.accentSubtle, Theme.Palette.accentSurface, .dark))
         // 行内代码的底是**半透明**的（要能透出下面的卡片白），不能换成不透明色。
-        #expect(Theme.Palette.codeInlineSurface != Theme.Palette.surface)
-        #expect(Theme.Palette.codeInlineSurface != Theme.Palette.surfaceSunken)
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(ColorResolve.distinct(Theme.Palette.codeInlineSurface, Theme.Palette.surface, scheme))
+            #expect(ColorResolve.distinct(Theme.Palette.codeInlineSurface, Theme.Palette.surfaceSunken, scheme))
+        }
     }
 
     // MARK: - DiffRow 六档
@@ -101,8 +114,11 @@ struct Slice6ComponentTests {
         // 三档"没有底色"的必须是**同一个值** —— 各画各的会多出三种看不见的偏差。
         #expect(DiffRow.surface(.context) == DiffRow.surface(.note))
         #expect(DiffRow.surface(.note) == DiffRow.surface(.content))
-        #expect(DiffRow.surface(.context) != DiffRow.surface(.added))
-        #expect(DiffRow.surface(.context) != DiffRow.surface(.hunk))
+        // ⚠️ 动态色时代 `!=` 比实例身份 ⇒ 与"有底"两档的互异改比 resolve 分量（两档都钉）。
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(ColorResolve.distinct(DiffRow.surface(.context), DiffRow.surface(.added), scheme))
+            #expect(ColorResolve.distinct(DiffRow.surface(.context), DiffRow.surface(.hunk), scheme))
+        }
     }
 
     @Test("行文字色：增删各有色，hunk 头走强调色，注解比正文轻一档、未知行与正文同重")
@@ -116,7 +132,9 @@ struct Slice6ComponentTests {
 
         // ⚠️ **两档中性色不许串味**：`.note` 是注解（轻）、`.content` 是原文（重）。
         // 两者都取 `textPrimary` 的话，`\ No newline` 会看起来像一行代码。
-        #expect(DiffRow.textColor(.note) != DiffRow.textColor(.content))
+        // （动态色时代 `!=` 比实例身份 ⇒ 改比 resolve 分量，两档各钉一次。）
+        #expect(ColorResolve.distinct(DiffRow.textColor(.note), DiffRow.textColor(.content), .light))
+        #expect(ColorResolve.distinct(DiffRow.textColor(.note), DiffRow.textColor(.content), .dark))
     }
 
     @Test("读屏前缀只补增 / 删两个记号 —— 它们是 diff 格式自身的符号，不是产品文案")

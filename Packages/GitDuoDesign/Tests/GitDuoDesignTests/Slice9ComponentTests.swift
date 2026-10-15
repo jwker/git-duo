@@ -34,19 +34,24 @@ struct Slice9ComponentTests {
 
         // ⚠️ 第 0 档必须是**无贡献**那个最浅的灰。它与第 1 档若颠倒，
         // 整张图会变成"贡献越多越白"——而那种图看起来仍然像一张热力图。
-        #expect(Theme.Palette.heatmapLevels[0] != Theme.Palette.heatmapLevels[1])
-        #expect(Theme.Palette.heatmapLevels[4] != Theme.Palette.heatmapLevels[3])
+        // （动态色时代 `!=` 比实例身份 ⇒ 改比 resolve 分量，两档各钉一次。）
+        #expect(ColorResolve.distinct(Theme.Palette.heatmapLevels[0], Theme.Palette.heatmapLevels[1], .light))
+        #expect(ColorResolve.distinct(Theme.Palette.heatmapLevels[0], Theme.Palette.heatmapLevels[1], .dark))
+        #expect(ColorResolve.distinct(Theme.Palette.heatmapLevels[4], Theme.Palette.heatmapLevels[3], .light))
+        #expect(ColorResolve.distinct(Theme.Palette.heatmapLevels[4], Theme.Palette.heatmapLevels[3], .dark))
     }
 
     @Test("⚠️ 五个色值与原型 `styles/04-screens.css` 第 71–72 行**逐字相同**（冻结在这里）")
     func heatmapPaletteIsFrozenToPrototype() {
         // 原型：`.hm-cell{background:#ebedf0}` / `.l1 #9be9a8` / `.l2 #40c463`
         //      / `.l3 #30a14e` / `.l4 #216e39`
-        #expect(Theme.Palette.heatmapLevels[0] == Color(hex: 0xEBEDF0))
-        #expect(Theme.Palette.heatmapLevels[1] == Color(hex: 0x9BE9A8))
-        #expect(Theme.Palette.heatmapLevels[2] == Color(hex: 0x40C463))
-        #expect(Theme.Palette.heatmapLevels[3] == Color(hex: 0x30A14E))
-        #expect(Theme.Palette.heatmapLevels[4] == Color(hex: 0x216E39))
+        // ⚠️ 动态色时代 `Color ==` 比实例身份 ⇒ 比浅色列的 resolve 分量
+        //（冻结的是**浅色**列 = 原型值；深色档取 GitHub 日历官方深色，见 `Theme.swift` 行尾）。
+        #expect(ColorResolve.same(Theme.Palette.heatmapLevels[0], Color(hex: 0xEBEDF0), .light))
+        #expect(ColorResolve.same(Theme.Palette.heatmapLevels[1], Color(hex: 0x9BE9A8), .light))
+        #expect(ColorResolve.same(Theme.Palette.heatmapLevels[2], Color(hex: 0x40C463), .light))
+        #expect(ColorResolve.same(Theme.Palette.heatmapLevels[3], Color(hex: 0x30A14E), .light))
+        #expect(ColorResolve.same(Theme.Palette.heatmapLevels[4], Color(hex: 0x216E39), .light))
 
         // ⚠️ 这一条是**反万圣节**的那一条：这五个值**不是** GraphQL 的
         // `contributionCalendar.colors` 返回的那套（那套在十月底会被服务端换成南瓜色）。

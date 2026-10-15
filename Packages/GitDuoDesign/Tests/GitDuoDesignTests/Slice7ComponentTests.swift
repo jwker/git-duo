@@ -78,12 +78,15 @@ struct Slice7ComponentTests {
     func bubbleHeaderSurfaceIsItsOwnColor() {
         // 混用不会报错，只会让气泡的头看起来"和卡片外的页面底一模一样"，
         // 于是"气泡从哪开始"在白底上失去线索（沿 `codeSurface` 与 `background` 那条先例）。
+        // （动态色时代 `!=` 比实例身份 ⇒ 改比 resolve 分量，两档各钉一次。）
         let header = Theme.Palette.bubbleHeaderSurface
-        #expect(header != Theme.Palette.background)
-        #expect(header != Theme.Palette.surface)
-        #expect(header != Theme.Palette.surfaceSunken)
-        // 它得比卡片白暗一点（否则这条头根本看不出来）。
-        #expect(header != Color.clear)
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(ColorResolve.distinct(header, Theme.Palette.background, scheme))
+            #expect(ColorResolve.distinct(header, Theme.Palette.surface, scheme))
+            #expect(ColorResolve.distinct(header, Theme.Palette.surfaceSunken, scheme))
+            // 它得不是透明（否则这条头根本看不出来）。
+            #expect(ColorResolve.alpha(of: header, scheme) > 0)
+        }
     }
 
     @Test("⚠️ `Radius.bubble`(12) 与 `Radius.container`(12) **今天同值，是刻意的**")
@@ -148,10 +151,14 @@ struct Slice7ComponentTests {
         // 原型 `.lbl-tag{color:#fff}`。写成状态色（例如顺手写成 `stateOpen` 的绿）
         // 不会报错，只会让"标签"与"状态"这两族东西看起来像同一族 ——
         // 而它们在同一个页面上会同时出现（新建 Issue 页的标签行 + 头部状态胶囊）。
-        #expect(Theme.Palette.surface == Color(hex: 0xFFFFFF))
-        #expect(Theme.Palette.surface != Theme.Palette.stateOpen)
-        #expect(Theme.Palette.surface != Theme.Palette.stateMerged)
-        #expect(Theme.Palette.surface != Theme.Palette.stateClosed)
+        // （动态色时代 `==` / `!=` 比实例身份 ⇒ 改比 resolve 分量。）
+        // 冻结的是**浅色**列（#FFFFFF）；深色档卡面是 `#161B22`，别把它当成漂移。
+        #expect(ColorResolve.same(Theme.Palette.surface, Color(hex: 0xFFFFFF), .light))
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(ColorResolve.distinct(Theme.Palette.surface, Theme.Palette.stateOpen, scheme))
+            #expect(ColorResolve.distinct(Theme.Palette.surface, Theme.Palette.stateMerged, scheme))
+            #expect(ColorResolve.distinct(Theme.Palette.surface, Theme.Palette.stateClosed, scheme))
+        }
     }
 
     @Test("⚠️ 兜底填充取 `#6A737D`：白字压上去 4.82:1（≥ 4.5），且**足够深以看清文字**")
@@ -160,13 +167,20 @@ struct Slice7ComponentTests {
         // 它落在 `GitDuoKit` 侧：色板是领域层的数据，那边用同一条公式
         // 正面钉着"十档全部 ≥ 4.5"（`RepoLabelsTests.paletteAllPassWhiteTextContrast`）。
         // 这个兜底色与色板里的"灰"恰好同值，所以那边的断言对它也成立。
-        #expect(Theme.Palette.labelFallbackSurface == Color(hex: 0x6A737D))
+        // （动态色时代 `Color ==` 比实例身份 ⇒ 改比 resolve 分量；
+        //   这个兜底色**深浅两列同值**，所以两边都冻。）
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(ColorResolve.same(Theme.Palette.labelFallbackSurface, Color(hex: 0x6A737D), scheme))
+        }
 
         // ⚠️ 别拿文字令牌顶替：那是"按用途命名"当场失效的地方
         //（下次有人想改正文次级色就会动到标签的底）。
-        #expect(Theme.Palette.labelFallbackSurface != Theme.Palette.textSecondary)
+        //（浅色 6A737D vs 656D76 只差一点点，更要钉住。）
+        #expect(ColorResolve.distinct(Theme.Palette.labelFallbackSurface, Theme.Palette.textSecondary, .light))
+        #expect(ColorResolve.distinct(Theme.Palette.labelFallbackSurface, Theme.Palette.textSecondary, .dark))
         // 也不能是浅色 —— 白字会读不出来。
-        #expect(Theme.Palette.labelFallbackSurface != Theme.Palette.surfaceSunken)
+        #expect(ColorResolve.distinct(Theme.Palette.labelFallbackSurface, Theme.Palette.surfaceSunken, .light))
+        #expect(ColorResolve.distinct(Theme.Palette.labelFallbackSurface, Theme.Palette.surfaceSunken, .dark))
     }
 
     // MARK: - `SegmentedBar` 的两个新参数（切片 7 补口，PRD §4.4 分区二）

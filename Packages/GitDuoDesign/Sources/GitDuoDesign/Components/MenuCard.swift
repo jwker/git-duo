@@ -76,10 +76,14 @@ public struct MenuCard<Content: View>: View {
 ///
 /// ## ⚠️ `action` 可以为 `nil`（= 这一行不可点）
 ///
-/// 设置页的「主题 / GitHub App · 账号 / 版本」三行在原型里**没有 `onclick`**：
+/// 设置页的「GitHub App · 账号 / 版本」两行在原型里**没有 `onclick`**：
 /// 它们显示的是事实而不是入口。`nil` 时本件**根本不画成 `Button`**
 /// —— 不是 `.disabled`（那会把它变灰、看起来像"暂时不可用"，同决策 **#51**），
 /// 也不加读屏的按钮角色。
+///
+/// ⚠️ 「主题」行**曾是**这个名单里的第三个（"本期仅浅色"），2026-10-15 起它是
+/// 三档切换器（走查第 **69** 条）—— 调用方用 `Menu` 包着本件，`action` 仍传 `nil`
+/// （点击由 `Menu` 接管，本件只负责"长什么样"）。
 ///
 /// ⚠️ 另有一种"**眼下不给**"：设置页最底下的「退出登录」在**登出在途**时也传 `nil`
 /// （决策 **#78**）—— 那时它右侧说的是 `正在退出…`，而把它变灰会看起来像"登出坏了"，
@@ -273,11 +277,23 @@ public struct MenuRow: View {
             }
 
             // ② 设置页「外观 / 账户 / 关于」+ 末尾一张**无标题卡片**：六行一个图标都没有
-            //   （原型那五行就是这样，另两处见偏差第 40 / 46 条），
-            //   三行只显示值、两行可点、一行不可点
+            //   （原型那五行就是这样，另两处见偏差第 40 / 46 条）。
+            //   「主题」2026-10-15 起是三档切换器（走查第 69 条）⇒ 调用方用 `Menu` 包行、
+            //   加尖角；只显示值的行剩两行（账号 / 版本）、退出登录登出在途时不可点。
+            //   ⚠️ 预览里只能用字面量：本包不依赖领域包（拿不到 `ProfileCopy`），
+            //   更拿不到 App 层的 `AppAppearance` —— 真正的选项目录在 `SettingsView`。
             SectionHeader(title: "外观")
             MenuCard {
-                MenuRow(title: "主题", value: "浅色")
+                Menu {
+                    Picker("主题", selection: .constant("system")) {
+                        Text("跟随系统").tag("system")
+                        Text("浅色").tag("light")
+                        Text("深色").tag("dark")
+                    }
+                } label: {
+                    MenuRow(title: "主题", value: "浅色", accessory: .chevron,
+                            showsSeparator: false)
+                }
             }
             SectionHeader(title: "账户")
             MenuCard {

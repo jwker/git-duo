@@ -99,12 +99,21 @@ public enum ProfileCopy {
 
     public static let themeRow = "主题"
 
-    /// 主题的右侧值（原型逐字）。
+    /// 外观的三档文案（跟随系统 / 浅色 / 深色）。
     ///
-    /// ⚠️ **它是一行只读文字，不是切换器**：本期仅浅色（PRD §4.20、`TECH_SPEC §9.15`）。
-    /// PRD 只给了"本期仅浅色"这一条，没有说要不要把"以后会有"说出来 ——
-    /// 所以这一行**照原型不写任何解释**（多写一句就是对交付范围的承诺）。
-    public static let themeValue = "浅色"
+    /// ⚠️ 2026-10-15 起「主题」行**是切换器**（走查第 69 条）：深浅双列令牌接通后，
+    /// 设置页提供三档选择。此前的 `themeValue`（常量"浅色"）是"本期仅浅色"年代的产物，
+    /// 已被 `appearanceValue(for:)` 取代。
+    public static let appearanceFollowSystem = "跟随系统"
+    public static let appearanceLight = "浅色"
+    public static let appearanceDark = "深色"
+
+    /// 「主题」行的右侧值：显示**用户选的档**，不是当前实际生效的模式 ——
+    /// "跟随系统"选中时右侧若写"浅色"，用户就找不到"它在跟着系统变"的开关在哪儿。
+    public static func appearanceValue(isFollowingSystem: Bool, isDark: Bool) -> String {
+        if isFollowingSystem { return appearanceFollowSystem }
+        return isDark ? appearanceDark : appearanceLight
+    }
 
     /// 账户分区第一行 —— `GitHub App · {账号}`（原型逐字，用户名是活的）。
     public static func appRow(login: String) -> String { "GitHub App · \(login)" }

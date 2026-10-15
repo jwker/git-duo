@@ -10,9 +10,18 @@ struct GitDuoApp: App {
 
     @State private var environment = AppEnvironment()
 
+    /// 外观偏好（走查第 69 条）。与设置页共用同一个键 —— 那边写、这里读，
+    /// `@AppStorage` 的变更通知会让根部立刻重算。
+    @AppStorage(AppAppearance.storageKey) private var appearanceRaw = AppAppearance.system.rawValue
+
     var body: some Scene {
         WindowGroup {
             RootView()
+                // ⚠️ 挂在**根部**（不是设置页）：三档的语义就是"整个 App"，挂子树里
+                //    会导致"设置页是深色、别处是浅色"的劈叉。
+                //    「跟随系统」档传 `nil` = 不干预（`preferredColorScheme(nil)` 不是
+                //    "强制浅色"，是把决定权还给系统 —— 别把这两件事写混）。
+                .preferredColorScheme(AppAppearance.stored(appearanceRaw).preferredColorScheme)
                 .environment(environment)
                 .onOpenURL { url in
                     handleCallback(url)
