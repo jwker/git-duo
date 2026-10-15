@@ -59,18 +59,24 @@ struct IssueCard: View {
     /// 是否渲染标签行。**默认 `false`** = 探索页那张卡片（§4.14，原型没有这一行）。
     let showsLabels: Bool
 
+    /// 顶上一条内嵌 hairline（方案 D 的 `.card+.card{border-top:…}`）——
+    /// 列表里**第一行传 `false`**。与 `StarRow.showsTopSeparator` 同一条处置。
+    var showsTopSeparator: Bool = false
+
     /// ⚠️ 显式写初始化器、而不是靠"属性带默认值 = 参数带默认值"那个语法糖：
     /// 带初始值的 `let` 属性**不会**出现在自动生成的 memberwise init 里
     /// （只有 `var` 才会）⇒ 那种写法会让 `showsLabels` 变成一个设不进去的参数，
     /// 而错误出现在调用点、看起来像"这个组件没有那个参数"。
-    init(row: IssueRow, now: Date, showsLabels: Bool = false) {
+    init(row: IssueRow, now: Date, showsLabels: Bool = false,
+         showsTopSeparator: Bool = false) {
         self.row = row
         self.now = now
         self.showsLabels = showsLabels
+        self.showsTopSeparator = showsTopSeparator
     }
 
     var body: some View {
-        CardBox {
+        CardBox(showsTopSeparator: showsTopSeparator) {
             HStack(alignment: .top, spacing: Theme.Spacing.s) {
                 Image(systemName: icon)
                     .font(Theme.Font.body)

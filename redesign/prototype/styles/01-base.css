@@ -1,10 +1,13 @@
 /* ══ GitDuo 2.0 原型 · 01 · CSS 变量与全局重置 ══ */
 
   :root{
-    --bg:#f6f8fa; --card:#ffffff; --border:#d0d7de; --border-soft:#e8ecef;
+    /* ⚠️ 2026-10-15 起页面底转纯白（走查第 73 条 · 方案 D「分组平铺」）：
+       层次不再靠「灰底 vs 白卡」的明度差，而靠排版与 hairline —— 卡片容器随之全部去形。 */
+    --bg:#ffffff; --card:#ffffff; --border:#d0d7de; --border-soft:#e8ecef;
     --text:#1f2328; --text2:#656d76; --text3:#8b949e;
     --link:#0969da; --green:#1f883d; --open:#1a7f37; --closed-i:#8250df;
     --closed-p:#cf222e; --merge:#8250df;
+    --gold:#d4a72c; --slate:#57606a;
     --add-bg:#dafbe1; --add-tx:#116329; --del-bg:#ffebe9; --del-tx:#cf222e;
     --code-bg:#f6f8fa; --chip:#eff2f5;
   }

@@ -171,10 +171,8 @@ public struct StatButton: View {
                 RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                     .fill(Theme.Palette.surfaceSunken)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-            )
+            // 方案 D（2026-10-15，走查第 73 条）：边框去掉 —— 浅灰面本身就是形状，
+            // 原型 `.stat-btn{border:none}`。
         }
         .buttonStyle(.plain)
         // 读屏："Star · 2,341，已选中" —— 图标与文字本就是一个整体，不要逐块念。

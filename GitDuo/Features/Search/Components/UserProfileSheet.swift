@@ -85,7 +85,8 @@ struct UserProfileSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             // 原型 `.sheet-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}`.
             Text(SearchCopy.userSheetTitle)
-                .font(Theme.Font.sectionLabel)
+                // 弹层小标题 ⇒ `sheetTitle`（2026-10-15 起与 `sectionLabel` 分道，走查第 73 条）。
+                .font(Theme.Font.sheetTitle)
                 .tracking(0.4)
                 .foregroundStyle(Theme.Palette.textTertiary)
                 .textCase(.uppercase)

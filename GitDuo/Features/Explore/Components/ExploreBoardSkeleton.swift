@@ -5,7 +5,7 @@ import GitDuoDesign
 ///
 /// ## 它为什么必须挨着 `TrendCard`
 ///
-/// 同 `RepoCardSkeleton` / `PinGridSkeleton` 的理由：§8.5 的硬要求是
+/// 同 `RepoCardSkeleton` / `PinRowsSkeleton` 的理由：§8.5 的硬要求是
 /// "**尺寸必须匹配真实布局**，避免数据到达时跳动"，而"尺寸匹配"**没法靠断言守住**
 /// （Swift 单测没有布局引擎），只能把两个文件放得足够近。
 ///
@@ -16,14 +16,15 @@ struct ExploreBoardSkeleton: View {
     var count: Int = 4
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.s) {
-            ForEach(0..<count, id: \.self) { _ in
-                card
+        // 方案 D：行间 hairline 由行自己画（顶上那条），骨架同样首行不画。
+        VStack(spacing: 0) {
+            ForEach(0..<count, id: \.self) { index in
+                card(showsTopSeparator: index > 0)
             }
         }
     }
 
-    private var card: some View {
+    private func card(showsTopSeparator: Bool) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             // 尺寸跟着 `TrendCard` 一起改（那里用的是 `RepoAvatar.standard`）。
             SkeletonBar(
@@ -39,14 +40,17 @@ struct ExploreBoardSkeleton: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
+        // 方案 D（2026-10-15，走查第 73 条）：与 `TrendCard` 的去形内边距逐字对齐。
+        .padding(.vertical, 13)
+        .padding(.horizontal, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-        )
+        .overlay(alignment: .top) {
+            if showsTopSeparator {
+                Rectangle()
+                    .fill(Theme.Palette.borderSoft)
+                    .frame(height: 1)
+            }
+        }
     }
 }
 

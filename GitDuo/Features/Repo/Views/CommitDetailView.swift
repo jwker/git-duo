@@ -127,7 +127,7 @@ struct CommitDetailView: View {
     private func header(_ detail: CommitDetail) -> some View {
         // 原型 `.conv-head{background:var(--card);border:1px solid var(--border-soft);
         //                  border-radius:14px;padding:15px}`。
-        CardBox(vertical: 15, horizontal: 15) {
+        CardBox() {
             VStack(alignment: .leading, spacing: 0) {
                 Text(detail.headline)
                     // 原型 `.conv-head h2{font-size:17.5px;font-weight:720}` ⇒
@@ -233,7 +233,7 @@ struct CommitDetailView: View {
 
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            CardBox(vertical: 15, horizontal: 15) {
+            CardBox() {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     SkeletonBar(height: 17, width: 240)
                     SkeletonBar(height: 11, width: 180)
@@ -249,14 +249,7 @@ struct CommitDetailView: View {
                 }
                 .padding(Theme.Spacing.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                        .fill(Theme.Palette.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                        .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-                )
+                // 方案 D：diff 卡去形（与 `DiffCard` 一致），不画底与边框。
             }
         }
         .accessibilityHidden(true)

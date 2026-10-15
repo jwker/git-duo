@@ -24,10 +24,26 @@ public enum Theme {
     public enum Palette {
         // 深色列统一取自 Primer primitives v8.2.0 dark（出处标在各令牌下；见 Color.init(light:dark:) 的说明）。
 
-        public static let background      = Color(light: 0xF6F8FA, dark: 0x0D1117)  // 深 = bgColor-default
+        /// 页面底。⚠️ **2026-10-15 起浅色转纯白**（走查第 73 条 · 方案 D「分组平铺」，
+        /// 原型 `01-base.css` 的 `--bg:#ffffff`）：层次不再靠「灰底 vs 白卡」的明度差，
+        /// 而靠排版与 hairline —— 卡片容器随之全部去形（见 `CardBox`）。
+        /// 深色档不动（原型未改深色；`#0d1117` 压 `#161b22` 面板的明度差本来就成立）。
+        public static let background      = Color(light: 0xFFFFFF, dark: 0x0D1117)  // 深 = bgColor-default
         public static let surface         = Color(light: 0xFFFFFF, dark: 0x161B22)  // 深 = bgColor-muted
         public static let surfaceRaised   = Color(light: 0xFFFFFF, dark: 0x161B22)  // 深 = bgColor-muted（同 surface）
-        public static let surfaceSunken   = Color(light: 0xEFF2F5, dark: 0x0D1117)  // 深 = 页面底一档（bgColor-default）：深色下"内凹"= 比卡面暗
+        /// **方案 D 的「内容面板 / 控件底」** —— 原型 `:root` 的 `--chip:#eff2f5`。
+        ///
+        /// 方案 D 把「白卡 + 边框」拆成了两路：**列表条目去形**（直接坐在白页上，
+        /// 行间 hairline —— `CardBox`），**内容块转浅灰面**（README / 评论气泡 / 输入区 /
+        /// 热力图 / 置顶卡 / 搜索框 / 统计块 / 筛选 chip —— 全部落到本令牌）。
+        /// 白底页面上，「面」就是内容块的表达方式。
+        ///
+        /// ⚠️ **深色档 2026-10-15 随方案 D 改成 `#161b22`**（原 `#0d1117`）：
+        /// 旧值在"卡面比页面亮"的旧模型下表示"内凹 = 比卡面暗"，那时它嵌在白卡里；
+        /// 方案 D 下面板**直接坐在页面底上**，深色再取页面底就看不见了 ——
+        /// 方向反转成"面板比页面亮一档"（Primer `bgColor-muted`，与 `surface` 深色同值）。
+        /// 浅色档的值没动（`#EFF2F5` 本来就是 `--chip`）。
+        public static let surfaceSunken   = Color(light: 0xEFF2F5, dark: 0x161B22)  // 深 = bgColor-muted：方案 D 面板比页面亮一档
         public static let border          = Color(light: 0xD0D7DE, dark: 0x30363D)  // 深 = borderColor-default
         public static let borderSoft      = Color(light: 0xE8ECEF, lightAlpha: 1, dark: 0x30363D, darkAlpha: 0.7)  // 深 = borderColor-muted (#30363db3)
 
@@ -85,8 +101,26 @@ public enum Theme {
         ///
         /// 深色档兑现了上面的预告：代码面比卡面（`#161b22`）**再深一档**，取页面底
         /// `#0d1117`（bgColor-default）—— 与浅色的"比卡面浅一档"方向相反，
-        /// 但意图一致：**代码面要和嵌着它的卡面分得开**。
+        /// 但意图一致：**代码面要和嵌着它的面分得开**。
+        ///
+        /// ⚠️ **2026-10-15 起它不再服务 Markdown 代码块**（走查第 73 条 · 方案 D）：
+        /// 原型 `.markdown pre{background:#fff}` —— 灰面板（`--chip`）里垫**白**代码块才分得开，
+        /// 而本令牌的浅色 `#F6F8FA` 压在灰面板上就糊了。⇒ Markdown 代码块改走
+        /// `markdownPreSurface`；本令牌剩两个消费方：搜索结果的代码预览行（`.sr-code`，
+        /// 原型仍写 `--code-bg`）与文件内容页 —— 两处的原型都没动。
         public static let codeSurface    = Color(light: 0xF6F8FA, dark: 0x0D1117)
+
+        /// **Markdown 代码块**的底 —— 原型 `styles/04-screens.css` 的
+        /// `.markdown pre{background:#fff;border:none}`（2026-10-15 方案 D 改，走查第 73 条）。
+        ///
+        /// 方案 D 把 README 面板从「白卡」改成灰面（`--chip`）后，pre 若仍是
+        /// `--code-bg`（`#F6F8FA`）就与面板几乎同明度、糊成一片 ⇒ 原型改成了**纯白**：
+        /// 灰面板上"白块"是代码块唯一的形状信号（边框同时去掉了）。
+        ///
+        /// ⚠️ 深色档取 `#0d1117`（比面板 `#161b22` 深一档）—— 与浅色同一条意图：
+        /// **代码面要和嵌着它的面分得开**，只是两档的方向相反（浅色面板灰→块白，
+        /// 深色面板亮→块暗）。沿 `codeSurface` 那条"方向随主题反转、意图不变"的先例。
+        public static let markdownPreSurface = Color(light: 0xFFFFFF, dark: 0x0D1117)
 
         // MARK: 切片 6 新增 —— 语法高亮四色 + 两处浅底（出处见 TECH_SPEC §10.7）
 
@@ -218,6 +252,28 @@ public enum Theme {
         /// 深色取 `#21262d`（v8.2.0 `control-bgColor-rest`）：深卡面（`#161b22`）上
         /// 亮一档的灰块，白字形照旧压得读出（≥ 14:1）。
         public static let repoAvatarSurface = Color(light: 0x24292F, dark: 0x21262D)
+
+        // MARK: 方案 D 的「菜单图标色块」（2026-10-15，走查第 73 条）
+        //
+        // 菜单行 / 四行入口的图标从「19pt 灰线稿」升级为「40pt 实底圆角块 + 白字形」，
+        // 色由每行给（原型 `--ic` 内联变量）。五档里三档直接复用既有令牌：
+        // 绿 = `accentStrong`（--green）、蓝 = `accent`（--link）、紫 = `stateMerged`（--merge）；
+        // 金与中性灰是原型新立的两个变量（--gold / --slate），浅色取原型真值，
+        // 深色按"色块要在页面底上浮起来"各自取亮一档。
+
+        /// 图标色块的**金色**（Star 那一档）—— 原型 `--gold:#d4a72c`。
+        ///
+        /// ⚠️ 与 `starActive`（`#EAC54F`，"已 Star 态的星形图标色"）**不是同一个令牌**：
+        /// 那个是图标前景、这个是色块底，原型里也是两个值两处用。
+        /// 深色取 `#e3b341`（GitHub Dark 的 yellow）—— 色块底比页面底亮一档才浮得起来。
+        public static let iconTileGold  = Color(light: 0xD4A72C, dark: 0xE3B341)
+
+        /// 图标色块的**中性灰**（代码 / 设置那类"没有专属色"的行）—— 原型 `--slate:#57606a`。
+        ///
+        /// ⚠️ 与 `textSecondary`（`#656D76`）接近但**不是同一个令牌**：一个是文字色、
+        /// 一个是色块底（沿 `repoAvatarSurface` 那条"接近但不是同一个值"的先例）。
+        /// 深色取 `#6e7681`（v8.2.0 `bgColor-neutral-emphasis`）。
+        public static let iconTileSlate = Color(light: 0x57606A, dark: 0x6E7681)
 
         /// 头像图片**取不到时**的兜底配色（原型 `scripts/10-explore-repo.js` 的 8 色）。
         ///
@@ -419,13 +475,25 @@ public enum Theme {
         /// （`.stat-btn` / `.fchip` / `.linkbtn`）此前没有对应令牌 ——
         /// 不给它一个名字，各处就只能写 `.system(size: 12)`，而那正是"魔法值"。
         public static let label       = SwiftUI.Font.caption.weight(.semibold)
-        /// **分区标题**（原型 `.section-label{font-size:12px;font-weight:700}`）。
+        /// **分区标题**（原型 `.section-label`）。
         ///
-        /// ⚠️ 它与 `label` 只差一档字重（`bold` 700 vs `semibold` 600），但**不能合并**：
-        /// 原型里这确实是两处独立取字重，而分区标题是**全屏最安静的一级文字**
-        /// （12pt 灰字 + 字距），字重掉一档就会显得"和旁边的按钮一样重"。
-        /// 所以 `.section-label` 从 `label` 的消费方名单里移到了这里。
-        public static let sectionLabel = SwiftUI.Font.caption.weight(.bold)
+        /// ⚠️ **2026-10-15 起随方案 D 重定义**（走查第 73 条）：原型把它从
+        /// 「12px bold 灰 + 大写 + 字距」升级为「19px / 800 / 正文色 / 负字距」——
+        /// 卡片容器去形后，**分组全靠这一个元素承担**，它必须大到能压住整组。
+        /// 19px 落到 `.title3`(20pt)，字重 800 取 `bold`（本仓字重档里最接近的一档）。
+        ///
+        /// ⚠️ 弹层小标题（`.sheet-title`，仍是 12px/700/灰/大写 —— 方案 D 没动它）
+        /// 从前借用了本令牌（那时两者同为 12px bold），现在**分道**：弹层改走
+        /// `sheetTitle`。改弹层标题样式时不要动这里。
+        public static let sectionLabel = SwiftUI.Font.title3.weight(.bold)
+
+        /// **弹层小标题**（原型 `styles/05-overlays.css` 的
+        /// `.sheet-title{font-size:12px;font-weight:700;color:var(--text3)…}`）。
+        ///
+        /// 2026-10-15 从 `sectionLabel` 分出来（走查第 73 条）：两者从前同为
+        /// "12px bold"，方案 D 把页面分区标题升级成 19pt 后弹层没跟着动
+        /// ⇒ 借用关系结束，弹层自己有了名字。字形与旧 `sectionLabel` 完全一致。
+        public static let sheetTitle = SwiftUI.Font.caption.weight(.bold)
         /// **标签胶囊**（原型 `.pill{font-size:11px;font-weight:600}`，切片 5 新增）。
         ///
         /// ⚠️ 它与 `caption`（`.caption2`，11pt **regular**）**只差一个字重**，但不能合并：
@@ -475,7 +543,8 @@ public enum Theme {
         ///
         /// ⚠️ 与 `bodyStrong`（`.body.weight(.semibold)`）**只差一档字重**，但不能合并：
         /// 原型里 h2 是 700（bold），而 `bodyStrong` 是别处的 semibold。
-        /// 沿 `label`(12 semibold) 与 `sectionLabel`(12 bold) 那条"同值不同字重不合并"的先例。
+        /// 沿 `label`(12 semibold) 与 `sheetTitle`(12 bold) 那条"同值不同字重不合并"的先例
+        /// （⚠️ 2026-10-15 起 `sectionLabel` 升级为 20pt bold，不再属于 12 那一档，走查第 73 条）。
         public static let markdownH2 = SwiftUI.Font.body.weight(.bold)
 
         /// Markdown **正文**（原型 `.markdown{font-size:14px}`）⇒ `.subheadline`(15pt)。

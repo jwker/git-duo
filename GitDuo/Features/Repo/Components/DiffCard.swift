@@ -8,8 +8,8 @@ import SwiftUI
 /// `styles/04-screens.css` 的 `.diffcard` 一族：
 ///
 /// ```css
-/// .diffcard{background:var(--card);border:1px solid var(--border-soft);
-///           border-radius:12px;overflow:hidden;margin-bottom:12px}
+/// /* 2026-10-15 方案 D 起（走查第 73 条）：容器去形 —— add/del 行底色本身构成形状 */
+/// .diffcard{background:none;border:none;border-radius:0;overflow:hidden;margin-bottom:12px}
 /// .diffcard .dhead{display:flex;align-items:center;gap:8px;padding:10px 12px;
 ///                  border-bottom:1px solid var(--border-soft);cursor:pointer}
 /// .diffcard .dhead .fn{font-family:Menlo,monospace;font-size:12.5px;font-weight:600;color:var(--text)}
@@ -52,15 +52,8 @@ struct DiffCard: View {
             header
             if isExpanded { content }
         }
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-        )
+        // 方案 D（2026-10-15，走查第 73 条）：容器去形 —— 不画底、边框、圆角。
+        // add/del 行的底色本身就是形状；头部那条下分隔线（`header` 里）负责收边。
         // 默认展开的那一种也要走一次解析 —— 它没经过 `toggle()`。
         // ⚠️ 解析**只在这里与 `toggle()` 两处**发生，`body` 里不做任何解析
         //    （在 `body` 里算就等于"每次重绘都扫一遍"，那正是 §11.2 要避免的）。

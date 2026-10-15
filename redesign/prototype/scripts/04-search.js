@@ -196,18 +196,19 @@ function openUserSheet(u){
 function repoMeta(n){ return REPOS.find(r=>r.n===n) || {n:n,d:'',lang:'',lc:'',s:'',f:'',priv:false}; }
 function openRepo(n){ push(n.indexOf('my-git/')===0?'repoDetail':'exploreRepoDetail',{repo:n}); }
 function managePins(){ toast('置顶仓库在 GitHub 个人主页管理 · 已为你打开'); }
+// 2026-10-15 走查第 75 条：置顶卡改**行**（结构与 .recent-row 同款：头像 + 全名/描述 + 右侧一项）。
+// 网格时代的两个约束随之作废：描述不再补 '—'（不等高也没关系了）、指标只留 Star
+// （语言点 / Fork / 私有胶囊在半行宽里挤成一团，是"难看"的主要来源）。
 function pinCard(n){
   const r = repoMeta(n), parts = n.split('/'), owner = parts[0], name = parts.slice(1).join('/');
   return `
     <div class="pin-card" onclick="openRepo('${n}')">
-      <div class="pn">${svg(I.repo,'pin-ic')}<span class="pname"><span class="owner">${owner}/</span>${name}</span></div>
-      <div class="pd">${r.d||'—'}</div>
-      <div class="pm">
-        ${r.lang?`<span><span class="lang-dot" style="background:${r.lc}"></span>${r.lang}</span>`:''}
-        ${r.s?`<span>${svg(I.star)} ${r.s}</span>`:''}
-        ${r.f?`<span>${svg(I.fork)} ${r.f}</span>`:''}
-        ${r.priv?'<span class="pill closed-i" style="font-size:10px;padding:1px 7px">私有</span>':''}
+      <div class="repo-avatar">${svg(I.repo)}</div>
+      <div class="grow">
+        <div class="pn"><span class="pname"><span class="owner">${owner}/</span>${name}</span>${r.priv?'<span class="pill closed-i" style="margin-left:5px;font-size:10px;padding:1px 7px">私有</span>':''}</div>
+        ${r.d?`<div class="pd">${r.d}</div>`:''}
       </div>
+      ${r.s?`<span class="pm">${svg(I.star)} ${r.s}</span>`:''}
     </div>`;
 }
 function pinGrid(){

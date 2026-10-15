@@ -98,12 +98,11 @@ public struct BreadcrumbBar: View {
         .padding(.vertical, Theme.Spacing.s)
         .padding(.horizontal, Theme.Spacing.m)
         .background(
+            // 方案 D（2026-10-15，走查第 73 条）：白卡 → 浅灰面，边框去掉
+            //（原型 `.crumb{background:var(--chip);border:none}`）。
+            // 分支胶囊的底也是 `--chip` 同值 —— 面上胶囊只靠圆角读形（原型如此）。
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
+                .fill(Theme.Palette.surfaceSunken)
         )
     }
 

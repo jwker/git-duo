@@ -1,30 +1,27 @@
 import SwiftUI
 
-/// 菜单卡片 —— 「我的」页那两张卡片、设置页各分区的卡片（含末尾那张**无标题**的）
+/// 菜单组 —— 「我的」页那两组、设置页各分区（含末尾那张**无标题**的）
 /// （PRD §4.17 第 4/5 条、§4.20）。
 ///
 /// ```css
-/// .menu-card{background:var(--card);border:1px solid var(--border-soft);
-///            border-radius:14px;overflow:hidden;margin-bottom:12px}
+/// /* 2026-10-15 方案 D 起（走查第 73 条）—— 组不再画卡，行直接铺在页面上 */
+/// .menu-card{background:none;border:none;border-radius:0;margin:0 0 10px}
 /// ```
 ///
-/// ## ⚠️ 它与 `CardBox` 是**同一个容器、两种内边距**
+/// ## ⚠️ 方案 D：它退化成了"一组行的编组名"
 ///
-/// 两者都是「白底 + 1pt 浅边 + 14pt 圆角」——`.menu-card` 的 `border-radius:14px` 正是
-/// `Theme.Radius.sheet`，`--card` / `--border-soft` 也分别是 `surface` / `borderSoft`。
-/// **唯一的差别是 `.menu-card` 没有 `padding`**：它的留白由每一行自己出
-/// （`.menu-item{padding:13px 14px}`）—— 否则每行之间会多出两份卡片内边距。
+/// 白底 + 边框 + 圆角全没了 —— 行与行之间是**内嵌 hairline**（由 `MenuRow` 画），
+/// 组与组之间靠 `SectionHeader` 的 22pt 上边距分开。保留这个类型是因为
+/// "这几行是一组"这件事仍要一个名字（同 `CardBox` 去形后留名的理由）。
 ///
-/// 所以本件就是 `CardBox(vertical: 0, horizontal: 0)`
-/// —— **不是**另一个容器，是一个说清了"这一族卡片不带内边距"的名字。
-/// 直接写 `CardBox(vertical: 0, horizontal: 0)` 也能出同样的画面，
-/// 但那样下一次有人想调卡片内边距时，就会在 `CardBox` 的默认值上改到一个不该动的地方。
+/// ## ⚠️ 它与 `CardBox` 的关系
 ///
-/// ## ⚠️ 行之间的分隔线由**行**画，不由卡片画
+/// 本件仍是 `CardBox(vertical: 0, horizontal: 0)` —— 去形后的 `CardBox` 也什么都不画，
+/// 两者在"容器"这层已经没有差别；保留一层包装是为了语义（"一组菜单行"）。
 ///
-/// `.menu-item:last-child{border-bottom:none}` 是原型的规则（"除最后一个之外都画"）。
-/// 卡片不知道自己在装几行（`@ViewBuilder` 收到的是一棵已经拼好的视图树），
-/// 而调用方知道 ⇒ 由行的 `showsSeparator` 决定，**最后一行传 `false`**。
+/// ## 行之间的内嵌 hairline 由**行**画
+///
+/// 卡片不知道自己在装几行 ⇒ 由行的 `showsSeparator` 决定，**最后一行传 `false`**。
 /// 沿 `LinkRow` 的同一条处置（那里也是调用方传）。
 ///
 /// ## 它是内容层
@@ -47,32 +44,39 @@ public struct MenuCard<Content: View>: View {
     }
 }
 
-/// 菜单卡片里的一行 —— 图标 + 标题 +（可选）右侧值 +（可选）尖角 / 标签
-/// （原型 `styles/04-screens.css` 的 `.menu-item`）。
+/// 菜单组里的一行 —— **40pt 图标色块** + 标题 +（可选）右侧值 +（可选）尖角
+/// （原型 `styles/04-screens.css` 的 `.menu-item`，2026-10-15 方案 D 重穿）。
 ///
 /// ```css
-/// .menu-item{display:flex;align-items:center;gap:12px;padding:13px 14px;
-///            border-bottom:1px solid var(--border-soft);cursor:pointer;
-///            font-size:14.5px;font-weight:550}
-/// .menu-item:last-child{border-bottom:none}
-/// .menu-item svg{width:19px;height:19px;stroke:var(--text2);fill:none;stroke-width:1.8}
-/// .menu-item .chev{margin-left:auto;color:var(--text3)}
-/// .ftag{font-size:10.5px;font-weight:700;color:var(--text3);background:var(--chip);
-///       border-radius:6px;padding:2px 7px;letter-spacing:.3px}
+/// .menu-item{display:flex;align-items:center;gap:12px;padding:12px 2px;
+///            font-size:15px;font-weight:600;position:relative}
+/// .menu-item+.menu-item::before{content:"";position:absolute;top:0;left:54px;right:0;
+///                               height:1px;background:var(--border-soft)}
+/// .menu-item>svg{width:40px;height:40px;padding:10px;border-radius:12px;
+///                background:var(--ic,var(--slate));color:#fff;stroke:#fff}
 /// ```
+///
+/// ## ⚠️ 方案 D：图标从「19pt 灰线稿」升级为「40pt 实底色块 + 白字形」
+///
+/// 卡片去形后，行上唯一有分量的元素就是这块色 —— 它同时是"这一行是什么类别"的
+/// 颜色编码（`IconTone`）。字形的白由 `foregroundStyle` 给（SF Symbol 整体白色）。
+///
+/// ## ⚠️ 分隔线**内嵌缩进 54**，由行画在**顶上**
+///
+/// `54 = 色块 40 + gap 12 + 行缩进 2`（ hairline 从文字起点起，不再通栏）。
+/// ⚠️ 原型的选择器是 `.menu-item+.menu-item::before{left:54px}` —— **固定 54**，
+/// 没有图标的行（设置页那些）也一样缩进 54（文字从 2 起）—— 这是原型的写法，
+/// 照做；哪天要改成"无图标行缩到文字"，改原型与这里两处。
+/// 最后一行不画（调用方传 `showsSeparator: false`）。
 ///
 /// ## ⚠️ 它与 `LinkRow` **不是同一件**
 ///
 /// | | `LinkRow`（`.file-row`） | 本件（`.menu-item`） |
 /// |---|---|---|
-/// | 内边距 | `11px 4px`（左右只留 4 —— 它长在已经带内边距的卡片里） | **`13px 14px`** |
-/// | 图标 | 17pt / `--text3` | **19pt / `--text2`** |
+/// | 图标 | 17pt 线稿（随 `iconTint`） | **40pt 实底色块 + 白字形** |
 /// | 副标题 | 有（`.fmsg`） | **没有** |
 /// | 右侧 | 恒为一个尖角 | 值 / 标签 / 尖角 / 什么都没有 |
 /// | 可点性 | 恒是按钮 | **可以不可点**（设置页有三行是纯展示） |
-///
-/// 四处都不同 ⇒ 不能合并。合并的代价不是"少一个文件"，而是**其中一处会悄悄偏离原型**
-/// ——而偏离处看起来仍然像一行正常的菜单（同 `SheetRow` 与 `LinkRow` 的判例）。
 ///
 /// ## ⚠️ `action` 可以为 `nil`（= 这一行不可点）
 ///
@@ -91,31 +95,54 @@ public struct MenuCard<Content: View>: View {
 ///
 /// ## ⚠️ `systemImage` 也可以为 `nil`（= 这一行没有图标）
 ///
-/// **设置页那五个 `.menu-item` 在原型里一个图标都没有**
-/// （`12-me.js:65/69/70/74/75`：`<div class="menu-item">主题<span…>浅色</span></div>`
-/// —— 里面没有任何 `svg(...)`）。而「我的」页那几行**都有**。
-///
-/// ⚠️ 本 App 的设置页现在是**六行**（原型那五行一条不多、一条不少，另加：
-/// 「前往 GitHub 手动撤销授权」—— 偏差第 **40** 条；「退出登录」搬到末尾一张独立卡片 ——
-/// 偏差第 **46** 条），**六行同样一个图标都不给**。
-///
-/// 所以图标是 Optional：给了才画，也没了那个固定宽度的图标槽
-/// ⇒ 没有图标时标题从行首开始。若把它做成必填、设置页随便填一个图标，
-/// 那五行的样子就与原型**不同了**，而"多了一个小图标"很难被认成缺陷。
+/// **设置页那几个 `.menu-item` 在原型里一个图标都没有**（`12-me.js:65/69/70/74/75`），
+/// 而「我的」页与仓库首页四行入口**都有**。给了才画色块，也没了那个色块槽
+/// ⇒ 没有图标时标题从行首开始。
 ///
 /// ## ⚠️ 尖角取的是 `--text2`，**不是** `.chev` 写的 `--text3`
 ///
 /// 原型的 `.menu-item .chev{color:var(--text3)}` 看着像是要给尖角一个更浅的灰，
-/// 但 `.menu-item svg{stroke:var(--text2)}` 的选择器更具体（`.menu-item svg` =
-/// 0-1-1，`.chev` = 0-1-0）⇒ 它设在 `<svg>` 元素上的 `stroke` 直接给了子路径，
-/// `color` 那条根本用不上。**实测确认**：2026-10-09 用 Chrome 读 `.chev svg` 的
-/// `getComputedStyle().stroke` 得到 `rgb(101,109,118)`（就是 `--text2`）。
-/// 所以这里的前导图标与尖角**同色**。
+/// 但 `.menu-item svg{stroke:var(--text2)}` 的选择器更具体 ⇒ 尖角实际是 `--text2`。
+/// **实测确认**（2026-10-09 Chrome 读 `getComputedStyle().stroke`）。
+/// 方案 D 后 `stroke:#fff` 只作用于**色块内的字形**，尖角在色块外、仍是 `--text2`。
 ///
 /// ## 它是内容层
 ///
 /// **实色，不加 Liquid Glass**（§10.2）。
 public struct MenuRow: View {
+
+    /// 图标色块的色档（方案 D 新增，见类型说明）。
+    ///
+    /// ⚠️ 判据 **#43**：纯视觉枚举，不认识任何领域模型。
+    /// 色值全部落在 `Theme.Palette` 的既有/新增令牌上（见 `tileColor`）。
+    public enum IconTone: Sendable, Hashable {
+
+        /// 中性灰（原型 `--slate`）—— 代码 / 设置这类"没有专属色"的行，也是**缺省档**。
+        case slate
+
+        /// 金（原型 `--gold`）—— Star。
+        case gold
+
+        /// 绿（原型 `--green` = `accentStrong`）—— Issues。
+        case green
+
+        /// 链接蓝（原型 `--link` = `accent`）—— Pull Requests / 收藏。
+        case blue
+
+        /// 紫（原型 `--merge` = `stateMerged`）—— Commits。
+        case purple
+
+        /// 色档 → 色块底色。⚠️ 非 `private`：单测要能钉住"哪一档取的是哪个令牌"。
+        public var tileColor: Color {
+            switch self {
+            case .slate: Theme.Palette.iconTileSlate
+            case .gold: Theme.Palette.iconTileGold
+            case .green: Theme.Palette.accentStrong
+            case .blue: Theme.Palette.accent
+            case .purple: Theme.Palette.stateMerged
+            }
+        }
+    }
 
     /// 标题的颜色档。
     ///
@@ -143,8 +170,11 @@ public struct MenuRow: View {
         case chevron
     }
 
-    /// SF Symbol 名；`nil` = 这一行没有图标（设置页那五行就是这样）。
+    /// SF Symbol 名；`nil` = 这一行没有图标（设置页那几行就是这样）。
     public let systemImage: String?
+
+    /// 图标色块的色档（见 `IconTone`）。没有图标的行不消费它。
+    public let iconTone: IconTone
 
     public let title: String
 
@@ -155,7 +185,7 @@ public struct MenuRow: View {
 
     public let titleTone: TitleTone
 
-    /// 底部分隔线。**最后一行传 `false`**（原型 `.menu-item:last-child{border-bottom:none}`）。
+    /// 顶部内嵌 hairline。**最后一行传 `false`**（原型 `.menu-item+.menu-item`）。
     public let showsSeparator: Bool
 
     private let action: (() -> Void)?
@@ -173,6 +203,7 @@ public struct MenuRow: View {
 
     public init(
         systemImage: String? = nil,
+        iconTone: IconTone = .slate,
         title: String,
         value: String? = nil,
         accessory: Accessory = .none,
@@ -181,6 +212,7 @@ public struct MenuRow: View {
         action: (() -> Void)? = nil
     ) {
         self.systemImage = systemImage
+        self.iconTone = iconTone
         self.title = title
         self.value = value
         self.accessory = accessory
@@ -199,11 +231,14 @@ public struct MenuRow: View {
                 row
             }
         }
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .topLeading) {
             if showsSeparator {
                 Rectangle()
                     .fill(Theme.Palette.borderSoft)
                     .frame(height: 1)
+                    // 原型 `left:54px`（色块 40 + gap 12 + 缩进 2）—— 固定值，
+                    // 没有图标的行也一样（见类型说明）。
+                    .padding(.leading, 54)
             }
         }
     }
@@ -212,20 +247,21 @@ public struct MenuRow: View {
         HStack(spacing: 12) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    // 原型 `.menu-item svg{width:19px;height:19px}`。
-                    .font(.system(size: 19))
-                    // …同一行的 `stroke:var(--text2)`。
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    // 固定宽度：原型的图标都是 19px 的方框，所以标题天然对齐；
-                    // SF Symbols 的字形宽度各不相同（`star` 比 `gearshape` 窄），
-                    // 不固定的话每一行的标题会各差一两个点 —— 单看一行完全看不出来。
-                    .frame(width: 22)
+                    // 色块内的字形 20pt（原型 40 块垫 10 内边距）。
+                    .font(.system(size: 20))
+                    // 白字形（原型 `color:#fff;stroke:#fff`）。
+                    .foregroundStyle(.white)
+                    // 40pt 实底圆角块（原型 `border-radius:12px` = `container`）。
+                    .frame(width: 40, height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
+                            .fill(iconTone.tileColor)
+                    )
             }
 
-            // 原型 14.5px/550 ⇒ 最近的一档是 `rowTitle`（`.subheadline` 15）；
-            // 与 `SheetRow` 把 14.5px 映到 `rowTitle` 同一条判据。
+            // 原型 15px/600 ⇒ `rowTitle`（15pt）+ semibold（方案 D 从 14.5/550 提上来）。
             Text(title)
-                .font(Theme.Font.rowTitle)
+                .font(Theme.Font.rowTitle.weight(.semibold))
                 .foregroundStyle(titleColor)
                 .lineLimit(1)
 
@@ -246,16 +282,16 @@ public struct MenuRow: View {
                 chevron
             }
         }
-        // 原型 `padding:13px 14px`（13 不在 4pt 阶里 ⇒ 写原值；14 同 `CardBox` 的横向内边距）。
-        .padding(.vertical, 13)
-        .padding(.horizontal, 14)
+        // 原型 `padding:12px 2px`（方案 D 从 13/14 改 —— 行直接坐在页面上）。
+        .padding(.vertical, 12)
+        .padding(.horizontal, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // 整行可点（否则只有图标与文字那两小块响应点击）。
+        // 整行可点（否则只有色块与文字那两小块响应点击）。
         .contentShape(Rectangle())
     }
 
     private var chevron: some View {
-        // ⚠️ 颜色见类型说明：与图标**同色**（`--text2`），不是 `.chev` 里写的 `--text3`。
+        // ⚠️ 颜色见类型说明：与旧线稿图标同源（`--text2`），不是 `.chev` 里写的 `--text3`。
         Image(systemName: "chevron.right")
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(Theme.Palette.textSecondary)
@@ -265,25 +301,23 @@ public struct MenuRow: View {
 #Preview {
     ScrollView {
         VStack(alignment: .leading, spacing: 0) {
-            // ① 「我的」页第一张卡：三行都有图标与尖角，最后一行的分隔线要关掉
+            // ① 「我的」页第一组：三行都有色块与尖角，最后一行的分隔线要关掉
             //（PR 与 Issue 两行取 `StateIcon` 那两个常量，见 `GitHubIcon` 尾巴上的说明）
-            SectionHeader(title: "菜单卡片一")
+            SectionHeader(title: "菜单组一")
             MenuCard {
                 // 原型逐字「Star 管理」；2026-10-15 起改「我的 Star」（走查第 71 条，
                 // 设计包拿不到 `ProfileCopy`，预览写字面量 —— 改文案记得这里跟着改）。
-                MenuRow(systemImage: GitHubIcon.star, title: "我的 Star", accessory: .chevron, action: {})
-                MenuRow(systemImage: StateIcon.pullRequestOpen, title: "我的 Pull Request",
-                        accessory: .chevron, action: {})
-                MenuRow(systemImage: StateIcon.issueOpen, title: "我的 Issue",
-                        accessory: .chevron, showsSeparator: false, action: {})
+                MenuRow(systemImage: GitHubIcon.star, iconTone: .gold,
+                        title: "我的 Star", accessory: .chevron, action: {})
+                MenuRow(systemImage: StateIcon.pullRequestOpen, iconTone: .blue,
+                        title: "我的 Pull Request", accessory: .chevron, action: {})
+                MenuRow(systemImage: StateIcon.issueOpen, iconTone: .green,
+                        title: "我的 Issue", showsSeparator: false, action: {})
             }
 
-            // ② 设置页「外观 / 账户 / 关于」+ 末尾一张**无标题卡片**：六行一个图标都没有
+            // ② 设置页「外观 / 账户 / 关于」+ 末尾一张**无标题**组：六行一个图标都没有
             //   （原型那五行就是这样，另两处见偏差第 40 / 46 条）。
-            //   「主题」2026-10-15 起是三档切换器（走查第 69 条）⇒ 调用方用 `Menu` 包行、
-            //   加尖角；只显示值的行剩两行（账号 / 版本）、退出登录登出在途时不可点。
-            //   ⚠️ 预览里只能用字面量：本包不依赖领域包（拿不到 `ProfileCopy`），
-            //   更拿不到 App 层的 `AppAppearance` —— 真正的选项目录在 `SettingsView`。
+            //   分隔线仍固定缩进 54（原型 CSS 如此，见类型说明）。
             SectionHeader(title: "外观")
             MenuCard {
                 Menu {
@@ -307,7 +341,7 @@ public struct MenuRow: View {
                 MenuRow(title: "清除缓存", value: "12.4 MB", action: {})
                 MenuRow(title: "版本", value: "2.0 (1)", showsSeparator: false)
             }
-            // 末尾那张**无标题**卡片：分区标题那 16pt 上边距它没有 ⇒ 自己补，否则会
+            // 末尾那张**无标题**组：分区标题那 22pt 上边距它没有 ⇒ 自己补，否则会
             // 贴着「关于」那张、看着像多出来的一行（偏差第 46 条）。
             // 登出在途时右侧的值会变成 `正在退出…`。
             MenuCard {

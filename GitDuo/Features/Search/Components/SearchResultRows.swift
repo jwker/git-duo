@@ -73,7 +73,7 @@ struct RepositoryResultRow: View {
             VStack(alignment: .leading, spacing: 0) {
                 // 两色拼接：先各自做成 `Text`，再**一次性**插进同一个字面量
                 // （`Text + Text` 自 iOS 26 起已废弃；而把两段先拼成 `String` 再交给
-                //  `Text(_:)` 会丢掉各自的样式 —— 见 `PinCard` 的同款写法）。
+                //  `Text(_:)` 会丢掉各自的样式 —— 见 `PinRow` 的同款写法）。
                 Text("\(ownerText)\(nameText)")
                     .font(Theme.Font.rowTitle)
                     .lineLimit(1)

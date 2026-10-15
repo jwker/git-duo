@@ -57,8 +57,10 @@ public struct SheetTitle: View {
 
     public var body: some View {
         Text(text)
-            // 原型 12px bold ⇒ 本仓那一档是 `sectionLabel`（`.caption` 12 + bold）。
-            .font(Theme.Font.sectionLabel)
+            // 原型 12px bold ⇒ `sheetTitle`（`.caption` 12 + bold）。
+            // ⚠️ 2026-10-15 起从这里分出来的（走查第 73 条）：`sectionLabel` 已升级为
+            // 19pt 组头（方案 D），弹层标题没跟着动 —— 借用关系结束。
+            .font(Theme.Font.sheetTitle)
             .tracking(0.4)
             .foregroundStyle(Theme.Palette.textTertiary)
             .textCase(.uppercase)

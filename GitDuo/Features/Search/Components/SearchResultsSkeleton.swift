@@ -31,13 +31,15 @@ struct SearchResultsSkeleton: View {
 
                     Spacer(minLength: 0)
                 }
-                .padding(.vertical, 11)
+                .padding(.vertical, 12)
                 .padding(.horizontal, Theme.Spacing.xxs)
-                .overlay(alignment: .bottom) {
-                    if index < count - 1 {
+                // 方案 D：与 `SearchRowBox` 一致 —— 分隔线画在顶上、内嵌缩进 45。
+                .overlay(alignment: .topLeading) {
+                    if index > 0 {
                         Rectangle()
                             .fill(Theme.Palette.borderSoft)
                             .frame(height: 1)
+                            .padding(.leading, 45)
                     }
                 }
             }

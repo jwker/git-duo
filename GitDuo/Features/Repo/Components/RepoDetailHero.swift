@@ -105,15 +105,11 @@ struct RepoDetailHero: View {
             statRow
                 .padding(.top, Theme.Spacing.m)
         }
-        // 原型 `.repo-hero{padding:16px;border-radius:16px}`。
-        .padding(Theme.Spacing.l)
+        // 方案 D（2026-10-15，走查第 73 条）：头部去卡形 —— 名字与统计直接排版在页面上
+        //（原型 `.repo-hero{background:none;border:none;border-radius:0;padding:6px 2px}`）。
+        .padding(.top, 6)
+        .padding(.horizontal, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-        )
     }
 
     // MARK: - 组成

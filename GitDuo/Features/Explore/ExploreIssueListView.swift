@@ -131,8 +131,8 @@ struct ExploreIssueListView: View {
         let items = model.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: Theme.Spacing.s) {
-            ForEach(items) { row in
+        return VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
                 Button {
                     // ⚠️ `readOnly: true` —— 这一页是**他人仓库**的 Issue（页脚那句就写着
                     //    "关闭 Issue 需维护者权限"）。但决策 #79 之后它**不等于整页只读**：
@@ -140,7 +140,8 @@ struct ExploreIssueListView: View {
                     //    （GitHub 的规则是"谁提的谁可关"）。
                     env.router.push(.issueDetail(fullName: fullName, number: row.number, readOnly: true))
                 } label: {
-                    IssueCard(row: row, now: now)
+                    // 方案 D：行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
+                    IssueCard(row: row, now: now, showsTopSeparator: index > 0)
                 }
                 .buttonStyle(.plain)
                 .onAppear {

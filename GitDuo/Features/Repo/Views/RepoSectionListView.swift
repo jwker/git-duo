@@ -213,7 +213,7 @@ struct RepoSectionListView: View {
         let items = model.commits.items
         let lastID = items.last?.id
 
-        return CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
+        return CardBox() {
             // ⚠️ `LazyVStack`（不是 `VStack`）：滚到底自动加载靠的就是
             //    "最后一行真正出现时才触发"，而 `VStack` 会把所有行一次建出来 ⇒
             //    一进这一页就把后面每一页都请求一遍。
@@ -280,11 +280,11 @@ struct RepoSectionListView: View {
     /// 提交段的骨架。
     ///
     /// ⚠️ **容器参数与行内边距必须与上面那个真实的 `commitsList` 对齐**
-    /// （`CardBox(vertical: Theme.Spacing.xs)` + `RepoCommitRow` 的 `padding:11px 4px`）。
+    /// （`CardBox()` + `RepoCommitRow` 的 `padding:11px 4px`）。
     /// 2026-10-09 切片 10 修：此前写的是 `Theme.Spacing.m`（12）且没有行内边距 ⇒
     /// 数据到达时**整块上移 8pt**，随后每一行再各挪一次。
     private var commitsSkeleton: some View {
-        CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
+        CardBox() {
             ForEach(0..<6, id: \.self) { _ in
                 HStack(spacing: 10) {
                     SkeletonBar(height: 28, width: 28, cornerRadius: 14)

@@ -18,6 +18,10 @@ struct RepoCard: View {
 
     let repository: Repository
 
+    /// 顶上一条内嵌 hairline（方案 D 的 `.card+.card{border-top:…}`）——
+    /// 列表里**第一行传 `false`**。与 `StarRow.showsTopSeparator` 同一条处置。
+    var showsTopSeparator: Bool = false
+
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             icon
@@ -34,15 +38,18 @@ struct RepoCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, Theme.Spacing.m)
+        // 方案 D（2026-10-15，走查第 73 条）：`.card` 去形 —— 条目直接坐在页面上，
+        // 行间靠顶上那条内嵌 hairline 分隔（原型 `padding:13px 2px`）。
+        .padding(.vertical, 13)
+        .padding(.horizontal, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-        )
+        .overlay(alignment: .top) {
+            if showsTopSeparator {
+                Rectangle()
+                    .fill(Theme.Palette.borderSoft)
+                    .frame(height: 1)
+            }
+        }
         // 无障碍：读屏读的是"这是什么、有什么"，而不是把六个碎片逐个念一遍
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)

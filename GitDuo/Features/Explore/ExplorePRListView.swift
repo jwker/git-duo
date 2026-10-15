@@ -97,8 +97,8 @@ struct ExplorePRListView: View {
         let items = model.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: Theme.Spacing.s) {
-            ForEach(items) { row in
+        return VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
                 Button {
                     // ⚠️ `readOnly: true` **显式传**（铁律 #7）：本页只可能来自探索入口，
                     //    而"只读还是可写"由路由在进入前定下，不让下层页自己推断仓库归属。
@@ -106,7 +106,8 @@ struct ExplorePRListView: View {
                         .prDetail(fullName: fullName, number: row.number, readOnly: true)
                     )
                 } label: {
-                    PullCard(row: row)
+                    // 方案 D：行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
+                    PullCard(row: row, showsTopSeparator: index > 0)
                 }
                 .buttonStyle(.plain)
                 .onAppear {

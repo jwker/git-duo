@@ -50,7 +50,9 @@ struct ExploreFilterSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(kind.title)
-                .font(Theme.Font.sectionLabel)
+                // 弹层小标题（原型 `.sheet-title`）⇒ `sheetTitle`（2026-10-15 起与
+                // 页面分区标题 `sectionLabel` 分道，走查第 73 条）。
+                .font(Theme.Font.sheetTitle)
                 .tracking(0.4)
                 .foregroundStyle(Theme.Palette.textTertiary)
                 .textCase(.uppercase)

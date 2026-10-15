@@ -3,8 +3,8 @@ import SwiftUI
 /// 对话头部 —— 原型 `styles/04-screens.css` 第 30–31 行的 `.conv-head`（PRD §4.9 / §4.11 页首）。
 ///
 /// ```css
-/// .conv-head{background:var(--card);border:1px solid var(--border-soft);
-///            border-radius:14px;padding:15px;margin-bottom:12px}
+/// /* 2026-10-15 方案 D 起（走查第 73 条）—— 头部去卡形：名字与状态直接排版在页面上 */
+/// .conv-head{background:none;border:none;border-radius:0;padding:12px 2px;margin-bottom:6px}
 /// .conv-head h2{font-size:17.5px;font-weight:720;line-height:1.35;margin:8px 0}
 /// ```
 ///
@@ -18,11 +18,10 @@ import SwiftUI
 ///
 /// ## 它的形状就是 `CardBox`，所以直接用它
 ///
-/// `.conv-head` 与 `.card` 的"白底 + 1pt 浅边 + 14pt 圆角"**逐字相同**
-/// （`.card{border-radius:14px}` / `.conv-head{border-radius:14px}`），
-/// 只有内边距不同（`.card` 是 14、这里是 15）。
-/// 所以这里用 `CardBox(vertical: 15, horizontal: 15)` 而不是再画一遍那个形状 ——
-/// 抄一遍的代价不是多几行，而是"将来改卡片描边时只改到一处"。
+/// `.conv-head` 与 `.card` 在方案 D 下**同为去形条目**（都不画底与边框），
+/// 只有内边距不同（`.card` 是 13、这里是 12 —— 原型两个值）。
+/// 所以这里用 `CardBox(vertical: 12, horizontal: 2)` 而不是再写一遍 ——
+/// 抄一遍的代价不是多几行，而是"将来调条目形态时只改到一处"。
 ///
 /// ## 五段文字全部由调用方给
 ///
@@ -67,8 +66,8 @@ public struct ConversationHeader: View {
     }
 
     public var body: some View {
-        // 原型 `.conv-head{padding:15px}`（15 不在 4pt 阶里 ⇒ 写原值）。
-        CardBox(vertical: 15, horizontal: 15) {
+        // 原型 `.conv-head{padding:12px 2px}`（方案 D 的去形内边距，12 不在 4pt 阶里 ⇒ 写原值）。
+        CardBox(vertical: 12, horizontal: 2) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: Theme.Spacing.m) {
                     StatusPill(title: stateTitle, tone: stateTone)

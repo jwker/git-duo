@@ -18,9 +18,10 @@ struct ExploreSubListSkeleton: View {
     var count = 5
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.s) {
-            ForEach(0..<count, id: \.self) { _ in
-                CardBox {
+        // 方案 D：行间 hairline 由行自己画（顶上那条），骨架同样首行不画。
+        VStack(spacing: 0) {
+            ForEach(0..<count, id: \.self) { index in
+                CardBox(showsTopSeparator: index > 0) {
                     HStack(alignment: .top, spacing: Theme.Spacing.s) {
                         // 16pt 的正方形 —— 它对着的是 `Theme.Font.body` 那一档的
                         // SF Symbol，图标视觉高度大约就是这个数。

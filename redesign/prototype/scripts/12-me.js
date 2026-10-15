@@ -20,10 +20,10 @@ SCR.me = {
       <div class="hm-grid">${hm()}</div>
     </div>
     <div class="menu-card">
-      <div class="menu-item" onclick="push('stars')">${svg(I.star)} Star 管理<span class="chev">${svg(I.chev)}</span></div>
-      <div class="menu-item" onclick="push('folders')">${svg(I.bm)} 我的收藏<span class="chev">${svg(I.chev)}</span></div>
-      <div class="menu-item" onclick="push('prDetail',{n:57,t:'我创建的 Pull Request',s:'open'})">${svg(I.pr)} 我的 Pull Request<span class="chev">${svg(I.chev)}</span></div>
-      <div class="menu-item" onclick="push('issueDetail',{n:42,t:'我创建的 Issue',s:'open'})">${svg(I.issueO)} 我的 Issue<span class="chev">${svg(I.chev)}</span></div>
+      <div class="menu-item" style="--ic:var(--gold)" onclick="push('stars')">${svg(I.star)} Star 管理<span class="chev">${svg(I.chev)}</span></div>
+      <div class="menu-item" style="--ic:var(--link)" onclick="push('folders')">${svg(I.bm)} 我的收藏<span class="chev">${svg(I.chev)}</span></div>
+      <div class="menu-item" style="--ic:var(--link)" onclick="push('prDetail',{n:57,t:'我创建的 Pull Request',s:'open'})">${svg(I.pr)} 我的 Pull Request<span class="chev">${svg(I.chev)}</span></div>
+      <div class="menu-item" style="--ic:var(--green)" onclick="push('issueDetail',{n:42,t:'我创建的 Issue',s:'open'})">${svg(I.issueO)} 我的 Issue<span class="chev">${svg(I.chev)}</span></div>
     </div>
     <div class="menu-card">
       <div class="menu-item" onclick="push('settings')">${svg(I.gear)} 设置<span class="chev">${svg(I.chev)}</span></div>

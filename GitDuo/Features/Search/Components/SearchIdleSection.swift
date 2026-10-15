@@ -52,7 +52,8 @@ struct SearchIdleSection: View {
             EmptyBox(title: SearchCopy.emptyHistory)
         } else {
             ForEach(Array(history.enumerated()), id: \.element) { index, term in
-                SearchRowBox(showsSeparator: index < history.count - 1) {
+                // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
+                SearchRowBox(showsSeparator: index > 0) {
                     onUse(term)
                 } content: {
                     Image(systemName: "clock")

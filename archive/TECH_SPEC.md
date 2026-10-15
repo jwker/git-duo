@@ -2019,6 +2019,35 @@ GlassEffectContainer(spacing: 12) {
 - 状态色沿用 GitHub 语义（开放=绿、已合并=紫、已关闭=红、已发布=紫），与 PRD 一致。
 - 玻璃用法封装为组件（`GlassIconButton` / `GlassChip` / `GlassActionBar`），业务代码不直接写 `.glassEffect`，从机制上防止误用。
 
+> 🔴 **2026-10-15（走查第 73 / 74 条）：视觉规格已按「方案 D · 分组平铺」切换，原型与 App 均已落地。**
+> 用户主动重启视觉改版（推翻 2026-10-13 的整体否决——本次方向不同：去卡片边框 + 放大排版 +
+> 彩色图标块），从 6 个方向对比页中拍板选 D。第 73 条先改原型（视觉规格正本），第 74 条 App 侧跟进：
+> **令牌层**——`background` 浅色转纯白、`surfaceSunken` 深色转 `#161b22`（面板比页面亮一档，
+> 旧"内凹=更暗"模型随方案 D 作废）、新增 `iconTileGold` / `iconTileSlate` / `markdownPreSurface`
+> （Markdown 代码块在灰面板上垫白，与 `.sr-code` 的 `codeSurface` 分道）、
+> `Font.sectionLabel` 重定义为 19pt 组头并新分 `Font.sheetTitle`（弹层小标题 12px bold 保持不变）；
+> **组件层**——`CardBox` 去形（13/2 内边距 + 相邻顶部分隔线，`showsTopSeparator` 由调用方给）、
+> 新增 `PanelBox`（浅灰内容面板，热力图 / README 一族）、`MenuRow` 图标升级 40pt 实底色块
+> （`IconTone` 五档：slate / gold / green=accentStrong / blue=accent / purple=stateMerged）、
+> `StatButton` / `FilterChip` / `SearchField` / `BreadcrumbBar` / `CommentBubble` / `CommentComposer`
+> / `CodeSurface` 转无边框浅灰面，行分隔线（MenuRow / RecentRow / SearchRowBox）改**顶上内嵌缩进**
+> （54 / 44 / 45pt）；**视图层**——两个详情头去卡形、全部列表（Star / 仓库 / 趋势 / Issue / PR /
+> 提交）spacing 归零 + 首行不画线，骨架同步重穿。
+> ⚠️ 深色档原型未定义，App 侧按「面板比页面亮一档」的同一意图取值（见 `Theme.swift` 各令牌注释）。
+>
+> 🔴 **2026-10-15 当晚再走（第 75 条，用户目视 App 后提的两条，原型 + App 已同步）：**
+> ① **README 一族不再是一块面** —— 原型 `.markdown` 去 `background` 去 `padding`（正文直接坐在底上，
+> 左右留白由**页面**给：仓库首页 / 文件页的 `Spacing.page`、Release 弹层自己的内边距），
+> 连带 `pre` 从"白块"翻成**浅灰面**（`--chip`）—— 白块在白底上等于没有形状。
+> ⚠️ 同一档的**三处调用点一起变**（README / 文件页 md 预览 / Release 说明弹层），它们是同一份样式。
+> ② **首页置顶从「2 列灰块网格」改成「单列平铺行」** —— `PinCard` → **`PinRow`**、
+> `PinGridSkeleton` → **`PinRowsSkeleton`**（名字跟着形状改），与 `.recent-row` 同款
+> （30pt owner 头像 + 全名 + 一行描述 + 右侧 Star，顶上内嵌 hairline 44，首行不画）。
+> 网格时代三个约束作废：描述不再补 `—`、**只留一行**、指标只留 Star（语言点 / Fork 不再显示；私有标记保留）。
+> ③ **顺手修掉第 74 条的一处回归**：`CodeSurface` 的底色当时被写死成"白块"（它那时只出现在灰面板里），
+> 而**文件页的源码块**与**提交弹层的「查看最新版」**不在面板里 ⇒ 浅色白贴白、深色与页面同色。
+> 现在底色做成参数 `fill`（默认 `surfaceSunken` = 面板色，评论气泡里才传 `markdownPreSurface`）。
+
 > ⚠️ **2026-10-09（切片 10 逐条核实）：上面点名的那三个封装组件，至今一个都不存在 —— 因为一次都没被需要过。**
 > 全 App 的玻璃**全部来自系统导航层**（`NavigationStack` 的导航栏 / `TabView` 的 Tab 栏 / 工具栏 / Sheet 外框），
 > 系统自己负责外观，业务侧**没有任何一处自定义玻璃控件**，因此也没有一处 `.glassEffect` 调用
@@ -2139,14 +2168,14 @@ GlassEffectContainer(spacing: 12) {
 | `Radius.branchChip` | `7` | `.branch-chip{border-radius:7px}`。⚠️ 与 `chip`(6) **只差 1pt 但不合并**：原型里是两处独立取值，而这一颗是**可点的控件**（点开切换分支弹层） |
 | `Font.monospacedCode` | `.system(.caption, design: .monospaced)` | `pre code{font-size:12px}`。12pt 落在 `monospaced`(13) 与 `monospacedPreview`(11) **中间那一档**；代码块是**要读懂的内容**（不像预览行只是"瞄一眼"），且嵌在 README 正文里不能与正文抢主次 |
 | `Font.markdownH1` | `.title2.weight(.bold)` | `.markdown h1{font-size:22px;font-weight:750}` |
-| `Font.markdownH2` | `.body.weight(.bold)` | `.markdown h2{font-size:17px;font-weight:700}`。⚠️ 与 `bodyStrong`（semibold）只差一档字重，不合并（沿 `label` / `sectionLabel` 先例） |
+| `Font.markdownH2` | `.body.weight(.bold)` | `.markdown h2{font-size:17px;font-weight:700}`。⚠️ 与 `bodyStrong`（semibold）只差一档字重，不合并（沿 `label` / `sheetTitle` 先例；⚠️ `sectionLabel` 2026-10-15 起升级为 20pt bold，不再是 12 那一档，走查第 73 条） |
 | `Font.markdownBody` | `.subheadline` | `.markdown{font-size:14px}`。⚠️ 与 `rowTitle` **今天同值但不同令牌**（原型是两处独立取值），沿 `codeSurface` 与 `background` 那条先例 |
 | `Font.breadcrumb` | `.caption`（系统 12pt） | `.crumb{font-size:12.5px}`。⚠️ **陷阱**：本文件里 `Font.caption` 这个**令牌名**指的是 `.caption2`（11pt）⇒ 这里**不能**复用 `Font.caption`。`Slice6ComponentTests` 用一条断言把这对关系钉住了 |
 | `GitHubIcon.branch` | `arrow.triangle.branch` | 面包屑的分支胶囊图标。**单独立文件**的理由：Issue / PR 的状态图标是业务相关标识（`StateIcon`），通用图标不是 —— 混在一起会让"再加一个图标"变成往业务文件里塞东西 |
 
 | 组件 | 对应原型 | 为什么进设计包（决策 #43 判据） |
 |---|---|---|
-| `CodeSurface` | `.markdown pre` / `pre code`（PRD §4.4 / §4.5） | 只收 `[[CodeSpan]]`（`text` + 五档 `CodeTone`）⇒ 与业务无关。**横向滚动不折行**（折行会让缩进层次看不出来，而缩进是读代码的第一信息）；**一个 `Text` 装全部行**（否则行距要靠 `VStack(spacing:)` 凑，而那个值同时管着行距与末行内边距） |
+| `CodeSurface` | `.markdown pre` / `pre code`（PRD §4.4 / §4.5） | 只收 `[[CodeSpan]]`（`text` + 五档 `CodeTone`）⇒ 与业务无关。**横向滚动不折行**（折行会让缩进层次看不出来，而缩进是读代码的第一信息）；**一个 `Text` 装全部行**（否则行距要靠 `VStack(spacing:)` 凑，而那个值同时管着行距与末行内边距）。⚠️ **底色是参数 `fill`**（2026-10-15 走查第 75 条）：默认 `surfaceSunken`（坐在页面 / 弹层底上），评论气泡里传 `markdownPreSurface` —— 两处要的形状信号方向相反，写死一个必有一处看不见自己 |
 | `DiffRow` | `.dline` / `.hunk`（PRD §4.7） | 只收 `number` / `text` / `tone` 三个基础类型 ⇒ 进设计包。**六档**：原型四档 + `.note`（`\ No newline`）与 `.content`（未知行）—— 这两档原型没有但**必须有地方落**，丢掉会让用户看到的 diff **少几行且没有任何迹象**。行号列宽 34（含右侧 8pt 内边距，故修饰符顺序不能反） |
 | `BreadcrumbBar` | `.crumb` + `.branch-chip`（PRD §4.4 / §4.13） | 只收 `branch: String` + `path: [String]` ⇒ 进设计包。"当前在哪一级"是领域层 `RepoPath` 的事。路径段走 `FlowLayout` **折行不截尾**（截尾会把"我在哪一级"这个唯一的信息压掉）；分隔符作**每段的前缀**（否则折行时行尾会留一根孤零零的斜杠）。⚠️ **2026-10-14：右端那个 `trailing` 槽删了**（它唯一的生产调用方 `RepoTreeSection` 不再传 —— 那颗「⋯」搬到了导航栏右上角），连同 `where Trailing == EmptyView` 的便利 init 与 `#Preview` 里那段演示 |
 | `BranchRow` | `.menu-item` 的分支行（PRD §4.8） | 只收 `name` / `badgeTitle` / `canDelete` / 两个闭包 ⇒ 进设计包。**不判断能不能删**（判据在 `BranchSummary.canDelete`）、**不写死任何文案**（从 `BranchCopy` 传） |
@@ -2188,7 +2217,8 @@ GlassEffectContainer(spacing: 12) {
 | `Radius.bubble` | `12` | `.comment .bubble{border-radius:12px}`。⚠️ 与 `container`(12) **同值但不是一个令牌**：`container` 是**设计指南**推出来的（"与父容器同心"，§10.3），只在玻璃那套语境里说话；这一档是**原型写死**的。补深色 / 调玻璃时 `container` 可能要动，而气泡圆角不该跟着动 |
 | `Radius.labelDot` | `4` | `.lbl-dot{border-radius:4px}`。圆角阶里**最小的一档**（`chip` 是 6）；用到 6 就接近胶囊，而原型画的是"方一点的小色块" |
 | `Font.conversationTitle` | `.body.weight(.bold)` | `.conv-head h2{font-size:17.5px;font-weight:720}` ⇒ 系统 17pt + bold。⚠️ 与 `markdownH2` 同值但不是一个令牌：原型里是**两处独立取值**（`.markdown h2` 是 17/700、这里是 17.5/720），只是都落到了同一档 |
-| `Font.commentMeta` | `.caption`（系统 12pt） | `.comment .bhead{font-size:12px}` ⇒ 评论气泡的头部行。⚠️ 与 `breadcrumb`（`.crumb{12.5px}`）同值但不是一个令牌（同 `markdownBody` / `rowTitle` 那条判例）；⚠️ **与 `label`(12 semibold) / `sectionLabel`(12 bold) 只差字重**，也不能合并 —— 拿 `label` 顶替会让整条头部都变粗，于是作者名（原型 `font-weight:700`）"更粗"就看不出来了 |
+| `Font.commentMeta` | `.caption`（系统 12pt） | `.comment .bhead{font-size:12px}` ⇒ 评论气泡的头部行。⚠️ 与 `breadcrumb`（`.crumb{12.5px}`）同值但不是一个令牌（同 `markdownBody` / `rowTitle` 那条判例）；⚠️ **与 `label`(12 semibold) / `sheetTitle`(12 bold) 只差字重**，也不能合并
+（⚠️ `sectionLabel` 2026-10-15 起升级为 20pt bold，弹层小标题那档由 `sheetTitle` 接住，走查第 73 条） —— 拿 `label` 顶替会让整条头部都变粗，于是作者名（原型 `font-weight:700`）"更粗"就看不出来了 |
 
 | 组件 | 对应原型 | 为什么进设计包（决策 #43 判据） |
 |---|---|---|
@@ -2254,7 +2284,9 @@ GlassEffectContainer(spacing: 12) {
 > 三个解析器（`MarkdownParser` / `UnifiedDiffParser` / `SyntaxHighlighter`）**一律是纯函数**：只吃 `String`、只吐结构体，不碰任何 UI 类型。
 
 > **渲染落点（6.3 已交付）**：`MarkdownBody`（`GitDuo/Features/Repo/Components/`）吃 `[MarkdownBlock]` 逐块渲染 —— 按决策 **#43** 留 Feature（收领域模型）。
-> - 容器与标题照原型 `.markdown` 一族：底 `surface` + 1pt `borderSoft` + `Radius.container`(12) + 内边距 `Spacing.page`(16)；h1 / h2 各配一条 `borderSoft` 下边线（**画在内边距之内**，即先 `padding(.bottom)` 再 `overlay(alignment: .bottom)`）。
+> - ⚠️ **容器自 2026-10-15 走查第 75 条起是一张"没有容器"**：原型 `.markdown` 去 `background`、去 `padding`
+>   （此前是底 `surface` + 1pt `borderSoft` + `Radius.container`(12) + 内边距 `Spacing.page`(16)，方案 D 时又转成灰面）——
+>   正文直接坐在底上，**左右留白由页面给**。h1 / h2 仍各配一条 `borderSoft` 下边线（画在下内边距之内）。
 > - **行内样式由视图层做**（领域层只出结构）：`.bold` / `.italic` 必须基于**本块的基准字号**派生（`base.weight(.bold)` / `base.italic()`）—— `AttributedString` 的 `.font` 是**整段替换**而不是叠一层，直接给 `.bold` 会让粗体那一小段退回系统默认字号。`.code` 用 `monospacedCode` + `codeInlineSurface`；`.link` 用 `accent` + **无下划线**（原型没有 `a` 规则，取本 App 既有链接语汇，与面包屑一致）。
 > - **代码块直接交给 `CodeSurface`**，语言由 `CodeLanguage.named(fence 的 info string)` 决定，**认不出来就是纯文本**（不去猜 —— 按错的规则着色比不着色更让人怀疑内容本身）。
 > - 列表项的缩进 = `18 × (depth + 1)`（原型 `ul{margin-left:18px}`）；**嵌套是「规格未给」**（原型没有嵌套列表），故只复用那一个 18、不引入第二个数值。任务列表勾选框只靠图形表达勾选态、**不加颜色区分**，且**必须给读屏标签**（`MarkdownCopy.checkboxLabel`）。

@@ -156,7 +156,6 @@ struct SearchView: View {
 
     private var results: some View {
         let rows = model.rows
-        let lastIndex = rows.count - 1
 
         return VStack(alignment: .leading, spacing: 0) {
             if let title = model.listTitle {
@@ -176,7 +175,8 @@ struct SearchView: View {
                 SearchRowView(
                     row: row,
                     now: model.loadedAt,
-                    showsSeparator: index < lastIndex
+                    // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
+                    showsSeparator: index > 0
                 ) {
                     open(row)
                 }

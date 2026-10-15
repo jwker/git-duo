@@ -61,12 +61,16 @@ public struct FilterChip: View {
             .padding(.vertical, 6)
             .padding(.horizontal, Theme.Spacing.m)
             .background(
-                Capsule().fill(isHighlighted ? Theme.Palette.accentSurface : Theme.Palette.surface)
+                // 方案 D（2026-10-15，走查第 73 条）：未选档白卡 → 浅灰面（原型
+                // `.fchip{background:var(--chip);border:1px solid transparent}`）。
+                Capsule().fill(isHighlighted ? Theme.Palette.accentSurface : Theme.Palette.surfaceSunken)
             )
             .overlay(
                 // 原型 `border-radius:20px` 在 26pt 高的 chip 上就是胶囊。
+                // 未选档的边框是**透明的**（占位但不画）—— 已选档仍靠"底 + 边 + 字"
+                // 三处一起换表达"已选"。
                 Capsule().stroke(
-                    isHighlighted ? Theme.Palette.accent : Theme.Palette.border,
+                    isHighlighted ? Theme.Palette.accent : Color.clear,
                     lineWidth: 1
                 )
             )

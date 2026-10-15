@@ -307,9 +307,10 @@ struct FileView: View {
         .padding(.vertical, Theme.Spacing.s)
         .padding(.horizontal, Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // 方案 D：面包屑类条转浅灰面（同 `BreadcrumbBar`），无边框。
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(Theme.Palette.surface)
+                .fill(Theme.Palette.surfaceSunken)
         )
         .overlay(
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
@@ -495,9 +496,12 @@ struct FileView: View {
         }
     }
 
-    /// md 正文：与 README / Issue 正文**同一套**渲染（`MarkdownBody` 的 `.document` 档
-    /// —— 白底卡片 + 16 内边距 + 15pt 正文），所以同一份 README 在仓库页的卡片里
+    /// md 正文：与 README / Release 说明**同一套**渲染（`MarkdownBody` 的 `.document` 档
+    /// —— 无面板、无内边距、15pt 正文），所以同一份 README 在仓库首页
     /// 与在文件页点开之后长得一样。
+    ///
+    /// ⚠️ 左右那 16pt 由**本页**给（`body` 里那圈 `Spacing.page`）—— 正文档的内边距
+    ///    在 2026-10-15 走查第 75 条归零了，这里不给的话正文会顶到屏幕边。
     ///
     /// ⚠️ **走到这里的路径必然是 `.md` / `.markdown`**（`file.markdown` 非空），
     /// 判据在领域层 `MarkdownFile`，本视图不再判一次。

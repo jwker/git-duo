@@ -137,12 +137,15 @@ struct Slice7ComponentTests {
         #expect(Theme.Font.commentMeta == Theme.Font.breadcrumb)
     }
 
-    @Test("⚠️ `commentMeta`(12pt 常规) 与 `label`(12pt semibold) / `sectionLabel`(12pt bold) **不是一档**")
+    @Test("⚠️ `commentMeta`(12pt 常规) 与 `label`(12pt semibold) / `sheetTitle`(12pt bold) **不是一档**")
     func commentMetaIsNotAHeavierLabel() {
         // 三档都是 12pt，只差字重。拿 `label` 顶替会让整条评论头部都变粗 ——
         // 于是作者名的"更粗"（原型 `.author{font-weight:700}`）就看不出来了，
         // 而它是那一行里唯一要抢眼的东西。
         #expect(Theme.Font.commentMeta != Theme.Font.label)
+        #expect(Theme.Font.commentMeta != Theme.Font.sheetTitle)
+        // ⚠️ 2026-10-15 走查第 73 条起 `sectionLabel` 升级为 20pt bold（不再属于 12 那一档），
+        // 弹层小标题那一档由新分的 `sheetTitle` 接住 ⇒ 上面这条改比 `sheetTitle`。
         #expect(Theme.Font.commentMeta != Theme.Font.sectionLabel)
     }
 

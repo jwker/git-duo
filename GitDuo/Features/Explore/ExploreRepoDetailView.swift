@@ -314,7 +314,7 @@ struct ExploreRepoDetailView: View {
     private var fileSection: some View {
         SectionHeader(title: ExploreRepoCopy.fileSection)
 
-        CardBox(vertical: Theme.Spacing.xs) {
+        CardBox() {
             LinkRow(
                 systemImage: GitHubIcon.folder,
                 title: ExploreRepoCopy.fileBrowseRowTitle,
@@ -340,7 +340,7 @@ struct ExploreRepoDetailView: View {
     private var collaborationSection: some View {
         SectionHeader(title: ExploreRepoCopy.collaborationSection)
 
-        CardBox(vertical: Theme.Spacing.xs) {
+        CardBox() {
             LinkRow(
                 systemImage: StateIcon.issueOpen,
                 iconTint: Theme.Palette.stateOpenIcon,

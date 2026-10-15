@@ -153,12 +153,12 @@ struct RepoReadmeSection: View {
             SkeletonBar(height: 13, width: 84)
                 .padding(.top, Theme.Spacing.l)
 
-            CardBox {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 15)
-                    SkeletonBar(height: 15)
-                    SkeletonBar(height: 15, width: 240)
-                }
+            // ⚠️ **不画 `CardBox`**（2026-10-15 走查第 75 条）：README 正文已不再是一块面板
+            //    ⇒ 骨架画一块卡的话，数据到达时会"灰底突然消失"跳一下。
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                SkeletonBar(height: 15)
+                SkeletonBar(height: 15)
+                SkeletonBar(height: 15, width: 240)
             }
         }
         .accessibilityHidden(true)

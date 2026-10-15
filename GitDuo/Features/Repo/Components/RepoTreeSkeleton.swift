@@ -42,7 +42,7 @@ struct RepoTreeSkeleton: View {
             // 面包屑那一条（`BreadcrumbBar` 高 32）。
             SkeletonBar(height: 32)
 
-            CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
+            CardBox() {
                 ForEach(0..<rows, id: \.self) { _ in
                     SkeletonBar(height: 15, width: 190)
                         // 与 `RepoFileRow` 的 `padding:11px 4px` 同值。

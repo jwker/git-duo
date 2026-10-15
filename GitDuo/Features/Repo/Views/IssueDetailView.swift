@@ -303,7 +303,7 @@ struct IssueDetailView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             // 头部卡：胶囊 + 说明那一行、标题、元信息行 —— 三行，与 `ConversationHeader`
             // 的三行一一对应（骨架的用处就是让"东西来了之后"不发生跳动）。
-            CardBox(vertical: 15, horizontal: 15) {
+            CardBox() {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     SkeletonBar(height: 11, width: 120)
                     SkeletonBar(height: 17, width: 260)
@@ -332,13 +332,10 @@ struct IssueDetailView: View {
         }
         .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // 方案 D：气泡是浅灰面（与 `CommentBubble` 一致），无边框。
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
+                .fill(Theme.Palette.surfaceSunken)
         )
     }
 }

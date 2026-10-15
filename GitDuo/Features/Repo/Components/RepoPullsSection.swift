@@ -112,14 +112,15 @@ struct RepoPullsSection: View {
         let items = list.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: Theme.Spacing.s) {
-            ForEach(items) { row in
+        return VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
                 Button {
                     onOpen(row.number)
                 } label: {
                     // ⚠️ 给 `now` ⇒ 画第三行。只读位由**路由**决定（铁律 #7），
                     //    本件不推断仓库归属。
-                    PullCard(row: row, now: now)
+                    //    方案 D：行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
+                    PullCard(row: row, now: now, showsTopSeparator: index > 0)
                 }
                 .buttonStyle(.plain)
                 .onAppear {

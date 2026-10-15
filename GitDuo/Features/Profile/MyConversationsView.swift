@@ -74,7 +74,6 @@ struct MyConversationsView: View {
 
     private var results: some View {
         let rows = model.rows
-        let lastIndex = rows.count - 1
 
         return VStack(alignment: .leading, spacing: 0) {
             if let title = model.listTitle {
@@ -96,7 +95,8 @@ struct MyConversationsView: View {
                     // ⚠️ 「现在」取的是**结果到达那一刻**（`model.loadedAt`），
                     //    不在 `body` 里取 `Date()`（见那个属性的说明）。
                     now: model.loadedAt,
-                    showsSeparator: index < lastIndex
+                    // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
+                    showsSeparator: index > 0
                 ) {
                     open(hit)
                 }

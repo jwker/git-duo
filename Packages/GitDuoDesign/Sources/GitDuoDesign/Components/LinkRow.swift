@@ -109,7 +109,7 @@ public struct LinkRow: View {
 }
 
 #Preview {
-    CardBox(vertical: Theme.Spacing.xs) {
+    CardBox() {
         LinkRow(
             systemImage: "smallcircle.filled.circle",
             title: "Issues",

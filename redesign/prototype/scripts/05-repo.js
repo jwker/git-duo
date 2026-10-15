@@ -95,16 +95,17 @@ function readmeBlock(){
 }
 
 /* 四行入口：图标 / 颜色 / 文字 / 落点全在一处（同 App `RepoDetailView.entryRows`）。
-   ⚠️ Issues / Pull Requests 两行用状态色（开放态那个绿）—— 这两行**不是状态**
-      （它们是"去哪个列表"），颜色只是"这一类东西"的固定色。 */
+   ⚠️ 2026-10-15（走查第 73 条 · 方案 D）：图标升级为 40pt 实底色块 + 白字形，
+      `--ic` 内联给色（原 `.tint-open` 绿描边机制随之移除）——
+      Issues 用开放态那个绿、PR 用链接蓝，颜色仍是「这一类东西」的固定色而非状态。 */
 function repoEntryRows(repo){
   const rows = [
-    {t:'代码',           ic:I.folder, cls:'',          act:`push('repoCode',{repo:'${repo}'})`},
-    {t:'Issues',         ic:I.issueO, cls:'tint-open', act:`push('repoSection',{repo:'${repo}',seg:'issues'})`},
-    {t:'Pull Requests',  ic:I.pr,     cls:'tint-open', act:`push('repoSection',{repo:'${repo}',seg:'prs'})`},
-    {t:'Commits',        ic:I.commit, cls:'',          act:`push('repoSection',{repo:'${repo}',seg:'commits'})`},
+    {t:'代码',           ic:I.folder, c:'var(--slate)', act:`push('repoCode',{repo:'${repo}'})`},
+    {t:'Issues',         ic:I.issueO, c:'var(--green)', act:`push('repoSection',{repo:'${repo}',seg:'issues'})`},
+    {t:'Pull Requests',  ic:I.pr,     c:'var(--link)',  act:`push('repoSection',{repo:'${repo}',seg:'prs'})`},
+    {t:'Commits',        ic:I.commit, c:'var(--merge)', act:`push('repoSection',{repo:'${repo}',seg:'commits'})`},
   ];
-  return rows.map(r=>`<div class="menu-item" onclick="${r.act}">${svg(r.ic,r.cls)} ${r.t}<span class="chev">${svg(I.chev)}</span></div>`).join('');
+  return rows.map(r=>`<div class="menu-item" style="--ic:${r.c}" onclick="${r.act}">${svg(r.ic)} ${r.t}<span class="chev">${svg(I.chev)}</span></div>`).join('');
 }
 
 /* ============================================================ 代码页（页内层级） */

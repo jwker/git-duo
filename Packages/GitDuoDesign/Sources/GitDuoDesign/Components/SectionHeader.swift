@@ -5,8 +5,10 @@ import SwiftUI
 /// ## 两种形态来自原型
 ///
 /// ```css
-/// .section-label{font-size:12px;font-weight:700;color:var(--text3);
-///                text-transform:uppercase;letter-spacing:.6px;margin:16px 2px 8px}
+/// /* 2026-10-15 方案 D 起（走查第 73 条）—— 组标题从「12px 大写灰小字」
+///    升级为 19pt 特粗组头：卡片容器全部去形后，分组全靠它一个元素承担。 */
+/// .section-label{font-size:19px;font-weight:800;color:var(--text);
+///                letter-spacing:-.3px;margin:22px 2px 6px}
 /// .home-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:16px}
 /// .home-head .section-label{margin:0}
 /// ```
@@ -15,25 +17,24 @@ import SwiftUI
 ///   就是这一种（`align-items:baseline` ⇒ 用 `firstTextBaseline`）。
 /// - **不带动作**：只有一个标题（探索页的列表标题、详情页的各分区）。
 ///
-/// ## ⚠️ `text-transform:uppercase` 是照做的，不是抄错
+/// ## ⚠️ 大写规则随方案 D 一起删了
 ///
-/// 原型这个类上确实挂着 `uppercase`。中文没有大小写，所以它只作用于英文分区名 ——
-/// 本切片出现的 `Latest Release` 会被渲染成 **`LATEST RELEASE`**，
-/// 切片 6 的 `README.md` 会变成 `README.MD`。这就是原型上看到的样子，
-/// 因此照做；若认为观感不对，改这一处即可（一个 `.textCase`）。
+/// 旧版挂着 `text-transform:uppercase`（只作用于英文分区名，如 `README.MD`）。
+/// 方案 D 的新规则里**没有这一条** ⇒ 本件不再加 `.textCase`。
 ///
 /// ## ⚠️ 两档**外边距**（切片 7.4 补）
 ///
 /// 原型里 `.section-label` 有两种用法，差的就是外边距：
 ///
-/// - **默认**：`margin:16px 2px 8px`（写在 `.section-label` 自己身上）——
+/// - **默认**：`margin:22px 2px 6px`（方案 D 起的上边距从 16 提到 22 —— 组与组之间
+///   要靠这段空白分开，因为组与组之间已经没有任何容器形状了）——
 ///   所有"自己撑开上下留白"的分区标题都是这一种；
 /// - **`margin:0`**：§4.10 新建 Issue 页的「标签」（`07-issues.js:23` 逐字带着
 ///   `style="margin:0"`）。那一页是一个 `display:flex;gap:10px` 的纵向流，
 ///   每个孩子之间的间距由 `gap` 统一给 ⇒ 标题再自带一层上下边距就会把它顶开。
 ///
 /// ⚠️ 这两档**不能靠"调用方自己加负 padding"** 表达：那等于把本组件内部的
-/// 三个数值（16 / 2 / 8）泄露给每一个调用点，而将来改其中一个就会漏掉一处。
+/// 数值泄露给每一个调用点，而将来改其中一个就会漏掉一处。
 ///
 /// ## 它是内容层
 ///
@@ -54,10 +55,10 @@ public struct SectionHeader: View {
     ///
     /// 带动作时原型把 `.section-label` 的 `margin` 归零（由 `.home-head` 管外边距），
     /// 靠 CSS 的行高撑出一点空隙 —— 而 SwiftUI 的 `Text` 没有那段行距，
-    /// 全归零会让标题与卡片贴在一起，所以补 2pt（`Spacing.xxs`）。
+    /// 全归零会让标题与下面的内容贴在一起，所以补 2pt（`Spacing.xxs`）。
     private var bottomPadding: CGFloat {
         switch margins {
-        case .section: action == nil ? Theme.Spacing.s : Theme.Spacing.xxs
+        case .section: action == nil ? 6 : Theme.Spacing.xxs
         case .none: 0
         }
     }
@@ -78,9 +79,12 @@ public struct SectionHeader: View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
             Text(title)
                 .font(Theme.Font.sectionLabel)
-                .foregroundStyle(Theme.Palette.textTertiary)
-                // 见类型说明：原型就是这么写的，中文不受影响、英文会变大写。
-                .textCase(.uppercase)
+                // 方案 D：组标题取正文色 —— 12px 时代它是"全屏最安静的一级文字"，
+                // 19pt 时代它是页面上最重的元素之一，灰色会让它看起来像一句说明。
+                .foregroundStyle(Theme.Palette.textPrimary)
+                // 原型 `letter-spacing:-.3px`（大标题收一点字距，笔画不那么散）。
+                // 字号令牌管不到字距，这里写原值并注明出处。
+                .tracking(-0.3)
 
             Spacer(minLength: 0)
 
@@ -99,15 +103,16 @@ public struct SectionHeader: View {
         .padding(.horizontal, horizontalPadding)
     }
 
-    /// 原型 `margin:16px 2px 8px` 的上边距。`.none` 那一档归零（见类型说明）。
+    /// 原型 `margin:22px 2px 6px` 的上边距（方案 D 起 16 → 22，见类型说明）。
+    /// `.none` 那一档归零（见类型说明）。
     private var topPadding: CGFloat {
         switch margins {
-        case .section: Theme.Spacing.l
+        case .section: 22
         case .none: 0
         }
     }
 
-    /// 原型 `margin:16px 2px 8px` 的左右边距。
+    /// 原型 `margin:22px 2px 6px` 的左右边距。
     private var horizontalPadding: CGFloat {
         switch margins {
         case .section: Theme.Spacing.xxs
@@ -121,7 +126,7 @@ extension SectionHeader {
     /// 原型里 `.section-label` 的两处外边距写法（见类型说明）。
     public enum Margins: Sendable, Hashable {
 
-        /// `margin:16px 2px 8px` —— `.section-label` 自带的那个（默认）。
+        /// `margin:22px 2px 6px` —— `.section-label` 自带的那个（默认）。
         case section
 
         /// `style="margin:0"` —— 排版由外层 `gap` 统一给的那种（§4.10 的「标签」）。

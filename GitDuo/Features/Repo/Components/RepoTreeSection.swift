@@ -101,7 +101,7 @@ struct RepoTreeSection: View {
                 // 原型 `.crumb{margin-bottom:8px}`。
                 .padding(.bottom, Theme.Spacing.s)
 
-            CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
+            CardBox() {
                 if page.entries.isEmpty {
                     // 原型：`<div class="t3" style="padding:16px 8px;text-align:center">空目录</div>`
                     // ——**它也在卡片里面**（不是卡片外的一句提示）。

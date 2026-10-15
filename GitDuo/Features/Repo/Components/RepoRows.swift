@@ -158,7 +158,7 @@ struct RepoCommitRow: View {
 #Preview {
     ScrollView {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
+            CardBox() {
                 RepoFileRow(
                     entry: TreeEntry(
                         name: "GitDuo", path: RepoPath(path: "GitDuo"), kind: .directory,
@@ -177,7 +177,7 @@ struct RepoCommitRow: View {
                 )
             }
 
-            CardBox(vertical: Theme.Spacing.xs, horizontal: 14) {
+            CardBox() {
                 RepoCommitRow(
                     commit: CommitSummary(
                         sha: "a1b2c3d4e5f6", message: "fix(auth): 断网不再被当成登出",

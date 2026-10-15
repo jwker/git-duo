@@ -24,7 +24,7 @@ import GitDuoKit
 ///
 /// ## 为什么它在本 Feature 里
 ///
-/// 同 `PinCard` / `RepoCard`（决策 #43）：认识领域模型的卡片不进 `GitDuoDesign`。
+/// 同 `PinRow` / `RepoCard`（决策 #43）：认识领域模型的卡片不进 `GitDuoDesign`。
 struct RecentRow: View {
 
     /// 仓库全名 `owner/name`。
@@ -81,11 +81,15 @@ struct RecentRow: View {
         .padding(.vertical, Theme.Spacing.m)
         .padding(.horizontal, Theme.Spacing.xxs)
         .contentShape(Rectangle())
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .topLeading) {
             if showsSeparator {
                 Rectangle()
                     .fill(Theme.Palette.borderSoft)
                     .frame(height: 1)
+                    // 方案 D（2026-10-15，走查第 73 条）：hairline 内嵌缩进 ——
+                    // 从文字起点起，不再通栏。缩进 = 行缩进 2 + 头像 30 + gap 12 = 44
+                    //（原型 `.recent-row+.recent-row::before{left:43px}`，App 的 gap 是 12 ⇒ 44）。
+                    .padding(.leading, Theme.Spacing.xxs + RepoAvatar.row.diameter + Theme.Spacing.m)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -95,7 +99,7 @@ struct RecentRow: View {
     private var name: some View {
         HStack(spacing: Theme.Spacing.xs) {
             // ⚠️ `Text` **插值**，不是 `Text + Text` —— 后者自 iOS 26 起已废弃
-            //    （与 `PinCard` 同一处修法，理由见那里）。
+            //    （与 `PinRow` 同一处修法，理由见那里）。
             Text("\(ownerPart)\(namePart)")
                 .font(Theme.Font.footnote.weight(.semibold))
                 .lineLimit(1)

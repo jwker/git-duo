@@ -17,14 +17,15 @@ struct RepoCardSkeleton: View {
     var rows: Int = 4
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            ForEach(0..<rows, id: \.self) { _ in
-                card
+        // 方案 D：行间 hairline 由行自己画（顶上那条），骨架同样首行不画。
+        VStack(spacing: 0) {
+            ForEach(0..<rows, id: \.self) { index in
+                card(showsTopSeparator: index > 0)
             }
         }
     }
 
-    private var card: some View {
+    private func card(showsTopSeparator: Bool) -> some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             // ⚠️ 这两行尺寸**跟着 `RepoCard` 一起改**（2026-10-06：36/r6 浅底 → 34/r9 深底）。
             //    §8.5 要求骨架"尺寸必须匹配真实布局"，否则数据到达时整屏会跳一下，
@@ -42,15 +43,17 @@ struct RepoCardSkeleton: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, Theme.Spacing.m)
+        // 方案 D（2026-10-15，走查第 73 条）：与 `RepoCard` 的去形内边距逐字对齐。
+        .padding(.vertical, 13)
+        .padding(.horizontal, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-        )
+        .overlay(alignment: .top) {
+            if showsTopSeparator {
+                Rectangle()
+                    .fill(Theme.Palette.borderSoft)
+                    .frame(height: 1)
+            }
+        }
     }
 }
 

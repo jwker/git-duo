@@ -7,8 +7,9 @@ import SwiftUI
 /// 原型 `styles/04-screens.css` 的 `.markdown` 一族：
 ///
 /// ```css
-/// .markdown{background:var(--card);border:1px solid var(--border-soft);border-radius:12px;
-///           padding:16px;font-size:14px;line-height:1.65}
+/// /* 2026-10-15 走查第 75 条：**不再是一块面板** —— 去背景、去内边距，文字直接坐在底上；
+///    代码块改垫浅灰面（白块在白底上没有形状） */
+/// .markdown{background:none;border:none;padding:0;font-size:14px;line-height:1.65}
 /// .markdown h1{font-size:22px;font-weight:750;margin:4px 0 10px;padding-bottom:8px;
 ///              border-bottom:1px solid var(--border-soft)}
 /// .markdown h2{font-size:17px;font-weight:700;margin:14px 0 8px;padding-bottom:6px;
@@ -17,7 +18,7 @@ import SwiftUI
 /// .markdown ul{margin:0 0 9px 18px}   .markdown li{margin-bottom:4px}
 /// .markdown code{background:rgba(175,184,193,.35);border-radius:5px;padding:1.5px 5px;
 ///                font-size:12.5px;font-family:"SF Mono",Menlo,monospace}
-/// .markdown pre{background:var(--code-bg);border:1px solid var(--border-soft);border-radius:9px;
+/// .markdown pre{background:var(--chip);border:none;border-radius:9px;
 ///               padding:11px 13px;overflow-x:auto;margin-bottom:10px}
 /// ```
 ///
@@ -51,8 +52,19 @@ import SwiftUI
 ///
 /// | 档 | 原型 | 卡片框 | 内边距 | 字号 |
 /// |---|---|---|---|---|
-/// | `.document` | `.markdown` | 有（白底 + 1pt 浅边） | 16 | 14px |
+/// | `.document` | `.markdown` | **无**（2026-10-15 走查第 75 条去掉，见下） | **0**（同） | 14px |
 /// | `.compact` | `.comment .bbody` | **无** | **0**（容器给，见下） | 13.5px |
+///
+/// ## ⚠️ 2026-10-15 走查第 75 条：`.document` 的面板与内边距**一起去掉**
+///
+/// 原型原本给 `.markdown` 一块"浅灰面 + 圆角 + 16 内边距"（方案 D 刚把它从白卡改成灰面），
+/// 而页面转白之后它是**页面上唯一一块大面积灰底**，看起来像一张贴上去的旧卡片 ——
+/// 用户原话：「仓库详情页面的 readme.md 建议去掉背景色和内边距」。
+/// GitHub 网页的 README 也直接坐在页面上 ⇒ 去掉面板、内边距归 0（左右留白由**页面**给：
+/// 仓库首页 / 文件页各有一圈 `Spacing.page`，Release 弹层有自己的内边距）。
+///
+/// ⚠️ **同一档的三处调用点一起变**（README / 文件页的 md 预览 / Release 说明弹层）——
+/// 它们是同一份样式，只改一处会让"同一段 markdown 在两个页面上长得不一样"。
 ///
 /// 差异全部收在 `Style` 上（见那个枚举），调用方只需选一档：
 /// 评论正文传 `.compact`，其余全部用默认的 `.document`。
@@ -76,8 +88,9 @@ struct MarkdownBody: View {
 
     /// 版式。原型有**两套** markdown 外观，差别不只是字号：
     ///
-    /// - `.document` —— `styles/04-screens.css` 的 `.markdown`：白底卡片 + 1pt 浅边
-    ///   + `padding:16px` + `font-size:14px`。README / Issue 正文 / PR 正文用它。
+    /// - `.document` —— `styles/04-screens.css` 的 `.markdown`：**没有面板、没有内边距**
+    ///   （2026-10-15 走查第 75 条去掉）+ `font-size:14px`。README / 文件页的 md 预览 /
+    ///   Release 说明用它。
     /// - `.compact` —— 同文件的 `.comment .bbody`：**没有卡片框**（评论气泡自己就是容器）
     ///   + `padding:11px 13px` + `font-size:13.5px`。评论正文用它。
     ///
@@ -179,12 +192,11 @@ struct MarkdownBody: View {
     /// 整块的内边距。
     private var blockPadding: EdgeInsets {
         switch style {
-        // 原型 `.markdown{padding:16px}` ⇒ `Spacing.page`（16）。
+        // ⚠️ **零**，不是漏写（2026-10-15 走查第 75 条）：`.document` 不再是一块面板，
+        //    左右留白由**页面**给（仓库首页 / 文件页的 `Spacing.page`、弹层的内边距）。
+        //    这里再给一遍，正文会比同一页上的其它内容缩进 16 —— 而它看起来只是"这段窄了点"。
         case .document:
-            EdgeInsets(
-                top: Theme.Spacing.page, leading: Theme.Spacing.page,
-                bottom: Theme.Spacing.page, trailing: Theme.Spacing.page
-            )
+            EdgeInsets()
         // ⚠️ **零**，不是漏写：原型 `.bbody{padding:11px 13px}` 那对值由 **容器**
         //    （`CommentBubble` 的注入槽）给 —— 这里再加一遍就是 22/26（见类型说明）。
         case .compact:
@@ -208,15 +220,10 @@ struct MarkdownBody: View {
 
         switch style {
         case .document:
+            // 走查第 75 条（2026-10-15）：**不画面板** —— 正文直接坐在底上
+            //（原型 `.markdown{background:none;padding:0}`）。
+            // ⚠️ 别顺手补一个"为了可点区域"的透明底：可点的是链接，不是这一块。
             stack
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                        .fill(Theme.Palette.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                        .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-                )
         case .compact:
             // 评论气泡**自己就是容器**（`.comment .bubble` 有底、有边、有圆角）
             // ⇒ 紧凑档不再画卡片框：画了就是"气泡里还套一张卡"，
@@ -420,13 +427,26 @@ struct MarkdownBody: View {
 
     // MARK: - 代码块
 
+    /// 代码块的底色（判据见 `CodeSurface.fill` 那张表）。
+    ///
+    /// **正文档坐在页面上** ⇒ 垫面板色（`surfaceSunken`），那是代码块在白底上唯一的形状信号；
+    /// **评论正文坐在气泡里**（气泡本身就是 `surfaceSunken`）⇒ 反过来垫
+    /// `markdownPreSurface`（浅白 / 深 `0x0D1117`），否则代码块会和气泡糊成一片。
+    private var codeFill: Color {
+        switch style {
+        case .document: Theme.Palette.surfaceSunken
+        case .compact: Theme.Palette.markdownPreSurface
+        }
+    }
+
     private func codeBlock(language: String?, lines: [String]) -> some View {
         // ⚠️ **紧凑档沿用同一份 `CodeSurface`** —— 也是「规格未给」（原型没给
         //    `.comment .bbody pre` 的规则）。它自成一块带底色的代码面，
         //    比正文大一点不算走形；真要改，改的是 `CodeSurface` 那一档令牌。
         // 语言认不出来 ⇒ `nil` ⇒ `CodeSurface` 走纯文本降级（不去猜语言）。
         CodeSurface(
-            lines: CodeHighlighting.lines(lines, language: CodeHighlighting.language(language))
+            lines: CodeHighlighting.lines(lines, language: CodeHighlighting.language(language)),
+            fill: codeFill
         )
         // 原型 `pre{margin-bottom:10px}`。
         .padding(.bottom, 10)
@@ -779,12 +799,8 @@ struct MarkdownBody: View {
                 """),
                 style: .compact
             )
-            .background(Theme.Palette.surface)
+            .background(Theme.Palette.surfaceSunken)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous)
-                    .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-            )
         }
         .padding(.horizontal, Theme.Spacing.page)
     }

@@ -145,7 +145,7 @@ struct ProfileView: View {
 
             case let .failure(error):
                 // 这一张卡是**内容层** ⇒ 实色，不加 Liquid Glass（§10.2）。
-                CardBox(vertical: 14) {
+                PanelBox(vertical: 14, horizontal: 14) {
                     VStack(alignment: .leading, spacing: 0) {
                         // ⚠️ 失败态**也要有年份切换器**：这一年的数取不到时，用户要做的
                         //    第一件事就是切回能看的那一年（或换个年份再试）。
@@ -170,7 +170,7 @@ struct ProfileView: View {
             }
         } else {
             // 首帧：还没取到任何结果 ⇒ 骨架（§8.5：加载中 ≠ 无数据）。
-            CardBox(vertical: 14) { skeleton }
+            PanelBox(vertical: 14, horizontal: 14) { skeleton }
         }
     }
 
@@ -222,8 +222,11 @@ struct ProfileView: View {
         // ⚠️ 两行会话的去向是 `.myConversations(kind:)`（TECH_SPEC §8.2）——
         //    与「我的 Star」不同：那一页是**一个**列表，这两项**各是一页**（决策 #73）。
         MenuCard {
+            // 图标色档照原型 `12-me.js` 的 `--ic`（方案 D，走查第 73 条）：
+            // Star 金 / PR 与收藏链接蓝 / Issue 绿 / 设置缺省灰。
             MenuRow(
                 systemImage: GitHubIcon.star,
+                iconTone: .gold,
                 title: ProfileCopy.menuStars,
                 accessory: .chevron
             ) {
@@ -233,6 +236,7 @@ struct ProfileView: View {
             // 不在 `GitHubIcon` 里再抄一份 —— 见那个文件的尾巴。
             MenuRow(
                 systemImage: StateIcon.pullRequestOpen,
+                iconTone: .blue,
                 title: ProfileCopy.menuPullRequests,
                 accessory: .chevron
             ) {
@@ -240,15 +244,16 @@ struct ProfileView: View {
             }
             MenuRow(
                 systemImage: StateIcon.issueOpen,
+                iconTone: .green,
                 title: ProfileCopy.menuIssues,
                 accessory: .chevron,
-                // 最后一行不画分隔线（原型 `.menu-item:last-child{border-bottom:none}`）。
+                // 最后一行不画分隔线（原型 `.menu-item+.menu-item`）。
                 showsSeparator: false
             ) {
                 env.router.push(.myConversations(kind: .issue))
             }
         }
-        // 原型 `.menu-card{margin-bottom:12px}`。
+        // 原型 `.menu-card{margin:0 0 10px}`（方案 D：组与组之间只剩这一段空隙）。
         .padding(.bottom, Theme.Spacing.m)
 
         MenuCard {

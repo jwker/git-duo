@@ -68,12 +68,10 @@ struct SearchField: View {
         .padding(.vertical, Theme.Spacing.s)
         .padding(.horizontal, 10)
         .background(
+            // 方案 D（2026-10-15，走查第 73 条）：白卡 → 浅灰面，边框去掉
+            //（原型 `.searchfield{background:var(--chip);border:none}`）。
             RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
-                .stroke(Theme.Palette.border, lineWidth: 1)
+                .fill(Theme.Palette.surfaceSunken)
         )
     }
 

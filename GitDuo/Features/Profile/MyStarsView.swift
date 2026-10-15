@@ -80,12 +80,14 @@ struct MyStarsView: View {
         let items = model.items
         let lastID = items.last?.id
 
-        return LazyVStack(spacing: Theme.Spacing.s) {
-            ForEach(items) { repository in
+        return LazyVStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, repository in
                 StarRow(
                     repository: repository,
                     state: model.starState(of: repository),
-                    onOpen: { open(repository) }
+                    onOpen: { open(repository) },
+                    // 方案 D：条目去形，行间靠顶上那条内嵌 hairline 分隔 —— 首行不画。
+                    showsTopSeparator: index > 0
                 )
                 .onAppear {
                     // 滚到底自动加载（PRD §4.18 明文：与仓库页同规矩）。

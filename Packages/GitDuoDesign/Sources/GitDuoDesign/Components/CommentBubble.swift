@@ -121,14 +121,12 @@ public struct CommentBubble<Body: View>: View {
             }
             // 原型 `.bubble{flex:1}` —— 气泡吃掉头像之外的全部宽度。
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.Palette.surface)
+            // 方案 D（2026-10-15，走查第 73 条）：白卡 → 浅灰面，边框去掉
+            //（原型 `.bubble{background:var(--chip);border:none}`）。
+            .background(Theme.Palette.surfaceSunken)
             // 原型 `.bubble{overflow:hidden}` + `border-radius:12px`：
             // 头部的浅灰底必须被**圆角裁掉**，否则它会从气泡的圆角外溢出来。
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous)
-                    .stroke(Theme.Palette.borderSoft, lineWidth: 1)
-            )
         }
     }
 

@@ -5,7 +5,8 @@ import GitDuoKit
 
 /// 首页 —— Tab 根页（PRD §4.1、TECH_SPEC §9.1）。
 ///
-/// 结构：大标题「首页」+ 右上角搜索 · 「置顶仓库」网格（2 列，最多 6 张）·「最近访问」列表。
+/// 结构：大标题「首页」+ 右上角搜索 · 「置顶仓库」**行列表**（最多 6 条，
+/// ⚠️ 2026-10-15 走查第 75 条起不再是 2 列网格）·「最近访问」列表。
 ///
 /// ## ⚠️ 这一屏唯一容易写错的，是"点什么进哪里"
 ///
@@ -110,7 +111,7 @@ struct HomeView: View {
 
         switch model.pinned.presentation {
         case .skeleton:
-            PinGridSkeleton()
+            PinRowsSkeleton()
 
         case .content:
             pinnedGrid
@@ -127,12 +128,15 @@ struct HomeView: View {
         if items.isEmpty {
             EmptyBox(title: HomeCopy.pinnedEmptyTitle, hint: HomeCopy.pinnedEmptyHint)
         } else {
-            LazyVGrid(columns: PinGridSkeleton.columns, spacing: PinGridSkeleton.spacing) {
-                ForEach(items) { summary in
+            // ⚠️ 2026-10-15 走查第 75 条：置顶从 **2 列灰块网格**改成**单列平铺行**
+            //    （页面转白后它是唯一一组还带灰底的块，且与同页的最近访问不像一家人）
+            //    ⇒ 行间 hairline 由行自己画在顶上，首行不画（同 `StarRow` / `RecentRow`）。
+            LazyVStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, summary in
                     Button {
                         openPinned(summary)
                     } label: {
-                        PinCard(summary: summary)
+                        PinRow(summary: summary, showsSeparator: index > 0)
                     }
                     .buttonStyle(.plain)
                 }
@@ -175,7 +179,8 @@ struct HomeView: View {
                             // 记录访问时落盘的 owner 头像地址（走查第 72 条）；
                             // 旧记录没有这个字段 ⇒ `nil` ⇒ 行内首字母兜底圆。
                             ownerAvatarURL: visit.ownerAvatarURL,
-                            showsSeparator: index < visits.count - 1
+                            // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
+                            showsSeparator: index > 0
                         )
                     }
                     .buttonStyle(.plain)

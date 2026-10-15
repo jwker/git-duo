@@ -182,7 +182,10 @@ public struct ContributionHeatmap: View {
     }
 
     public var body: some View {
-        CardBox(vertical: 14) {
+        // 方案 D（2026-10-15，走查第 73 条）：热力图是**内容面板**（原型
+        // `.heatmap{background:var(--chip);border:none;border-radius:14px;padding:14px}`），
+        // 不再是列表条目 ⇒ 容器从 `CardBox` 换成 `PanelBox`。
+        PanelBox(vertical: 14, horizontal: 14) {
             VStack(alignment: .leading, spacing: 0) {
                 HeatmapHeader(
                     totalText: totalText,

@@ -182,13 +182,17 @@ struct RepoDetailView: View {
     private var entries: some View {
         let rows = entryRows
 
-        return CardBox(vertical: Theme.Spacing.xs) {
+        // 方案 D（2026-10-15，走查第 73 条）：四行入口是 `.menu-item` —— 图标升级
+        // 40pt 实底色块 + 白字形，行间 hairline 内嵌缩进 54（都由 `MenuRow` 画）。
+        // 容器不带内边距（同 `MenuCard`：留白由行自己出）。
+        return CardBox(vertical: 0, horizontal: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                LinkRow(
+                MenuRow(
                     systemImage: row.icon,
-                    iconTint: row.tint,
+                    iconTone: row.tone,
                     title: row.title,
-                    showsSeparator: index < rows.count - 1
+                    accessory: .chevron,
+                    showsSeparator: index > 0
                 ) {
                     env.router.push(row.route)
                 }
@@ -205,7 +209,7 @@ struct RepoDetailView: View {
             EntryRow(
                 id: "code",
                 icon: GitHubIcon.folder,
-                tint: Theme.Palette.textTertiary,
+                tone: .slate,
                 title: RepoCopy.codeEntryTitle,
                 route: .repoCode(fullName: fullName, readOnly: false, path: nil)
             )
@@ -215,7 +219,7 @@ struct RepoDetailView: View {
             EntryRow(
                 id: section.rawValue,
                 icon: icon(for: section),
-                tint: tint(for: section),
+                tone: tone(for: section),
                 title: section.title,
                 route: .repoSection(fullName: fullName, section: section)
             )
@@ -232,15 +236,18 @@ struct RepoDetailView: View {
         }
     }
 
-    /// 状态图标用**开放态那个颜色**（与 §4.13 那两行一致）。
+    /// 色块色档照原型 `05-repo.js` 的 `--ic`（方案 D，走查第 73 条）：
+    /// 代码灰 / Issues 绿 / PR 链接蓝 / Commits 紫。
     ///
     /// ⚠️ 这三个入口**都不是状态**（它们是"去哪个列表"），所以颜色只是沿用
     /// "这一类东西"的固定色 —— 与列表行上的状态胶囊无关，不要从这里推"这个仓库
-    /// 有没有开放的 Issue"。
-    private func tint(for section: RepoSection) -> Color {
+    /// 有没有开放的 Issue"。⚠️ Issues 用的绿是 `accentStrong`（原型 `--green`），
+    /// **不是**开放态的 `stateOpen`（见 `MenuRow.IconTone` 的取值表）。
+    private func tone(for section: RepoSection) -> MenuRow.IconTone {
         switch section {
-        case .issues, .pullRequests: Theme.Palette.stateOpenIcon
-        case .commits: Theme.Palette.textTertiary
+        case .issues: .green
+        case .pullRequests: .blue
+        case .commits: .purple
         }
     }
 
@@ -248,7 +255,7 @@ struct RepoDetailView: View {
     private struct EntryRow: Identifiable {
         let id: String
         let icon: String
-        let tint: Color
+        let tone: MenuRow.IconTone
         let title: String
         let route: Route
     }
@@ -260,10 +267,11 @@ struct RepoDetailView: View {
     /// ⚠️ 它此前是"大卡 + 分段条 + 代码分区骨架"三块 ——
     /// 后两块随分段条一起删掉了（这次改动的核心就是**别让骨架盖住半屏**）。
     ///
-    /// ⚠️ 四行那一段的形状必须与真实内容**对齐**（`CardBox(vertical: Theme.Spacing.xs)`
-    /// + 每行约 42pt）—— 数据到达时整块跳动是最容易被做出来、也最容易被忽略的瑕疵。
+    /// ⚠️ 四行那一段的形状必须与真实内容**对齐**（`MenuRow` 的 40pt 色块行，每行约 64pt）
+    /// —— 数据到达时整块跳动是最容易被做出来、也最容易被忽略的瑕疵。
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 方案 D：头部去卡形 ⇒ 骨架同样不画底与圆角（与 `RepoDetailHero` 对齐）。
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.m) {
                     SkeletonBar(
@@ -284,19 +292,19 @@ struct RepoDetailView: View {
                 }
                 .padding(.top, Theme.Spacing.s)
             }
-            .padding(Theme.Spacing.l)
-            .background(Theme.Palette.surface)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous))
+            .padding(.top, 6)
+            .padding(.horizontal, 2)
 
-            CardBox(vertical: Theme.Spacing.xs) {
+            // 四行入口的骨架：与 `MenuRow` 对齐（40pt 色块 + 14pt 标题行）。
+            CardBox(vertical: 0, horizontal: 0) {
                 ForEach(0..<4, id: \.self) { _ in
-                    HStack(spacing: 11) {
-                        SkeletonBar(height: 17, width: 20)
+                    HStack(spacing: 12) {
+                        SkeletonBar(height: 40, width: 40, cornerRadius: Theme.Radius.container)
                         SkeletonBar(height: 14, width: 120)
                         Spacer(minLength: 0)
                     }
-                    .padding(.vertical, 11)
-                    .padding(.horizontal, Theme.Spacing.xs)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 2)
                 }
             }
             .padding(.top, Theme.Spacing.m)

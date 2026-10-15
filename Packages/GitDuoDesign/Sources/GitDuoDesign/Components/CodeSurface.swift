@@ -53,10 +53,24 @@ public struct CodeSpan: Sendable, Hashable {
 /// **代码面** —— 一块等宽、实色、可横向滚动的代码（原型 `styles/04-screens.css`）。
 ///
 /// ```css
-/// .markdown pre{background:var(--code-bg);border:1px solid var(--border-soft);
+/// /* 2026-10-15 走查第 75 条：面板去掉之后，代码块垫**浅灰面**（白块在白底上没有形状） */
+/// .markdown pre{background:var(--chip);border:none;
 ///               border-radius:9px;padding:11px 13px;overflow-x:auto}
 /// .markdown pre code{background:none;padding:0;font-size:12px;line-height:1.55}
 /// ```
+///
+/// ## ⚠️ 底色由调用方给，不能写死（2026-10-15 走查第 75 条）
+///
+/// 同一段代码块会坐在**两种不同的底**上，而它们要的形状信号是**相反**的：
+///
+/// | 坐在哪 | 底 | 代码块该垫 |
+/// |---|---|---|
+/// | 页面 / 弹层（正文档、文件页源码、弹层里的源码） | `background`（浅白 / 深 `0x0D1117`） | **面板色** `surfaceSunken`（浅 `0xEFF2F5` / 深 `0x161B22`） |
+/// | 评论气泡（`.compact`） | `surfaceSunken` | `markdownPreSurface`（浅白 / 深 `0x0D1117` —— 比气泡亮 / 暗一档） |
+///
+/// ⚠️ 方案 D 那一批把它写死成"白块"（那时它只出现在灰面板里）⇒ **文件页的源码块与
+/// 提交弹层的代码块坐在页面 / 弹层底上，白块等于没有形状**（浅色白贴白、深色与页面同色）。
+/// 那两处不在面板里，是同一批"未目视"漏掉的 ⇒ 本条一并修回。
 ///
 /// ## ⚠️ 横向滚动是**要点**，不是顺手加的
 ///
@@ -83,8 +97,15 @@ public struct CodeSurface: View {
     /// 每一行由若干 `CodeSpan` 组成（顺序即绘制顺序）。
     public let lines: [[CodeSpan]]
 
-    public init(lines: [[CodeSpan]]) {
+    /// 代码块的**底色**。默认 `surfaceSunken`（"面板"那一档 —— 坐在页面 / 弹层底上时成立）。
+    ///
+    /// ⚠️ 为什么它是参数而不是写死：见类型说明那张表 —— 评论气泡里那段要的是
+    /// `markdownPreSurface`（白，垫在灰气泡上），方向正好相反。
+    public let fill: Color
+
+    public init(lines: [[CodeSpan]], fill: Color = Theme.Palette.surfaceSunken) {
         self.lines = lines
+        self.fill = fill
     }
 
     /// 无着色的纯文本：按 `\n` 拆行，每行一段 `.plain`。
@@ -92,12 +113,13 @@ public struct CodeSurface: View {
     /// 给"语言认不出来 ⇒ 降级为纯文本"（§11.3）与"还没着色就先显示内容"两处用。
     /// ⚠️ 尾部那个由"以换行结尾"产生的空串**会被去掉** ——
     /// 留着它会在代码块底多出一条空白行（同 `FileContent.lines` 的处理）。
-    public init(text: String) {
+    public init(text: String, fill: Color = Theme.Palette.surfaceSunken) {
         var raw = text.replacingOccurrences(of: "\r\n", with: "\n")
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
         if raw.last == "" { raw.removeLast() }
         self.lines = raw.map { [CodeSpan(text: $0)] }
+        self.fill = fill
     }
 
     public var body: some View {
@@ -114,12 +136,11 @@ public struct CodeSurface: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
+            // 走查第 75 条（2026-10-15）起：`fill` 由调用方给 —— 坐在页面 / 弹层底上垫
+            // **面板色**（`surfaceSunken`），坐在评论气泡里才垫 `markdownPreSurface`。
+            // 边框去掉（原型 `.markdown pre{border:none}`）：形状由底色表达，不画第二层。
             RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .fill(Theme.Palette.codeSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
+                .fill(fill)
         )
         // 读屏念**原文**（不着色的纯文字）。用 `attributed` 去念会把每个片段的
         // 颜色当成属性读出来（“红色 关键字 let”），那不是用户要听的东西。

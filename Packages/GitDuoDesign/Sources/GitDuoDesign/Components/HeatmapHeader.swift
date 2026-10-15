@@ -242,7 +242,7 @@ public struct HeatmapYear: Identifiable, Hashable, Sendable {
     ]
 
     return VStack(spacing: Theme.Spacing.m) {
-        CardBox(vertical: 14) {
+        PanelBox(vertical: 14, horizontal: 14) {
             HeatmapHeader(
                 totalText: "1,024 次贡献",
                 yearTitle: years.first { $0.year == selected }?.title ?? "",
@@ -255,7 +255,7 @@ public struct HeatmapYear: Identifiable, Hashable, Sendable {
         }
 
         // 在途：只多一枚小转圈，标题与箭头不动（与上一张对照着看）。
-        CardBox(vertical: 14) {
+        PanelBox(vertical: 14, horizontal: 14) {
             HeatmapHeader(
                 totalText: "1,024 次贡献",
                 yearTitle: years.first { $0.year == selected }?.title ?? "",
@@ -268,7 +268,7 @@ public struct HeatmapYear: Identifiable, Hashable, Sendable {
         }
 
         // 失败态：左边那个数**不画**（不是 `0 次贡献`），而切换器照常在。
-        CardBox(vertical: 14) {
+        PanelBox(vertical: 14, horizontal: 14) {
             HeatmapHeader(
                 totalText: nil,
                 yearTitle: years.first { $0.year == selected }?.title ?? "",
@@ -282,7 +282,7 @@ public struct HeatmapYear: Identifiable, Hashable, Sendable {
 
         // 失败态 + 在途：按了那一行「重试」之后的样子（这张卡最矮，转圈最容易被顶高，
         // 所以它也一起摆出来）。
-        CardBox(vertical: 14) {
+        PanelBox(vertical: 14, horizontal: 14) {
             HeatmapHeader(
                 totalText: nil,
                 yearTitle: years.first { $0.year == selected }?.title ?? "",

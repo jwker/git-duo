@@ -99,12 +99,10 @@ public struct CommentComposer: View {
             // 原型 `border-radius:13px` 在圆角阶里**没有对应档**（12 与 14 各差 1）。
             // 取 `container`(12)：它就在对话区（与 `Radius.bubble`(12) 同值），
             // 差 1pt 属有意偏差第 12 条那一类。
+            // 方案 D（2026-10-15，走查第 73 条）：白卡 → 浅灰面，边框去掉
+            //（原型 `.composer{background:var(--chip);border:none}`）。
             RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                .stroke(Theme.Palette.borderSoft, lineWidth: 1)
+                .fill(Theme.Palette.surfaceSunken)
         )
     }
 }
