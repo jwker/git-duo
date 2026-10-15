@@ -85,9 +85,7 @@ struct MyStarsView: View {
                 StarRow(
                     repository: repository,
                     state: model.starState(of: repository),
-                    isToggling: model.isToggling(repository),
-                    onOpen: { open(repository) },
-                    onToggle: { Task { await model.toggleStar(repository) } }
+                    onOpen: { open(repository) }
                 )
                 .onAppear {
                     // 滚到底自动加载（PRD §4.18 明文：与仓库页同规矩）。

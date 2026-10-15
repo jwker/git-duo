@@ -189,7 +189,7 @@ struct Slice9ComponentTests {
         // 而「我的」页那几行都有 ⇒ 图标只能是 Optional。
         // 若哪天有人给它一个默认图标，设置页五行会**多出一个原型没有的图标**。
         #expect(MenuRow(title: "主题", value: "浅色").systemImage == nil)
-        #expect(MenuRow(systemImage: GitHubIcon.star, title: "Star 管理").systemImage != nil)
+        #expect(MenuRow(systemImage: GitHubIcon.star, title: "我的 Star").systemImage != nil)
     }
 
     @Test("⚠️ `action` 默认 `nil` —— 不可点的那几行**根本不是按钮**")
@@ -206,7 +206,7 @@ struct Slice9ComponentTests {
     @Test("⚠️ 两档标题色各自取的是哪个令牌，且**两档真的不同**")
     func menuRowTitleTones() {
         // `--text`：普通行。
-        #expect(MenuRow(title: "Star 管理").titleColor == Theme.Palette.textPrimary)
+        #expect(MenuRow(title: "我的 Star").titleColor == Theme.Palette.textPrimary)
         // `--closed-p`：退出登录那一行是红字（原型 `12-me.js:70` 的内联 `color:var(--closed-p)`）。
         #expect(MenuRow(title: "退出登录", titleTone: .destructive).titleColor == Theme.Palette.destructive)
 

@@ -72,8 +72,9 @@ import SwiftUI
 ///
 /// ⚠️ 两种形态的**唯一出处是 `StatStar`** —— 本件不自己判"该画哪个"。
 /// ⚠️ 「为什么写不了」这件事只走**读屏 hint**，屏上不再画说明行
-/// （2026-10-15 走查第 68 条，同 `RepoHeroCard`）。§4.18 的列表行仍**照常可点、
-/// 失败时再说**（`MyStarsViewModel.toggleStar`）—— 那里是操作入口，得给用户一个动作。
+/// （2026-10-15 走查第 68 条，同 `RepoHeroCard`）。⚠️ §4.18 列表行右侧那颗 Star 按钮
+/// **2026-10-15 起不渲染了**（用户裁定「先去掉，因为也不可管理」，见 `StarRow` 抬头）
+/// ⇒ **全 App 的 Star / 取消 Star 操作入口只剩详情页头部这一处**（可写的那一档）。
 struct RepoDetailHero: View {
 
     let detail: RepositoryDetail

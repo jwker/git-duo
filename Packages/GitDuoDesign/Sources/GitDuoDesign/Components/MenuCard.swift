@@ -269,7 +269,9 @@ public struct MenuRow: View {
             //（PR 与 Issue 两行取 `StateIcon` 那两个常量，见 `GitHubIcon` 尾巴上的说明）
             SectionHeader(title: "菜单卡片一")
             MenuCard {
-                MenuRow(systemImage: GitHubIcon.star, title: "Star 管理", accessory: .chevron, action: {})
+                // 原型逐字「Star 管理」；2026-10-15 起改「我的 Star」（走查第 71 条，
+                // 设计包拿不到 `ProfileCopy`，预览写字面量 —— 改文案记得这里跟着改）。
+                MenuRow(systemImage: GitHubIcon.star, title: "我的 Star", accessory: .chevron, action: {})
                 MenuRow(systemImage: StateIcon.pullRequestOpen, title: "我的 Pull Request",
                         accessory: .chevron, action: {})
                 MenuRow(systemImage: StateIcon.issueOpen, title: "我的 Issue",

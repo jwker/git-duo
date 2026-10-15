@@ -63,7 +63,10 @@ public enum ProfileCopy {
 
     // MARK: - 菜单（原型两张卡片）
 
-    public static let menuStars = "Star 管理"
+    /// 原型逐字「Star 管理」。**2026-10-15 起改「我的 Star」**（走查第 71 条，第 70 条
+    /// 拆按钮的连带裁定：这一页不做任何管理动作，「管理」名不副实；与页面标题
+    /// `starsTitle` 同名 —— `ProfileCopyTests` 有同串断言钉着）。
+    public static let menuStars = "我的 Star"
     public static let menuPullRequests = "我的 Pull Request"
     public static let menuIssues = "我的 Issue"
     public static let menuSettings = "设置"
@@ -85,6 +88,8 @@ public enum ProfileCopy {
     ///
     /// ⚠️ 与 §4.13 详情页那颗 `Starred · {n}` **不是同一句**：那一颗带计数，
     /// 这一颗只表明状态（列表行上的星数在副标题里，按钮上再写一遍会挤）。
+    /// ⚠️ 2026-10-15 起那颗按钮**不渲染了**（用户裁定「先去掉，因为也不可管理」，
+    /// 见 App 侧 `StarRow` 抬头）—— 文案**原样保留**，按钮回加时即用。
     public static let unstarAction = "已 Star"
 
     // MARK: - 设置（PRD §4.20、原型 `SCR.settings`）

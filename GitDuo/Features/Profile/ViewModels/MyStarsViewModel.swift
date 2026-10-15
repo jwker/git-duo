@@ -45,6 +45,10 @@ final class MyStarsViewModel {
     private var toggled: [String: StarState] = [:]
 
     /// 正在切换的那几行（按钮内联 loading + 禁用，§8.5「操作类」）。
+    ///
+    /// ⚠️ 2026-10-15 起列表行的 Star 按钮**不渲染了**（用户裁定「先去掉，因为也不可管理」
+    /// —— 见 `StarRow` 抬头），本套切换机制（`toggled` / `toggling` / `toggleStar` / 本方法）
+    /// **暂无调用方但原样保留**：按钮回加时即用，别顺手清掉。
     private(set) var toggling: Set<String> = []
 
     private let loader: LoadRepositoriesPage
@@ -75,9 +79,10 @@ final class MyStarsViewModel {
 
     var canLoadMore: Bool { state.canLoadMore }
 
-    /// 某一行现在该显示什么（按钮文案 + 星数）。
+    /// 某一行现在该显示什么（星数；`toggled` 里记过 ⇒ 用改过的那份）。
     ///
     /// 没被点过 ⇒ 由**列表条目**现算（它就是已 Star，见类型说明）。
+    /// ⚠️ 2026-10-15 起行上不画按钮（见 `StarRow` 抬头），本方法仍供副标题取星数。
     func starState(of repository: Repository) -> StarState {
         toggled[repository.fullName] ?? StarState(
             fullName: repository.fullName,

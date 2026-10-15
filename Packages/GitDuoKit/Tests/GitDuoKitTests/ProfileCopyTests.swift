@@ -56,9 +56,9 @@ struct ProfileCopyTests {
         #expect(label.contains(ProfileCopy.yearLabel(2025)))
     }
 
-    @Test("四条菜单逐字（原型两张卡片）")
+    @Test("四条菜单逐字（原型两张卡片；首条 2026-10-15 起改「我的 Star」，走查第 71 条）")
     func menuItemsAreVerbatim() {
-        #expect(ProfileCopy.menuStars == "Star 管理")
+        #expect(ProfileCopy.menuStars == "我的 Star")
         #expect(ProfileCopy.menuPullRequests == "我的 Pull Request")
         #expect(ProfileCopy.menuIssues == "我的 Issue")
         #expect(ProfileCopy.menuSettings == "设置")
@@ -76,6 +76,9 @@ struct ProfileCopyTests {
     @Test("我的 Star：标题与空态两行逐字（空态是 PRD §7 新定的，原型没有）")
     func starsPageIsVerbatim() {
         #expect(ProfileCopy.starsTitle == "我的 Star")
+        // 2026-10-15 起菜单项与页面标题也是**同一个字符串**（走查第 71 条改名为「我的 Star」），
+        // 与上面 PR/Issue 那条同款判据 —— 两处各写一遍时"菜单改了标题没改"看一屏发现不了。
+        #expect(ProfileCopy.menuStars == ProfileCopy.starsTitle)
         #expect(ProfileCopy.starsEmptyTitle == "还没有 Star 过任何仓库")
         // ⚠️ 第二行是**操作引导**（"怎么做才会有"）—— 与探索页那两处
         //    （说的是"这个仓库没有"）**有意不同**：这里说的是"**你**还没有"。

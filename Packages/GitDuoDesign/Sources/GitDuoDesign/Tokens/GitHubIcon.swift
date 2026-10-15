@@ -201,7 +201,8 @@ public enum GitHubIcon {
 
     // MARK: - 「我的」页菜单与设置（切片 9）
 
-    /// 「Star 管理」菜单行 —— 原型 `I.star`（`12-me.js:23`）。
+    /// 「我的 Star」菜单行（原型逐字「Star 管理」，2026-10-15 起改名，走查第 71 条）
+    /// —— 原型 `I.star`（`12-me.js:23`）。
     ///
     /// ⚠️ 与 `StatButton` 那颗**星形按钮**用的是同一个字形，但颜色完全不同：
     /// 那一颗在"已 Star"时取 `Theme.Palette.starActive`（金色），

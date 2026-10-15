@@ -5,8 +5,8 @@ import SwiftUI
 
 /// 「我的 Star」列表的一行（PRD §4.18、原型 `12-me.js` 的 `SCR.stars`）。
 ///
-/// 形状（自上而下逐条对原型）：一张 `.card` 里一行 —— 仓库图标 · 「全名（链接色）+
-/// `★ {Star} · {语言}`」· 右侧那颗「已 Star」按钮。
+/// 形状（自上而下逐条对原型）：一张 `.card` 里一行 —— 仓库图标 ·
+/// 「全名（链接色）+ `★ {Star} · {语言}`」。
 ///
 /// ```html
 /// <div class="card"><div class="row">
@@ -19,12 +19,19 @@ import SwiftUI
 /// </div></div>
 /// ```
 ///
+/// ## ⚠️ 右侧那颗「已 Star」按钮**不画了**（2026-10-15 · 用户裁定）
+///
+/// 原型每行右侧有一颗「取消 Star」的 ghost 按钮（上面 HTML 的最后那个 `<button>`）。
+/// 用户裁定**先去掉**，原话「先去掉，因为也不可管理」—— 列表行不做 Star 的管理动作，
+/// Star / 取消 Star 的操作入口留在仓库详情页头部那颗统计上（`StatStar`，写得了才有形状）。
+/// ⚠️ ViewModel 侧的切换机制（`MyStarsViewModel.toggleStar` 那一套）**原样保留**，
+/// 回加按钮时即用；`ProfileCopy.unstarAction` 文案同理。
+///
 /// ## ⚠️ 只有「全名 + 副标题」那一块可点，图标不可点
 ///
-/// 原型把 `onclick` 挂在 `.grow` 上（**不含**仓库图标与那颗按钮）。
+/// 原型把 `onclick` 挂在 `.grow` 上（**不含**仓库图标）。
 /// 顺手把整张卡做成按钮看着更"好用"，但那会让"点图标"与"点名字"跳去同一个地方
-/// —— 而这一行的右侧按钮做的是**另一件事**（取消 Star），三者挤在一起时
-/// 区分"点到哪个"就变得很难说清。
+/// —— 区分"点到哪个"就变得很难说清。
 ///
 /// ## 它是内容层
 ///
@@ -33,17 +40,11 @@ struct StarRow: View {
 
     let repository: Repository
 
-    /// 这一行现在该显示什么 —— **由 ViewModel 给**（它记着哪几行被点过）。
+    /// 这一行现在该显示什么 —— 由 ViewModel 给（星数从列表条目 / 本页改过的记录里来）。
     let state: StarState
-
-    /// 这颗按钮是否在途（内联转圈 + 禁用，§8.5「操作类」）。
-    let isToggling: Bool
 
     /// 点「全名 / 副标题」那一块 → 去这个仓库。
     let onOpen: () -> Void
-
-    /// 点右侧那颗按钮 → 切换 Star。
-    let onToggle: () -> Void
 
     var body: some View {
         // 原型 `.card{padding:14px}` ⇒ `CardBox(vertical: 14)`。
@@ -71,18 +72,6 @@ struct StarRow: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-
-                // 原型 `style="padding:7px 12px"` + `.btn.ghost`。
-                // ⚠️ `fillsWidth: false` —— `.btn` 本身是 `display:inline-flex`（按内容宽）。
-                ActionButton(
-                    title: ProfileCopy.unstarAction,
-                    style: .ghost,
-                    verticalPadding: 7,
-                    horizontalPadding: 12,
-                    fillsWidth: false,
-                    isWorking: isToggling,
-                    action: onToggle
-                )
             }
         }
     }
@@ -119,7 +108,6 @@ struct StarRow: View {
 
 #Preview {
     VStack(spacing: Theme.Spacing.s) {
-        // 已 Star（进页的样子）。
         StarRow(
             repository: Repository(
                 owner: "vercel", name: "next.js",
@@ -131,27 +119,10 @@ struct StarRow: View {
                 fullName: "vercel/next.js", isStarred: true,
                 starCount: 124_000, baselineConfirmed: true
             ),
-            isToggling: false,
-            onOpen: {}, onToggle: {}
+            onOpen: {}
         )
 
-        // 点过「已 Star」之后就地改文案（PRD §4.18）—— 这一行**不消失**。
-        StarRow(
-            repository: Repository(
-                owner: "rust-lang", name: "rust",
-                description: nil, isPrivate: false, language: "Rust",
-                starCount: 98_000, forkCount: 12_600,
-                permissions: .none
-            ),
-            state: StarState(
-                fullName: "rust-lang/rust", isStarred: false,
-                starCount: 97_999, baselineConfirmed: true
-            ),
-            isToggling: false,
-            onOpen: {}, onToggle: {}
-        )
-
-        // 在途：按钮内联转圈。
+        // 语言为 nil ⇒ 副标题只留星数（不补空格 / 破折号）。
         StarRow(
             repository: Repository(
                 owner: "my-git", name: "scripts",
@@ -163,8 +134,7 @@ struct StarRow: View {
                 fullName: "my-git/scripts", isStarred: true,
                 starCount: 41, baselineConfirmed: true
             ),
-            isToggling: true,
-            onOpen: {}, onToggle: {}
+            onOpen: {}
         )
     }
     .padding(Theme.Spacing.page)

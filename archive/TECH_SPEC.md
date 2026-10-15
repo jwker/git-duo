@@ -1797,7 +1797,7 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
 | 个人资料头部 | `GET /user`（`avatar_url` / `name` / `login` / `bio`）。⚠️ `name` / `bio` 可能为 `null` ⇒ **整行不渲染，也不占位**（`nil` = 不知道，不是空字符串）。⚠️ **`avatar_url` 是本期唯一的网络头像消费点**（2026-10-09 落地，偏差第 43 条）：走 `AsyncImage`（§5.3），**加载中与取不到都回落成同一个首字母块**（`UserAvatar` 的兜底路径）—— 这一项**永远不该让头部空一块**，也不该把它算进"整块降级"的判据里（登录名取自 `authState`，头像取不到时头部照样成立） |
 | 三统计项（仓库 / Star / Follower） | **与热力图合并成一次 GraphQL 查询**（决策 #76）：`viewer.repositories(first:1, affiliations:[OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) { totalCount }` · `viewer.starredRepositories(first:1) { totalCount }` · 加 `GET /user` 的 `followers`。⚠️ **`affiliations` 不写会默认只算 `OWNER`** ⇒ 与仓库列表（决策 #35）对不上 |
 | 贡献热力图 | **GraphQL** `viewer.contributionsCollection(from:$from, to:$to) { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount contributionLevel } } } }`（决策 #74，**年份切换 2026-10-09 加**）：**画满接口给的一年（≈53 周）** · 5 档**直接用 `contributionLevel`** · 配色走设计令牌（**不用** API 的 `color` / `colors`，理由见 #74③）。⚠️ `weeks` 与 `contributionDays` **是数组不是连接** ⇒ 不能写 `first:`；⚠️ 只有 GraphQL 提供（§4.6.5 的四个场景之一）。⚠️ **`from` / `to` 走变量**、窗口是**自然年**（当年 1/1 → `min(12/31, 今天)`），官方对这两个参数的限制是**跨度不超过一年**（自然年天然满足）；加变量**不增加点数**（这一次仍是 **1 点**，`§13.2` 的"加字段不扣点"同样适用于加变量） |
-| 菜单卡片一 | Star 管理 → `.stars`（§4.18）· 我的收藏 → `.folders`（§4.19）· **我的 Pull Request / 我的 Issue → `.myConversations(kind:)`**（决策 #73；关联值直接复用**已有的 `ConversationKind`**，不新造类型） |
+| 菜单卡片一 | Star 管理 → `.stars`（§4.18）· 我的收藏 → `.folders`（§4.19）· **我的 Pull Request / 我的 Issue → `.myConversations(kind:)`**（决策 #73；关联值直接复用**已有的 `ConversationKind`**，不新造类型）。⚠️ 首条 **2026-10-15 起文案改「我的 Star」**（走查第 71 条，与页标题同串 `ProfileCopy.starsTitle`；路由 `.stars` 不变） |
 | 菜单卡片二 | 设置 → `.settings`（§4.20） |
 | 我的 Star | `GET /user/starred`（§4.18）；取消 Star = `DELETE /user/starred/{owner}/{repo}`，**基准先查一次**（决策 #41，唯一实现 `ToggleStar`） |
 | 我的收藏 | **纯本地** `FolderStore`（§9.12）；不发请求 |
@@ -1871,6 +1871,12 @@ PUT /repos/{o}/{r}/contents/{path}   { message, content, sha?, branch }
     而"灰掉却不解释"比"点了才知道"更糟 —— 前者看起来像"暂时不可用"，后者至少说出一句有依据的话。
     ⇒ 处置：**照常可点**，失败时把通用句换成 `StarCopy.unavailableHint`。
     ⚠️ 代价如实记：这一页里装的**基本全都是别人的仓库** ⇒ 用户会**几乎必然**白点一下。
+  - 🔴 **2026-10-15 补（用户裁定，推翻上面那条处置）：那颗按钮先不渲染了** —— 用户原话
+    「**先去掉，因为也不可管理**」（`StarRow` 不再画 `ActionButton`，PRD §4.18 同日补记）。
+    列表行只陈列（图标 + 全名 + 副标题），Star / 取消 Star 的操作入口**只剩详情页头部**
+    （`StatStar` 的"能写"档）。⚠️ **只拆 UI**：`MyStarsViewModel` 的 `toggleStar` /
+    `toggling` / `toggled` 与 `ProfileCopy.unstarAction` **原样保留**（暂无调用方），
+    组合根仍把 `ToggleStar` 传进本页 —— 按钮回加时全部即用。
     ⚠️ 这条**不是**"内容页的按钮不用管" —— 判据只有一条：**这一处放得下说明吗**。放得下的两处都置灰了。
 - 与收藏夹**完全解耦**（§9.12：收藏不改 `starCount`、不进 Starred）。
 
