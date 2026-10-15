@@ -49,6 +49,12 @@ public struct RepositoryDetail: Sendable, Hashable, Identifiable {
     /// 当前令牌对该仓库的权限（可写性判定的唯一来源）—— ⚠️ 本页不要用它分支，见类型说明。
     public let permissions: Permissions
 
+    /// owner 的头像地址。**可以是 `nil`** —— 取不到时界面回退首字母兜底圆（走查第 72 条）。
+    ///
+    /// 来源是 `GET /repos/{o}/{r}` 响应里本来就有的 `owner.avatar_url`（零额外请求）。
+    /// ⚠️ 别当长期资产：EMU 账号的地址约 20 分钟失效（`RepositoryOwnerDTO` 的说明）。
+    public let ownerAvatarURL: URL?
+
     /// ⚠️ **公开构造是有意的**，但它不是生产路径。
     ///
     /// 生产路径**只有一条**：`LoadRepoInsights` 走 `RepoInsightsMapper` 从
@@ -69,7 +75,8 @@ public struct RepositoryDetail: Sendable, Hashable, Identifiable {
         forkCount: Int,
         watcherCount: Int,
         pushedAt: Date? = nil,
-        permissions: Permissions = .none
+        permissions: Permissions = .none,
+        ownerAvatarURL: URL? = nil
     ) {
         self.fullName = fullName
         self.description = description
@@ -81,6 +88,7 @@ public struct RepositoryDetail: Sendable, Hashable, Identifiable {
         self.watcherCount = watcherCount
         self.pushedAt = pushedAt
         self.permissions = permissions
+        self.ownerAvatarURL = ownerAvatarURL
     }
 
     public var id: String { fullName }

@@ -57,7 +57,8 @@ struct GitHubSearchRepositoriesEndpointTests {
     private let fullItem = """
     {"full_name":"misoge/paneltkit","description":"SwiftUI 自适应布局工具库 · Swift",
      "language":"Swift","stargazers_count":2341,
-     "created_at":"2026-08-05T09:00:00Z","pushed_at":"2026-10-06T10:00:00Z"}
+     "created_at":"2026-08-05T09:00:00Z","pushed_at":"2026-10-06T10:00:00Z",
+     "owner":{"avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}}
     """
 
     private func envelope(items: String, incomplete: Bool = false) -> String {
@@ -204,7 +205,7 @@ struct GitHubSearchRepositoriesEndpointTests {
         harness.stub(
             .json(
                 envelope(
-                    items: #"{"full_name":"a/b","description":null,"language":null,"stargazers_count":51,"created_at":"2026-09-01T00:00:00Z","pushed_at":null}"#
+                    items: #"{"full_name":"a/b","description":null,"language":null,"stargazers_count":51,"created_at":"2026-09-01T00:00:00Z","pushed_at":null,"owner":{"avatar_url":"https://avatars.githubusercontent.com/u/2?v=4"}}"#
                 )
             )
         )

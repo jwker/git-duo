@@ -69,6 +69,24 @@ public struct PinnedRepositoryDTO: Sendable, Equatable, Decodable {
         }
     }
 
+    /// owner 摘要 —— 只取头像地址（走查第 72 条：置顶卡换 owner 头像）。
+    ///
+    /// GraphQL 的 `Repository.owner` 是**非空**的 `RepositoryOwner`、`avatarUrl` 也是非空
+    /// （schema 口径），所以这里声明**必需**：缺了就是查询与响应形状脱了钩，整页报错才诚实。
+    ///
+    /// ⚠️ 与 REST 侧同一条 EMU 注意事项：EMU 账号这里的地址可能是短时效 JWT 的
+    /// `private-avatars` 地址 —— 消费侧取不到就回退首字母兜底圆（`UserAvatar` 已是这么写的）。
+    public struct Owner: Sendable, Equatable, Decodable {
+        /// 字段名与 GraphQL 同名（`avatarUrl`），不写 `CodingKeys`。
+        public let avatarUrl: URL
+
+        public init(avatarUrl: URL) {
+            self.avatarUrl = avatarUrl
+        }
+    }
+
+    public let owner: Owner
+
     public init(
         nameWithOwner: String,
         description: String? = nil,
@@ -76,7 +94,8 @@ public struct PinnedRepositoryDTO: Sendable, Equatable, Decodable {
         starCount: Int,
         forkCount: Int,
         viewerPermission: String? = nil,
-        primaryLanguage: PrimaryLanguage? = nil
+        primaryLanguage: PrimaryLanguage? = nil,
+        owner: Owner
     ) {
         self.nameWithOwner = nameWithOwner
         self.description = description
@@ -85,6 +104,7 @@ public struct PinnedRepositoryDTO: Sendable, Equatable, Decodable {
         self.forkCount = forkCount
         self.viewerPermission = viewerPermission
         self.primaryLanguage = primaryLanguage
+        self.owner = owner
     }
 
     /// ⚠️ 这是全包**唯一**需要显式映射键名的 GraphQL DTO —— 因为只有它把
@@ -99,5 +119,6 @@ public struct PinnedRepositoryDTO: Sendable, Equatable, Decodable {
         case forkCount
         case viewerPermission
         case primaryLanguage
+        case owner
     }
 }

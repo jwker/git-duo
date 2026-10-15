@@ -36,6 +36,18 @@ public struct Repository: Sendable, Hashable, Identifiable {
     /// 当前令牌对该仓库的权限全集。
     public let permissions: Permissions
 
+    /// owner 的头像地址。**可以是 `nil`** —— 取不到（或没取到）时界面回退首字母兜底圆。
+    ///
+    /// ## 它从哪来（走查第 72 条，2026-10-15）
+    ///
+    /// 列表行 / 详情头把文件夹图标换成了 **owner 头像**，地址来自 REST 响应里
+    /// 本来就有的 `owner.avatar_url` —— 零额外请求。`nil` 的三种来路都要能兜住：
+    /// 旧测试夹具没带、EMU 账号的短时效地址取不到、以及将来任何"响应没给"的情形
+    /// —— 兜底表现统一是首字母圆块（`UserAvatar`），**不该有第三种样子**。
+    ///
+    /// ⚠️ 别拿它当长期资产：EMU 的地址约 20 分钟失效（`RepositoryOwnerDTO` 的说明）。
+    public let ownerAvatarURL: URL?
+
     /// `owner/name` —— 唯一标识，也是路由、缓存与本地记忆的键。
     public var fullName: String { "\(owner)/\(name)" }
 
@@ -58,7 +70,8 @@ public struct Repository: Sendable, Hashable, Identifiable {
         language: String? = nil,
         starCount: Int,
         forkCount: Int,
-        permissions: Permissions = .none
+        permissions: Permissions = .none,
+        ownerAvatarURL: URL? = nil
     ) {
         self.owner = owner
         self.name = name
@@ -68,6 +81,7 @@ public struct Repository: Sendable, Hashable, Identifiable {
         self.starCount = starCount
         self.forkCount = forkCount
         self.permissions = permissions
+        self.ownerAvatarURL = ownerAvatarURL
     }
 }
 

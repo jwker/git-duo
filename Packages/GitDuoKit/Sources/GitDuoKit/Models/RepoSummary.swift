@@ -59,6 +59,14 @@ public struct RepoSummary: Sendable, Hashable, Identifiable {
     /// 而两处必然会有一处选了另一侧。用 `canOpenWritableDetail`。
     public let canWrite: Bool?
 
+    /// owner 的头像地址。**可以是 `nil`** —— 取不到时界面回退首字母兜底圆（走查第 72 条）。
+    ///
+    /// 来源随数据源：置顶卡（GraphQL `owner.avatarUrl`）恒有值；
+    /// 探索榜（REST 搜索响应 `owner.avatar_url`）也恒有值 ——
+    /// `nil` 只出现在"响应形状变了 / 测试夹具没带"的场合，兜底表现统一是首字母圆块。
+    /// ⚠️ 别当长期资产：EMU 账号的地址约 20 分钟失效（`RepositoryOwnerDTO` 的说明）。
+    public let ownerAvatarURL: URL?
+
     public init(
         fullName: String,
         description: String? = nil,
@@ -66,7 +74,8 @@ public struct RepoSummary: Sendable, Hashable, Identifiable {
         starCount: Int,
         forkCount: Int? = nil,
         isPrivate: Bool? = nil,
-        canWrite: Bool? = nil
+        canWrite: Bool? = nil,
+        ownerAvatarURL: URL? = nil
     ) {
         self.fullName = fullName
         self.description = description
@@ -75,6 +84,7 @@ public struct RepoSummary: Sendable, Hashable, Identifiable {
         self.forkCount = forkCount
         self.isPrivate = isPrivate
         self.canWrite = canWrite
+        self.ownerAvatarURL = ownerAvatarURL
     }
 
     /// `Identifiable` 的 id 用全名：列表去重、`ForEach` 稳定性都依赖它

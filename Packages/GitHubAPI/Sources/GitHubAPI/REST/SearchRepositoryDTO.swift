@@ -43,13 +43,20 @@ public struct SearchRepositoryDTO: Sendable, Equatable, Decodable {
     /// 而不是拿 `createdAt` 顶上 —— 那会把"创建于"显示成"推送于"。
     public let pushedAt: Date?
 
+    /// owner 摘要 —— 目前只消费头像地址（走查第 72 条：榜单行 / 搜索结果行换 owner 头像）。
+    ///
+    /// **必需**（非可选）：搜索响应的仓库对象与列表同形状，恒带 `owner`；
+    /// 缺了就是响应形状变了，"整页报错"比"悄悄退化"诚实（同 `createdAt` 的口径）。
+    public let owner: RepositoryOwnerDTO
+
     public init(
         fullName: String,
         description: String? = nil,
         language: String? = nil,
         starCount: Int,
         createdAt: Date,
-        pushedAt: Date? = nil
+        pushedAt: Date? = nil,
+        owner: RepositoryOwnerDTO = RepositoryOwnerDTO()
     ) {
         self.fullName = fullName
         self.description = description
@@ -57,6 +64,7 @@ public struct SearchRepositoryDTO: Sendable, Equatable, Decodable {
         self.starCount = starCount
         self.createdAt = createdAt
         self.pushedAt = pushedAt
+        self.owner = owner
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -66,6 +74,7 @@ public struct SearchRepositoryDTO: Sendable, Equatable, Decodable {
         case starCount = "stargazers_count"
         case createdAt = "created_at"
         case pushedAt = "pushed_at"
+        case owner
     }
 }
 

@@ -34,15 +34,39 @@ public struct RecentVisit: Identifiable, Sendable, Hashable, Codable {
     /// 之间正常的强弱关系）。
     public let canWrite: Bool
 
+    /// owner 的头像地址 —— **记录访问时落盘的**（走查第 72 条，2026-10-15 起最近访问行
+    /// 把文件夹图标换成 owner 头像）。**可以是 `nil`**：
+    /// - 记录访问发生在**取详情之前**（"取数失败访问也发生了"，TECH_SPEC §7.2），
+    ///   那一刻还没有地址 —— 头像由详情到达后的**补记**写进来（同一次 `record`，
+    ///   去重逻辑保证仍只留一条）。
+    /// - 旧版本落盘的记录没有这个键（`Codable` 对可选字段按缺省解码，**不会**因此丢数据）。
+    /// - 地址本身失效（EMU 账号约 20 分钟一换，`RepositoryOwnerDTO` 的说明）。
+    ///
+    /// 三种 `nil` 的表现**相同**：那一行回退 owner 登录名的首字母兜底圆。
+    public let ownerAvatarURL: URL?
+
     /// 去重依据 = 仓库全名（原型 `RECENT.filter(v => v.n !== n)`）。
     public var id: String { fullName }
 
+    /// 拆出来的 owner 登录名 —— 行内首字母兜底与头像读屏标签都用它。
+    ///
+    /// **走 `RepositoryMapper.splitFullName` 那一个实现**（`try?` 吞掉错误即可），
+    /// 理由同 `RepoSummary.owner`：各写一遍 `count == 2` 的判断迟早写歪。
+    public var owner: String { (try? RepositoryMapper.splitFullName(fullName))?.owner ?? "" }
+
     /// - Parameter canWrite: **必须显式给出**（没有默认值）。给一个默认值意味着
     ///   "忘了传"也能编译通过，而那个默认值会让首页永远分错流 —— 而且看起来完全正常。
-    public init(fullName: String, canWrite: Bool, visitedAt: Date) {
+    /// - Parameter ownerAvatarURL: 可以缺省（`nil`）—— 落盘兼容与"先记访问后取数"都需要它。
+    public init(
+        fullName: String,
+        canWrite: Bool,
+        visitedAt: Date,
+        ownerAvatarURL: URL? = nil
+    ) {
         self.fullName = fullName
         self.canWrite = canWrite
         self.visitedAt = visitedAt
+        self.ownerAvatarURL = ownerAvatarURL
     }
 
     /// 相对文案（`刚刚` / `昨天` / `2 天前`…）。

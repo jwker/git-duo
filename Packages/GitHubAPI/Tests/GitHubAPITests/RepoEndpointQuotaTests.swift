@@ -161,7 +161,7 @@ struct RepoEndpointQuotaTests {
         status: 201
     )
     private static let repoJSON = StubURLProtocol.Response.json(
-        #"{"full_name":"o/r","default_branch":"main","stargazers_count":1,"forks_count":0,"subscribers_count":0}"#
+        #"{"full_name":"o/r","default_branch":"main","stargazers_count":1,"forks_count":0,"subscribers_count":0,"owner":{"avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}}"#
     )
     private static let commitDetailJSON = StubURLProtocol.Response.json(
         #"{"sha":"s","commit":{"message":"m","author":{"date":"2026-10-05T08:00:00Z"}}}"#

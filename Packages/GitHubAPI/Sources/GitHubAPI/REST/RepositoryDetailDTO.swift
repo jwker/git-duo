@@ -66,6 +66,12 @@ public struct RepositoryDetailDTO: Sendable, Equatable, Decodable {
     /// 缺权限时默认可写，会让用户点进编辑器、改完文件、提交时才吃 403。
     public let permissions: RepositoryPermissionsDTO?
 
+    /// owner 摘要 —— 目前只消费头像地址（走查第 72 条：详情头部换 owner 头像）。
+    ///
+    /// **必需**（非可选）：`GET /repos/{o}/{r}` 的仓库对象恒带 `owner`；
+    /// 缺了就是响应形状变了，"整页报错"比"悄悄退化"诚实（同 `starCount` 的口径）。
+    public let owner: RepositoryOwnerDTO
+
     /// REST 的 `license` 对象（`{ key, name, spdx_id, url }`）。
     ///
     /// 两个字段都要：列表里显示的是 **SPDX 短名**（`MIT` / `Apache-2.0`，与原型一致），
@@ -96,7 +102,8 @@ public struct RepositoryDetailDTO: Sendable, Equatable, Decodable {
         forkCount: Int,
         watcherCount: Int,
         pushedAt: Date? = nil,
-        permissions: RepositoryPermissionsDTO? = nil
+        permissions: RepositoryPermissionsDTO? = nil,
+        owner: RepositoryOwnerDTO = RepositoryOwnerDTO()
     ) {
         self.fullName = fullName
         self.description = description
@@ -108,6 +115,7 @@ public struct RepositoryDetailDTO: Sendable, Equatable, Decodable {
         self.watcherCount = watcherCount
         self.pushedAt = pushedAt
         self.permissions = permissions
+        self.owner = owner
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -122,6 +130,7 @@ public struct RepositoryDetailDTO: Sendable, Equatable, Decodable {
         case watcherCount = "subscribers_count"
         case pushedAt = "pushed_at"
         case permissions
+        case owner
     }
 
     // ⚠️ `open_issues_count` **有意不解码**：它把 PR 也算作 Issue（官方文档明确），

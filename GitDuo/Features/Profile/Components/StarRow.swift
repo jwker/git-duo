@@ -51,7 +51,13 @@ struct StarRow: View {
         CardBox(vertical: 14) {
             HStack(spacing: 10) {
                 // 原型 `.row{gap:10px}`（10 不在 4pt 阶里 ⇒ 写原值，同 `SheetRow`）。
-                RepoAvatar.standard
+                // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
+                //    文件夹图标块；尺寸仍是 34（`RepoAvatar.standard.diameter`）。
+                UserAvatar(
+                    login: repository.owner,
+                    avatarURL: repository.ownerAvatarURL,
+                    diameter: RepoAvatar.standard.diameter
+                )
 
                 Button(action: onOpen) {
                     VStack(alignment: .leading, spacing: 0) {

@@ -42,12 +42,22 @@ struct RecentRow: View {
     /// 是个坑（那条"刚刚"会永远停在"刚刚"）。现算的责任在领域层，组件只负责画。
     let timeLabel: String
 
+    /// owner 的头像地址。`nil` = 调用方手上没有（记录太旧 / 地址失效）——
+    /// 行内回退 owner 登录名的首字母兜底圆（走查第 72 条）。
+    var ownerAvatarURL: URL? = nil
+
     /// 最后一行不画分隔线（原型 `.recent-row:last-child{border-bottom:none}`）。
     var showsSeparator: Bool = true
 
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
-            RepoAvatar.row
+            // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
+            //    文件夹图标块；尺寸仍是 30（`RepoAvatar.row.diameter`）。
+            UserAvatar(
+                login: ownerLogin,
+                avatarURL: ownerAvatarURL,
+                diameter: RepoAvatar.row.diameter
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 name
@@ -123,6 +133,12 @@ struct RecentRow: View {
         Text(split?.name ?? fullName).foregroundStyle(Theme.Palette.textPrimary)
     }
 
+    /// owner 登录名 —— 头像首字母兜底用。走 `RepositoryMapper.splitFullName` 那一个实现
+    /// （`try?` 吞错），理由同 `RepoSummary.owner`：别各写一遍拆分。
+    private var ownerLogin: String {
+        (try? RepositoryMapper.splitFullName(fullName))?.owner ?? ""
+    }
+
     private var accessibilityLabel: String {
         var parts = [fullName]
         if isPrivate == true { parts.append("私有仓库") }
@@ -138,8 +154,10 @@ struct RecentRow: View {
             fullName: "vercel/next.js",
             description: "The React Framework",
             isPrivate: false,
-            timeLabel: "昨天"
+            timeLabel: "昨天",
+            ownerAvatarURL: URL(string: "https://avatars.githubusercontent.com/u/14985020?v=4")
         )
+        // 头像取不到（旧记录 / 地址失效）⇒ 首字母兜底圆 —— 也是一行合法的样子。
         RecentRow(
             fullName: "my-git/notes",
             description: nil,

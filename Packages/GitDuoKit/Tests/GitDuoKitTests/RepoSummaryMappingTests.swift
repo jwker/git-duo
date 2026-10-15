@@ -30,7 +30,8 @@ struct RepoSummaryMappingTests {
             starCount: 128,
             forkCount: 12,
             viewerPermission: "ADMIN",
-            primaryLanguage: .init(name: "Swift")
+            primaryLanguage: .init(name: "Swift"),
+            owner: .init(avatarUrl: URL(string: "https://avatars.githubusercontent.com/u/1?v=4")!)
         ))
 
         #expect(summary.fullName == "my-git/gitduo")
@@ -42,6 +43,8 @@ struct RepoSummaryMappingTests {
         #expect(summary.forkCount == 12)
         #expect(summary.isPrivate == true)
         #expect(summary.canWrite == true)
+        // 走查第 72 条：owner 头像地址原样带到摘要上（卡片要画它）。
+        #expect(summary.ownerAvatarURL?.absoluteString == "https://avatars.githubusercontent.com/u/1?v=4")
     }
 
     @Test("置顶：`primaryLanguage` 为 null ⇒ 语言为 nil（空仓库不该伪造一个语言）")
@@ -52,7 +55,8 @@ struct RepoSummaryMappingTests {
             starCount: 3,
             forkCount: 0,
             viewerPermission: "READ",
-            primaryLanguage: nil
+            primaryLanguage: nil,
+            owner: .init(avatarUrl: URL(string: "https://avatars.githubusercontent.com/u/2?v=4")!)
         ))
 
         #expect(summary.language == nil)
@@ -178,7 +182,8 @@ struct RepoSummaryMappingTests {
         var threw = false
         do {
             _ = try mapper.map(PinnedRepositoryDTO(
-                nameWithOwner: fullName, isPrivate: false, starCount: 0, forkCount: 0
+                nameWithOwner: fullName, isPrivate: false, starCount: 0, forkCount: 0,
+                owner: .init(avatarUrl: URL(string: "https://avatars.githubusercontent.com/u/0?v=4")!)
             ))
         } catch let error as RepositoryMappingError {
             #expect(error == .malformedFullName(fullName))
@@ -217,7 +222,7 @@ struct RepoSummaryMappingTests {
         let fieldNames = Mirror(reflecting: summary).children.compactMap(\.label)
         #expect(fieldNames == [
             "fullName", "description", "language", "starCount",
-            "forkCount", "isPrivate", "canWrite",
+            "forkCount", "isPrivate", "canWrite", "ownerAvatarURL",
         ])
     }
 

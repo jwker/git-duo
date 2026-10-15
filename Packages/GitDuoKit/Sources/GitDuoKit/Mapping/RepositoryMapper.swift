@@ -25,7 +25,8 @@ public struct RepositoryMapper: Sendable {
             language: dto.language,
             starCount: dto.starCount,
             forkCount: dto.forkCount,
-            permissions: Permissions(dto.permissions)
+            permissions: Permissions(dto.permissions),
+            ownerAvatarURL: dto.owner.avatarURL
         )
     }
 

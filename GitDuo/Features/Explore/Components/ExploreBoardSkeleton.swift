@@ -29,7 +29,8 @@ struct ExploreBoardSkeleton: View {
             SkeletonBar(
                 height: RepoAvatar.standard.diameter,
                 width: RepoAvatar.standard.diameter,
-                cornerRadius: RepoAvatar.standard.cornerRadius
+                // ⚠️ 2026-10-15 起占位块也是**圆的**（走查第 72 条：真实内容换成了 owner 头像）。
+                cornerRadius: RepoAvatar.standard.diameter / 2
             )
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 SkeletonBar(height: 14, width: 168)   // 仓库全名

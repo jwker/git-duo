@@ -37,8 +37,18 @@ actor UserDefaultsRecentVisitStore: RecentVisitStore {
         self.backing = InMemoryRecentVisitStore(seed: Self.load(from: defaults, key: key))
     }
 
-    func record(fullName: String, canWrite: Bool, at date: Date) async {
-        await backing.record(fullName: fullName, canWrite: canWrite, at: date)
+    func record(
+        fullName: String,
+        canWrite: Bool,
+        ownerAvatarURL: URL?,
+        at date: Date
+    ) async {
+        await backing.record(
+            fullName: fullName,
+            canWrite: canWrite,
+            ownerAvatarURL: ownerAvatarURL,
+            at: date
+        )
         // ⚠️ 存的是**对方归一化之后**的内容（去重 / 置顶 / 裁剪都已生效），
         //    而不是"我刚传进去的那一条" —— 否则落盘内容会与内存内容分叉。
         persist(await backing.visits())

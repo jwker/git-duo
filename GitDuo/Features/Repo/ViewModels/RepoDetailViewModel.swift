@@ -111,7 +111,8 @@ final class RepoDetailViewModel {
     /// 就把它判成了自己的仓库（`HomeView` / `ReposView` 二选一推入）
     /// —— 这正是 `RecentVisitStore.record(fullName:canWrite:at:)` 要调用方显式传参的原因。
     func start() async {
-        await visits.record(fullName: fullName, canWrite: true, at: Date())
+        // ⚠️ 头像地址此刻还不知道（详情没取）⇒ 传 `nil`，等 `loadDetail` 成功后**补记**。
+        await visits.record(fullName: fullName, canWrite: true, ownerAvatarURL: nil, at: Date())
 
         // ⚠️ 排在取详情**之前**：它决定头部那颗星标灰不灰，而它在稳态下是一次
         //    **缓存命中**（组合根在冷启动就预热了它，§3.5.5）⇒ 代价可以忽略；
@@ -178,6 +179,15 @@ final class RepoDetailViewModel {
         do {
             let value = try await detailLoader.load(fullName: fullName)
             snapshot.succeed(value)
+            // 头像补记（走查第 72 条）：进页那一次 `record` 传的是 `nil`（那时还没取数），
+            // 现在地址到手了。仍走同一条 `record` —— 去重逻辑保证"最近访问"里这条还是一条，
+            // 代价只是 `visitedAt` 刷新到此刻（同一次会话内，语义仍是"最近一次打开"）。
+            await visits.record(
+                fullName: fullName,
+                canWrite: true,
+                ownerAvatarURL: value.detail.ownerAvatarURL,
+                at: Date()
+            )
             // ⚠️ README **排在这里**，不在 `start()` 里另起一条并发：它要头部里的
             //    `defaultBranch` 才知道用哪条分支读 —— 而这里正是"头部到手"那一刻。
             //    代价是它比头部晚一拍开始（页面上先出头部、后出 README）——

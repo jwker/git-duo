@@ -50,16 +50,23 @@ struct RepoCard: View {
 
     // MARK: - 组成
 
-    /// 仓库图标块。
+    /// 仓库行的头像块。
     ///
     /// ⚠️ 2026-10-06 改回原型：此前这里是浅底 `surfaceSunken` + 灰色 `book.closed`
     /// （36×36 r6），而原型 `scripts/05-repo.js:15` 走的是 `.repo-avatar`
     /// —— **深底 `#24292f` + 白色文件夹字形**，34×34 圆角 9。
     /// 4.3 新做的 `RepoAvatar` 已按原型实现，于是同一 App 里曾出现两种仓库图标；
-    /// 用户拍板「两处都改回原型」⇒ 这里直接复用 `RepoAvatar.standard`，
-    /// 同一档图标自此只有一处实现（改一处即两处生效）。
+    /// 用户拍板「两处都改回原型」⇒ 这里复用 `RepoAvatar.standard`。
+    ///
+    /// ⚠️⚠️ **2026-10-15 再改（走查第 72 条，用户裁定）**：换成了 **owner 头像**
+    /// （圆形、首字母兜底，与全 App 的头像语言统一）—— 原型的文件夹图标让位。
+    /// 尺寸仍是 34（`RepoAvatar.standard.diameter`），骨架几何不动。
     private var icon: some View {
-        RepoAvatar.standard
+        UserAvatar(
+            login: repository.owner,
+            avatarURL: repository.ownerAvatarURL,
+            diameter: RepoAvatar.standard.diameter
+        )
     }
 
     private var title: some View {

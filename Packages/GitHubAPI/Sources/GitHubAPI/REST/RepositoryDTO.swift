@@ -35,6 +35,12 @@ public struct RepositoryDTO: Sendable, Equatable, Decodable {
     /// 当前令牌对该仓库的权限全集。**未认证 / 无权限时为 `nil`**。
     public let permissions: RepositoryPermissionsDTO?
 
+    /// owner 摘要 —— 目前只消费头像地址（走查第 72 条：列表行换 owner 头像）。
+    ///
+    /// **必需**（非可选）：GitHub 的仓库对象恒带 `owner`；真缺了说明响应形状已经变了，
+    /// "解码失败、整页报错"比"默默退化成首字母块"诚实（同 `starCount` 的口径）。
+    public let owner: RepositoryOwnerDTO
+
     public init(
         fullName: String,
         isPrivate: Bool,
@@ -42,7 +48,8 @@ public struct RepositoryDTO: Sendable, Equatable, Decodable {
         language: String? = nil,
         starCount: Int = 0,
         forkCount: Int = 0,
-        permissions: RepositoryPermissionsDTO? = nil
+        permissions: RepositoryPermissionsDTO? = nil,
+        owner: RepositoryOwnerDTO = RepositoryOwnerDTO()
     ) {
         self.fullName = fullName
         self.isPrivate = isPrivate
@@ -51,6 +58,7 @@ public struct RepositoryDTO: Sendable, Equatable, Decodable {
         self.starCount = starCount
         self.forkCount = forkCount
         self.permissions = permissions
+        self.owner = owner
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -61,6 +69,7 @@ public struct RepositoryDTO: Sendable, Equatable, Decodable {
         case starCount = "stargazers_count"
         case forkCount = "forks_count"
         case permissions
+        case owner
     }
 
     // ⚠️ `starCount` / `forkCount` 有意声明为**必需**（非 `Int?`）。

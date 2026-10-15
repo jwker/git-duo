@@ -922,7 +922,7 @@ View State（表现层，为 UI 量身裁剪，含 loading/empty/error）
 
 | 模型 | 关键字段 |
 |---|---|
-| `Repository` | `owner`,`name`,`fullName`,`description`,`isPrivate`,`primaryLanguage`,`starCount`,`forkCount`,`defaultBranch`,`pushedAt`,`license`,`topics`,`permissions`（REST 返回的 `{admin,maintain,push,triage,pull}` 全集；**`push == true` 即可写性判定依据**，见 §8.1 / §9.11 / 附录 B） |
+| `Repository` | `owner`,`name`,`fullName`,`description`,`isPrivate`,`primaryLanguage`,`starCount`,`forkCount`,`defaultBranch`,`pushedAt`,`license`,`topics`,`permissions`（REST 返回的 `{admin,maintain,push,triage,pull}` 全集；**`push == true` 即可写性判定依据**，见 §8.1 / §9.11 / 附录 B），`ownerAvatarURL`（⚠️ 2026-10-15 补，走查第 72 条：列表行 / 详情头把仓库图标块换成 **owner 头像**；来源是 REST 响应本就有的 `owner.avatar_url`，零额外请求；`nil` ⇒ 首字母兜底圆。⚠️ EMU 账号的地址约 20 分钟失效——**别当长期资产落盘后再怪它**，失效的表现只是兜底圆） |
 | `TreeEntry` | `name`,`path`,`kind(.file/.dir)`,`lastCommitMessage` |
 | `FileContent` | `path`,`text`,`sha`,`size`,`isBinary` |
 | `Issue` | `number`,`title`,`state(.open/.closed)`,`labels`,`author`,`createdAt`,`commentCount`,`body` |
@@ -956,7 +956,7 @@ View State（表现层，为 UI 量身裁剪，含 loading/empty/error）
 |---|---|---|
 | `access_token` / `refresh_token` | **Keychain** | 唯一安全位置 |
 | 账号登录名、令牌过期时间 | Keychain 附属 / UserDefaults | 非敏感元数据 |
-| 最近访问（全名 + 时间戳 + **当时是否可写**，≤6） | UserDefaults（JSON） | 同上 |
+| 最近访问（全名 + 时间戳 + **当时是否可写**，≤6；⚠️ 2026-10-15 起另存**记录时刻已知的 owner 头像地址**，取数成功后补记 —— 走查第 72 条。旧记录无此键 ⇒ `Codable` 可选解码为 `nil`，不是失败） | UserDefaults（JSON） | 同上 |
 | 收藏夹（`name` / `isDefault`）与归属映射 `favMap` | UserDefaults（JSON）或轻量文件夹 | 数据量小，无查询需求；**`count` 不落盘**，由映射推导（§9.12） |
 | 搜索历史（≤8） | UserDefaults | 同上 |
 | **未发完的评论草稿**（按仓库 + 编号） | UserDefaults | **决策 #59**：PRD §4.9 的提示条承诺「草稿已保留，可重试」⇒ 退出去再进来必须还在。键按「仓库 + 编号」隔离；`signOut()` ③ 步清空（草稿里可能含还没发布的正文） |

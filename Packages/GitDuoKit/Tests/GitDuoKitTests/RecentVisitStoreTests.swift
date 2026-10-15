@@ -37,8 +37,8 @@ struct RecentVisitStoreTests {
     @Test("新记录置顶，最新在最前")
     func newestFirst() async {
         let store = InMemoryRecentVisitStore()
-        await store.record(fullName: "a/one", canWrite: true, at: base)
-        await store.record(fullName: "b/two", canWrite: false, at: base.addingTimeInterval(10))
+        await store.record(fullName: "a/one", canWrite: true, ownerAvatarURL: nil, at: base)
+        await store.record(fullName: "b/two", canWrite: false, ownerAvatarURL: nil, at: base.addingTimeInterval(10))
 
         let names = await store.visits().map(\.fullName)
         #expect(names == ["b/two", "a/one"])
@@ -50,7 +50,7 @@ struct RecentVisitStoreTests {
             visit("a/one", at: 0), visit("b/two", at: 10), visit("c/three", at: 20),
         ])
 
-        await store.record(fullName: "a/one", canWrite: true, at: base.addingTimeInterval(30))
+        await store.record(fullName: "a/one", canWrite: true, ownerAvatarURL: nil, at: base.addingTimeInterval(30))
 
         let names = await store.visits().map(\.fullName)
         #expect(names == ["a/one", "c/three", "b/two"])
@@ -64,6 +64,7 @@ struct RecentVisitStoreTests {
             await store.record(
                 fullName: "o/r\(index)",
                 canWrite: true,
+                ownerAvatarURL: nil,
                 at: base.addingTimeInterval(Double(index))
             )
         }
@@ -115,8 +116,8 @@ struct RecentVisitStoreTests {
     @Test("写入时把「当时是否可写」一起存下来，读回时还在")
     func recordsWritabilityWithTheVisit() async {
         let store = InMemoryRecentVisitStore()
-        await store.record(fullName: "rust-lang/rust", canWrite: false, at: base)
-        await store.record(fullName: "my-git/gitduo", canWrite: true, at: base.addingTimeInterval(1))
+        await store.record(fullName: "rust-lang/rust", canWrite: false, ownerAvatarURL: nil, at: base)
+        await store.record(fullName: "my-git/gitduo", canWrite: true, ownerAvatarURL: nil, at: base.addingTimeInterval(1))
 
         let visits = await store.visits()
         #expect(visits.map(\.fullName) == ["my-git/gitduo", "rust-lang/rust"])
@@ -126,10 +127,10 @@ struct RecentVisitStoreTests {
     @Test("重新访问同一个仓库 ⇒ **用新的归属覆盖旧的**（权限可能变了：用户刚 Fork 过来）")
     func revisitingOverwritesWritability() async {
         let store = InMemoryRecentVisitStore()
-        await store.record(fullName: "rust-lang/rust", canWrite: false, at: base)
+        await store.record(fullName: "rust-lang/rust", canWrite: false, ownerAvatarURL: nil, at: base)
 
         // 同一个仓库，这次是在"自己的仓库"页里打开的（比如刚 Fork 完）。
-        await store.record(fullName: "rust-lang/rust", canWrite: true, at: base.addingTimeInterval(60))
+        await store.record(fullName: "rust-lang/rust", canWrite: true, ownerAvatarURL: nil, at: base.addingTimeInterval(60))
 
         let visits = await store.visits()
         #expect(visits.count == 1, "覆盖归属不该产生第二条记录")
@@ -154,8 +155,10 @@ struct RecentVisitCodingTests {
 
     @Test("编码 → 解码：全名 / 时刻 / 归属三样一个不丢")
     func roundTripKeepsEveryField() throws {
+        let avatar = URL(string: "https://avatars.githubusercontent.com/u/1?v=4")!
         let original = [
-            RecentVisit(fullName: "my-git/gitduo", canWrite: true, visitedAt: base),
+            RecentVisit(fullName: "my-git/gitduo", canWrite: true, visitedAt: base,
+                        ownerAvatarURL: avatar),
             RecentVisit(fullName: "rust-lang/rust", canWrite: false, visitedAt: base.addingTimeInterval(90)),
         ]
 
@@ -166,6 +169,20 @@ struct RecentVisitCodingTests {
         // ⚠️ 单独再断言一次 `canWrite`：它是 2026-10-06 才加的字段，
         //    "漏掉某个字段"正是这类改动最容易出的错（合成 `Codable` 会跟着漏）。
         #expect(restored.map(\.canWrite) == [true, false])
+        // 走查第 72 条：头像地址同样要一起活下来；没有的那条解码成 `nil`（不是崩溃）。
+        #expect(restored.first?.ownerAvatarURL == avatar)
+        #expect(restored.last?.ownerAvatarURL == nil)
+    }
+
+    @Test("⚠️ 旧版本落盘的记录（没有 `ownerAvatarURL` 键）⇒ 解码成 nil，不是失败")
+    func legacyJSONWithoutAvatarDecodes() throws {
+        // 与真实落盘同形状：2026-10-15 之前的版本写下的 JSON 就长这样。
+        let legacy = #"[{"fullName":"a/b","canWrite":true,"visitedAt":1700000000}]"#
+        let restored = RecentVisit.decodeList(from: Data(legacy.utf8))
+
+        #expect(restored.count == 1)
+        #expect(restored.first?.ownerAvatarURL == nil)
+        #expect(restored.first?.owner == "a", "首字母兜底要的 owner 登录名从全名派生，不依赖头像字段")
     }
 
     @Test("解码**不抛错**：坏数据退化成空数组，而不是让首页变成错误屏")

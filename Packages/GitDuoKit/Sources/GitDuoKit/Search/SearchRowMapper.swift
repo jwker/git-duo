@@ -27,7 +27,8 @@ public enum SearchRowMapper {
             fullName: dto.fullName,
             description: dto.description,
             language: dto.language,
-            starCount: dto.starCount
+            starCount: dto.starCount,
+            ownerAvatarURL: dto.owner.avatarURL
         )
     }
 

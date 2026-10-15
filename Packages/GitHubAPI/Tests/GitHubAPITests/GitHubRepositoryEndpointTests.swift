@@ -44,7 +44,8 @@ struct GitHubRepositoryEndpointTests {
       "language": "Swift",
       "stargazers_count": 124000,
       "forks_count": 12600,
-      "permissions": {"admin": true, "maintain": true, "push": true, "triage": true, "pull": true}
+      "permissions": {"admin": true, "maintain": true, "push": true, "triage": true, "pull": true},
+      "owner": {"avatar_url": "https://avatars.githubusercontent.com/u/1?v=4"}
     }
     """
 
@@ -62,13 +63,15 @@ struct GitHubRepositoryEndpointTests {
         #expect(repo.forkCount == 12_600)
         #expect(repo.permissions?.push == true)
         #expect(repo.permissions?.admin == true)
+        #expect(repo.owner.avatarURL?.absoluteString == "https://avatars.githubusercontent.com/u/1?v=4")
     }
 
     @Test("DTO：`language` / `description` 为 null 或缺失都不该崩 —— 它们在真实响应里很常见")
     func decodesNullables() throws {
         let json = """
         {"full_name":"my-git/empty","private":false,"description":null,
-         "stargazers_count":0,"forks_count":0}
+         "stargazers_count":0,"forks_count":0,
+         "owner":{"avatar_url":"https://avatars.githubusercontent.com/u/2?v=4"}}
         """
         let repo = try JSONDecoder().decode(RepositoryDTO.self, from: Data(json.utf8))
 
@@ -81,7 +84,8 @@ struct GitHubRepositoryEndpointTests {
     func decodesPartialPermissions() throws {
         let json = """
         {"full_name":"other/repo","private":false,"stargazers_count":1,"forks_count":0,
-         "permissions":{"push":true,"pull":true}}
+         "permissions":{"push":true,"pull":true},
+         "owner":{"avatar_url":"https://avatars.githubusercontent.com/u/3?v=4"}}
         """
         let repo = try JSONDecoder().decode(RepositoryDTO.self, from: Data(json.utf8))
 
@@ -93,7 +97,9 @@ struct GitHubRepositoryEndpointTests {
 
     @Test("DTO：缺 `stargazers_count` ⇒ **解码失败**，而不是默默当成 0")
     func missingStarCountFailsLoudly() {
-        let json = #"{"full_name":"a/b","private":false,"forks_count":0}"#
+        // ⚠️ `owner` 现在也是必需的（走查第 72 条）—— 这个"缺一个恒存在字段就响亮失败"
+        //    的口径对它同样成立，所以这条夹具把 `owner` 带上、只缺 `stargazers_count`。
+        let json = #"{"full_name":"a/b","private":false,"forks_count":0,"owner":{"avatar_url":null}}"#
 
         #expect(throws: (any Error).self) {
             try JSONDecoder().decode(RepositoryDTO.self, from: Data(json.utf8))

@@ -82,12 +82,23 @@ public struct RepositoryHit: Sendable, Hashable, Identifiable {
 
     public var id: String { fullName }
 
-    public init(fullName: String, description: String? = nil, language: String? = nil, starCount: Int) {
+    public init(
+        fullName: String,
+        description: String? = nil,
+        language: String? = nil,
+        starCount: Int,
+        ownerAvatarURL: URL? = nil
+    ) {
         self.fullName = fullName
         self.description = description
         self.language = language
         self.starCount = starCount
+        self.ownerAvatarURL = ownerAvatarURL
     }
+
+    /// owner 的头像地址（走查第 72 条：结果行把文件夹图标换成 owner 头像）。
+    /// **可以是 `nil`** —— 兜底表现统一是首字母圆块。
+    public let ownerAvatarURL: URL?
 
     /// 卡片把 owner 弱化显示（原型 `.t1` 里 `<span style="color:var(--text3)">${owner}/</span>`）。
     ///

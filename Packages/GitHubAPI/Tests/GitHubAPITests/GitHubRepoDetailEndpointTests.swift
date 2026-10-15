@@ -43,7 +43,7 @@ struct GitHubRepoDetailEndpointTests {
     @Test("请求形状：路径正确，不带任何查询串（默认分支由服务端自己挑）")
     func requestShape() async throws {
         let harness = StubURLProtocol.makeHarness()
-        harness.stub(.json(#"{"full_name":"o/r","default_branch":"trunk","stargazers_count":1,"forks_count":2,"subscribers_count":3}"#))
+        harness.stub(.json(#"{"full_name":"o/r","default_branch":"trunk","stargazers_count":1,"forks_count":2,"subscribers_count":3,"owner":{"avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}}"#))
 
         _ = try await makeEndpoint(harness: harness).repository(owner: "cli", repo: "cli")
 
@@ -60,7 +60,8 @@ struct GitHubRepoDetailEndpointTests {
                 """
                 {"full_name":"o/r","description":"一个仓库","default_branch":"main",
                  "stargazers_count":1240,"forks_count":88,"subscribers_count":37,
-                 "permissions":{"admin":false,"push":true,"pull":true}}
+                 "permissions":{"admin":false,"push":true,"pull":true},
+                 "owner":{"avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}}
                 """
             )
         )
@@ -79,7 +80,7 @@ struct GitHubRepoDetailEndpointTests {
     func permissionsAbsentStaysNil() async throws {
         let harness = StubURLProtocol.makeHarness()
         harness.stub(
-            .json(#"{"full_name":"o/r","default_branch":"main","stargazers_count":0,"forks_count":0,"subscribers_count":0}"#)
+            .json(#"{"full_name":"o/r","default_branch":"main","stargazers_count":0,"forks_count":0,"subscribers_count":0,"owner":{"avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}}"#)
         )
 
         let detail = try await makeEndpoint(harness: harness).repository(owner: "o", repo: "r")

@@ -114,9 +114,10 @@ final class ExploreRepoViewModel {
     func start() async {
         // ⚠️ `canWrite: false` **是事实、不是猜测**：能走到本页，只可能是因为路由
         //    在进入前就把它判成了他人仓库（`HomeView` / `ReposView` / `ExploreView` 三处入口）。
-        //    这正是 `RecentVisitStore.record(fullName:canWrite:at:)` 要调用方显式传参的原因 ——
-        //    零额外请求、零猜测（TECH_SPEC §7.2）。
-        await visits.record(fullName: fullName, canWrite: false, at: Date())
+        //    这正是 `RecentVisitStore.record(fullName:canWrite:ownerAvatarURL:at:)` 要调用方
+        //    显式传参的原因 —— 零额外请求、零猜测（TECH_SPEC §7.2）。
+        //    ⚠️ 头像地址此刻还不知道 ⇒ 传 `nil`，`load()` 成功后**补记**。
+        await visits.record(fullName: fullName, canWrite: false, ownerAvatarURL: nil, at: Date())
 
         // ⚠️ 「Star 写不写得动」排在这里（稳态下是缓存命中，组合根冷启动就预热过）。
         //    本页这一问**基本上每次都是有意义的** —— 它进来的多半是别人的仓库。
@@ -170,6 +171,14 @@ final class ExploreRepoViewModel {
         do {
             let value = try await loader.load(fullName: fullName, now: Date())
             insights.succeed(value)
+            // 头像补记（走查第 72 条）：进页那一次 `record` 传的是 `nil`（那时还没取数），
+            // 现在地址到手了。仍走同一条 `record` —— 去重逻辑保证"最近访问"里这条还是一条。
+            await visits.record(
+                fullName: fullName,
+                canWrite: false,
+                ownerAvatarURL: value.detail.ownerAvatarURL,
+                at: Date()
+            )
             // 详情到手才知道星数 ⇒ Star 基准必须在这之后问。
             star = await starToggle.initialState(fullName: fullName, starCount: value.detail.starCount)
             // ⚠️ README 也在这之后（它要 `defaultBranch` 才知道用哪条分支读）——

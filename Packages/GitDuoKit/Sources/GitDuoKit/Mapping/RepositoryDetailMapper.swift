@@ -39,7 +39,8 @@ public enum RepositoryDetailMapper {
             //    读成 `watchers_count` 会让 `Watch · n` 与 `Star · n` 恒相等（那是个历史别名）。
             watcherCount: dto.watcherCount,
             pushedAt: dto.pushedAt,
-            permissions: Permissions(dto.permissions)
+            permissions: Permissions(dto.permissions),
+            ownerAvatarURL: dto.owner.avatarURL
         )
     }
 }

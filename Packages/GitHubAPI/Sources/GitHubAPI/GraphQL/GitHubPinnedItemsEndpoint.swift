@@ -80,6 +80,9 @@ public struct GitHubPinnedItemsEndpoint: Sendable {
               forkCount
               viewerPermission
               primaryLanguage { name }
+              # 走查第 72 条：置顶卡换 owner 头像。`avatarUrl` 是标量字段、
+              # 不是连接 ⇒ 预扣点数不变（§13.2「加字段不扣点」）。
+              owner { avatarUrl }
             }
           }
         }

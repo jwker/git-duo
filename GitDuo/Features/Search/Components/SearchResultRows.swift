@@ -14,7 +14,7 @@ import GitDuoKit
 ///
 /// 四个小视图的入参都是领域模型（`RepositoryHit` / `UserHit` / `CodeHit` / `ConversationHit`）
 /// ⇒ 它们认识业务，留在 Feature。设计包里只有"与业务无关的视觉件"
-/// （本页用到的那三件 —— `RepoAvatar.compact` / `UserAvatar` / `StatusPill` / `CodePreviewLine`）。
+/// （本页用到的那三件 —— `UserAvatar`（owner 头像）/ `UserAvatar` / `StatusPill` / `CodePreviewLine`）。
 struct SearchRowView: View {
 
     let row: SearchRow
@@ -46,7 +46,7 @@ struct SearchRowView: View {
 
 /// 仓库结果行（原型 `repoResultRow`）。
 ///
-/// 形状：`RepoAvatar.compact` + 「owner 弱化 / name 加粗」+ 简介 + 语言与 Star 两个 chip + 尖角。
+/// 形状：owner 头像（2026-10-15 起替代 `RepoAvatar.compact`，走查第 72 条）+「owner 弱化 / name 加粗」+ 简介 + 语言与 Star 两个 chip + 尖角。
 ///
 /// ⚠️ 与原型的两处**有意偏差**：
 /// 1. **标题字号**：原型是 14px，这里用 `Font.rowTitle`（`.subheadline`，15pt）——
@@ -62,7 +62,13 @@ struct RepositoryResultRow: View {
 
     var body: some View {
         SearchRowBox(showsSeparator: showsSeparator, action: action) {
-            RepoAvatar.compact
+            // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
+            //    文件夹图标块；尺寸仍是 32（`RepoAvatar.compact.diameter`）。
+            UserAvatar(
+                login: hit.owner,
+                avatarURL: hit.ownerAvatarURL,
+                diameter: RepoAvatar.compact.diameter
+            )
 
             VStack(alignment: .leading, spacing: 0) {
                 // 两色拼接：先各自做成 `Text`，再**一次性**插进同一个字面量

@@ -50,7 +50,13 @@ struct TrendCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
-            RepoAvatar.standard
+            // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
+            //    文件夹图标块；尺寸仍是 34（`RepoAvatar.standard.diameter`）。
+            UserAvatar(
+                login: summary.owner,
+                avatarURL: summary.ownerAvatarURL,
+                diameter: RepoAvatar.standard.diameter
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 name

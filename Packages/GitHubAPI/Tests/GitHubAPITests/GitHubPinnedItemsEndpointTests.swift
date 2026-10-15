@@ -42,7 +42,8 @@ struct GitHubPinnedItemsEndpointTests {
     private let fullNode = """
     {"nameWithOwner":"my-git/gitduo","description":"GitHub 客户端 · SwiftUI",
      "isPrivate":true,"stargazerCount":128,"forkCount":12,
-     "primaryLanguage":{"name":"Swift"}}
+     "primaryLanguage":{"name":"Swift"},
+     "owner":{"avatarUrl":"https://avatars.githubusercontent.com/u/1?v=4"}}
     """
 
     /// 把 nodes 的正文套进完整的 GraphQL 响应信封（省得每个用例手拼一遍大括号）。
@@ -105,6 +106,7 @@ struct GitHubPinnedItemsEndpointTests {
         #expect(first.starCount == 128)
         #expect(first.forkCount == 12)
         #expect(first.primaryLanguage?.name == "Swift")
+        #expect(first.owner.avatarUrl.absoluteString == "https://avatars.githubusercontent.com/u/1?v=4")
     }
 
     @Test("主语言与描述为 null：留 nil 而不是解码失败（空仓库 / 没填简介都很常见）")
@@ -113,7 +115,7 @@ struct GitHubPinnedItemsEndpointTests {
         harness.stub(
             .json(
                 envelope(
-                    nodes: #"{"nameWithOwner":"a/b","description":null,"isPrivate":false,"stargazerCount":0,"forkCount":0,"primaryLanguage":null}"#
+                    nodes: #"{"nameWithOwner":"a/b","description":null,"isPrivate":false,"stargazerCount":0,"forkCount":0,"primaryLanguage":null,"owner":{"avatarUrl":"https://avatars.githubusercontent.com/u/2?v=4"}}"#
                 )
             )
         )
@@ -130,7 +132,9 @@ struct GitHubPinnedItemsEndpointTests {
         harness.stub(
             .json(
                 envelope(
-                    nodes: #"{"nameWithOwner":"a/b","isPrivate":false,"stargazers_count":5,"forkCount":1}"#
+                    // ⚠️ `owner` 带齐了 —— 本条只验证"星数字段名写错"这一种失败，
+                    //    别让"缺 owner"也凑巧引起解码失败而把它放过去。
+                    nodes: #"{"nameWithOwner":"a/b","isPrivate":false,"stargazers_count":5,"forkCount":1,"owner":{"avatarUrl":"https://avatars.githubusercontent.com/u/3?v=4"}}"#
                 )
             )
         )

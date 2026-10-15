@@ -22,7 +22,15 @@ public protocol RecentVisitStore: Sendable {
     /// - Parameter canWrite: 打开这个仓库时它是否可写 —— **由调用方给出**（它正在渲染的页面
     ///   就是按可写性选出来的），见 `RecentVisit.canWrite`。存下它是为了让首页那一行
     ///   在**下次点开时**还能正确分流（PRD §3.13、铁律 #7）。
-    func record(fullName: String, canWrite: Bool, at date: Date) async
+    /// - Parameter ownerAvatarURL: 记录**此刻**已知的 owner 头像地址；**此刻还不知道就传
+    ///   `nil`**（详情页是"先记访问、再取数"，地址要等取数成功后的**补记**带进来 ——
+    ///   补记也走本方法，去重逻辑保证仍只留一条）。`nil` 的行回退首字母兜底圆。
+    func record(
+        fullName: String,
+        canWrite: Bool,
+        ownerAvatarURL: URL?,
+        at date: Date
+    ) async
 
     /// 读取全部记录，**最新在前**。
     func visits() async -> [RecentVisit]
@@ -62,13 +70,25 @@ public actor InMemoryRecentVisitStore: RecentVisitStore {
         self.storage = Array(ordered.prefix(Self.maxCount))
     }
 
-    public func record(fullName: String, canWrite: Bool, at date: Date) async {
+    public func record(
+        fullName: String,
+        canWrite: Bool,
+        ownerAvatarURL: URL?,
+        at date: Date
+    ) async {
         // 先滤掉同仓库的旧记录，再把新记录拼到最前 —— 这就是原型的 concat + filter。
         // 顺序不能反：先拼后滤会把刚写进去的这条自己滤掉。
         //
         // ⚠️ 重新访问会**覆盖** `canWrite`。这是有意的：权限可能变了（用户刚 Fork 过来），
         //    而"最近一次见到它时是什么样"比"第一次见到它时是什么样"更接近事实。
-        var next = [RecentVisit(fullName: fullName, canWrite: canWrite, visitedAt: date)]
+        //    `ownerAvatarURL` 同理 —— 取数成功后的补记会覆盖掉进页时的 `nil`；
+        //    反过来，EMU 地址过期后的再一次访问也会换成新地址。
+        var next = [RecentVisit(
+            fullName: fullName,
+            canWrite: canWrite,
+            visitedAt: date,
+            ownerAvatarURL: ownerAvatarURL
+        )]
         next.append(contentsOf: storage.filter { $0.fullName != fullName })
         storage = Array(next.prefix(Self.maxCount))
     }

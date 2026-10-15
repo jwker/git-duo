@@ -53,7 +53,8 @@ struct GitHubRepoInsightsEndpointTests {
       "watchers_count":2341,
       "subscribers_count":45,
       "pushed_at":"2026-10-06T10:00:00Z",
-      "permissions":{"push":false,"pull":true}
+      "permissions":{"push":false,"pull":true},
+      "owner":{"avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}
     }
     """
 
@@ -102,7 +103,7 @@ struct GitHubRepoInsightsEndpointTests {
         let harness = StubURLProtocol.makeHarness()
         harness.stub(
             .json(
-                #"{"full_name":"a/b","default_branch":"main","stargazers_count":1,"forks_count":0,"subscribers_count":0}"#
+                #"{"full_name":"a/b","default_branch":"main","stargazers_count":1,"forks_count":0,"subscribers_count":0,"owner":{"avatar_url":"https://avatars.githubusercontent.com/u/2?v=4"}}"#
             )
         )
 

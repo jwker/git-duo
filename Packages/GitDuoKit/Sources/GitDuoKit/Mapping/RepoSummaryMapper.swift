@@ -26,7 +26,8 @@ public struct RepoSummaryMapper: Sendable {
             starCount: dto.starCount,
             forkCount: dto.forkCount,
             isPrivate: dto.isPrivate,
-            canWrite: Self.canWrite(fromViewerPermission: dto.viewerPermission)
+            canWrite: Self.canWrite(fromViewerPermission: dto.viewerPermission),
+            ownerAvatarURL: dto.owner.avatarUrl
         )
     }
 
@@ -46,7 +47,8 @@ public struct RepoSummaryMapper: Sendable {
             starCount: dto.starCount,
             forkCount: nil,
             isPrivate: nil,
-            canWrite: nil
+            canWrite: nil,
+            ownerAvatarURL: dto.owner.avatarURL
         )
     }
 

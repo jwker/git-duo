@@ -172,6 +172,9 @@ struct HomeView: View {
                             description: nil,
                             isPrivate: nil,
                             timeLabel: visit.timeLabel(now: .now),
+                            // 记录访问时落盘的 owner 头像地址（走查第 72 条）；
+                            // 旧记录没有这个字段 ⇒ `nil` ⇒ 行内首字母兜底圆。
+                            ownerAvatarURL: visit.ownerAvatarURL,
                             showsSeparator: index < visits.count - 1
                         )
                     }
