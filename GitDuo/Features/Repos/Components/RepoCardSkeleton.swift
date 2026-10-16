@@ -1,56 +1,37 @@
 import SwiftUI
 import GitDuoDesign
+import GitDuoKit
 
-/// 仓库卡片的骨架形态（TECH_SPEC §8.5）。
+/// 仓库列表的首屏骨架（TECH_SPEC §8.5）。
 ///
-/// ## 它为什么必须挨着 `RepoCard`
+/// ## ⚠️ 2026-10-16 起它**不再自己画灰条**（NATIVE-MIGRATION P1）
 ///
-/// §8.5 的硬要求是"**尺寸必须匹配真实布局**，避免数据到达时跳动"。
-/// 而"尺寸匹配"这件事**没法靠断言守住**（Swift 单测没有布局引擎，量不出高度），
-/// 只能靠**把两个文件放在一起**：改 `RepoCard` 的间距时，眼睛一定能扫到旁边这个文件。
-/// 把它挪进设计包，就等于把这份对应关系藏起来了。
+/// 从前的做法是"照着 `RepoCard` 抄一份几何、用 `SkeletonBar` 画灰条"，
+/// 代价就是 §8.5 第 1 条那条纪律（"尺寸必须匹配真实布局"）根本**守不住** ——
+/// 它没有断言可守，只能靠"两个文件挨着放、改的时候记得一起改"。
 ///
-/// ⚠️ 骨架属**内容层** ⇒ 实色、**不加玻璃**（§10.2）。
+/// 现在换成 SwiftUI 的官方占位方案：**渲染真实布局 + `.redacted(reason: .placeholder)`**
+/// ⇒ 第二份几何不存在了，"骨架与真实卡片失配"这件事在结构上不可能发生。
+/// 灰块的形状、圆角、配色、呼吸节奏**全部交给系统**（也顺带自动响应
+/// 「降低动态效果」与「增强对比度」，自绘版要手工做）。
+///
+/// 于是本文件剩下的只有"画几行"这一件事 —— 也因此它**仍然挨着 `RepoCard`**：
+/// 这一层（行数、卡间距）还是要跟着列表改。
 struct RepoCardSkeleton: View {
 
-    /// 每张卡片的占位行数。默认 3 行（图标行 / 描述 / 标签行），与真实卡片一致。
+    /// 每张卡片的占位行数。默认 4 行（一屏多一点）。
     var rows: Int = 4
 
     var body: some View {
-        // 方案 D：行间 hairline 由行自己画（顶上那条），骨架同样首行不画。
         VStack(spacing: 10) {
-            ForEach(0..<rows, id: \.self) { index in
-                card()
+            ForEach(0..<rows, id: \.self) { _ in
+                RepoCard(repository: .placeholder)
             }
         }
-    }
-
-    private func card() -> some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.m) {
-            // ⚠️ 这两行尺寸**跟着 `RepoCard` 一起改**（2026-10-06：36/r6 浅底 → 34/r9 深底）。
-            //    §8.5 要求骨架"尺寸必须匹配真实布局"，否则数据到达时整屏会跳一下，
-            //    而"跳一下"这件事单测量不出来（没有布局引擎），只能靠两处一起改。
-            SkeletonBar(
-                height: RepoAvatar.standard.diameter,
-                width: RepoAvatar.standard.diameter,
-                // ⚠️ 2026-10-15 起占位块也是**圆的**（走查第 72 条：真实内容换成了 owner 头像）。
-                cornerRadius: RepoAvatar.standard.diameter / 2
-            )
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                SkeletonBar(height: 14, width: 180)
-                SkeletonBar(height: 12)
-                SkeletonBar(height: 12, width: 120)
-            }
-            Spacer(minLength: 0)
-        }
-        // 方案 A（2026-10-15，走查第 76 条）：与 `RepoCard` 逐字对齐 —— 骨架也是白卡
-        //（否则数据到达时会"卡突然出现"跳一下）。
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
+        // ⚠️ 占位块是**装饰**：读屏该听到的是"正在加载"（由页面那层的
+        // `accessibility` 处理），不是把四行假仓库名念一遍。
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
     }
 }
 

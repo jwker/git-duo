@@ -96,19 +96,39 @@ struct SettingsView: View {
         // ⇒ 只在进页与下拉时量。
         .refreshable { await model.loadCacheSize() }
         .task { await model.loadCacheSize() }
-        .sheet(item: $model.sheet, onDismiss: handleSheetDismissal) { route in
-            switch route {
-            case .signOut:
-                SignOutConfirmSheet {
-                    // ① 记下"要登出" ② 关弹层（等价于点遮罩关闭）。
-                    //    **不在这里 await** —— 见 `signsOutAfterDismissal` 的说明。
-                    signsOutAfterDismissal = true
-                    model.sheet = nil
-                }
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+        // ⚠️ **2026-10-16 起这里是系统 `.alert`**（NATIVE-MIGRATION P1）——
+        //    此前是自绘的 `SignOutConfirmSheet`。登出是**破坏性且不可撤销**的动作
+        //    ⇒ HIG 给的是 alert，不是一张自绘卡（同 `HomeView` 那次改法）。
+        .alert(ProfileCopy.signOutSheetTitle, isPresented: signOutAlertPresented) {
+            Button(ProfileCopy.signOutConfirmAction, role: .destructive) {
+                // ① 记下"要登出" ② 让 alert 自己关（等价于点遮罩 / 点取消之外
+                //    的"系统把弹层收起来"那一步）。**不在这里 await** ——
+                //    见 `signsOutAfterDismissal` 的说明：登出会换掉整棵树，
+                //    而 alert 还盖在上面时做这件事，用户看到的是"弹层被突然掀掉"。
+                signsOutAfterDismissal = true
             }
+            Button(ProfileCopy.cancelAction, role: .cancel) {}
+        } message: {
+            Text(ProfileCopy.signOutSheetHint)
         }
+        // ⚠️ `.alert` **没有 `onDismiss`** ⇒ 用"弹层路由值变回 `nil`"这一刻当"关完了"。
+        //    次序与从前的 `.sheet(onDismiss:)` 逐字相同：先关完，再登出。
+        .onChange(of: model.sheet) { _, route in
+            guard route == nil else { return }
+            handleSheetDismissal()
+        }
+    }
+
+    /// `.alert` 要的布尔量 —— 由 `model.sheet` 导出（`SheetRoute` 枚举保留：
+    /// 它是"这一页有几张弹层"的表达，不是布尔量能替代的）。
+    private var signOutAlertPresented: Binding<Bool> {
+        Binding(
+            get: { model.sheet != nil },
+            set: { presented in
+                guard !presented else { return }
+                model.sheet = nil
+            }
+        )
     }
 
     // MARK: - 三个分区 + 末尾那张独立卡片

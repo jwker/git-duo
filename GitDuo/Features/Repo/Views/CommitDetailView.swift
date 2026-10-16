@@ -186,7 +186,7 @@ struct CommitDetailView: View {
             // ⚠️ 它**不是**"加载中"：空的 `files[]` 是服务端给的一个确定结果
             //    （初始提交之外的少数提交，或某个中间层吞掉了这个字段）。
             //    什么都不画会让整页看起来像少了一块。
-            EmptyBox(title: CommitCopy.noFilesNotice)
+            EmptyBox(title: CommitCopy.noFilesNotice, systemImage: GitHubIcon.file)
         } else {
             // ⚠️ 顺序即 `model.files` 的顺序（= 服务端的 `files[]`），本页不重排。
             ForEach(detail.files) { file in

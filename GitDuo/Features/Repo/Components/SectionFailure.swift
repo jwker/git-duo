@@ -20,6 +20,14 @@ import SwiftUI
 /// 按理可以进 `GitDuoDesign`。但它现在只有 `Features/Repo/` 里三处用，
 /// 而"跨 Feature 才搬进设计包"是本项目的既有边界（`RepoTreeSection` 同理）
 /// ⇒ **先留在 Feature**，等它真的被第二个 Feature 用到再说。
+///
+/// ## ⚠️ 2026-10-16 起它**用官方 `ContentUnavailableView` 画**（NATIVE-MIGRATION P1）
+///
+/// 同 `PageFailure` 那次改法：从前是"标题 + 重试"两个手摆的件，现在是官方的
+/// "图标 + 说明 + 出口"三件套（这里标题即图标那一行的文字，说明是失败原因）。
+///
+/// ⚠️ **分区失败与整页失败共用同一个官方件，靠文案分档**（`这一块加载失败` ↔ `加载失败`）
+/// —— 官方件没有"小号"这个变体，硬做一个只会又回到自绘。
 struct SectionFailure: View {
 
     let error: GitHubError
@@ -28,17 +36,23 @@ struct SectionFailure: View {
     let onRetry: () -> Void
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.s) {
-            Text(Self.title)
-                .font(Theme.Font.footnote)
-                .foregroundStyle(Theme.Palette.textSecondary)
+        ContentUnavailableView {
+            Label(Self.title, systemImage: Self.symbol(for: error))
+        } description: {
+            Text(Self.hint(for: error))
+        } actions: {
             Button(Self.retry, action: onRetry)
-                .font(Theme.Font.footnote.weight(.semibold))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xl)
-        .accessibilityElement(children: .combine)
+        // ⚠️ hint 与 description 是**同一句**：屏幕上要看得见（不然"重试"没有理由），
+        // 读屏也要听到。从前它只在 `accessibilityHint` 里（界面上不显示原因），
+        // 官方件有 description 这一格 ⇒ 顺手把它补成可见的。
         .accessibilityHint(Self.hint(for: error))
+    }
+
+    /// 失败图标 —— 与 `PageFailure.symbol(for:)` **同一张表**（失败原因说的是同一件事，
+    /// 两处各写一张表的下场是其中一处改了口径）。
+    static func symbol(for error: GitHubError) -> String {
+        PageFailure.symbol(for: error)
     }
 
     /// 分区失败的标题。

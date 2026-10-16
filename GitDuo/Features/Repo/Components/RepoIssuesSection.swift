@@ -199,12 +199,14 @@ struct RepoIssuesSection: View {
         case .open:
             EmptyBox(
                 title: RepoIssuesSectionCopy.emptyOpenTitle,
-                hint: RepoIssuesSectionCopy.emptyOpenHint
+                hint: RepoIssuesSectionCopy.emptyOpenHint,
+                systemImage: StateIcon.issueOpen
             )
         case .closed:
             EmptyBox(
                 title: RepoIssuesSectionCopy.emptyClosedTitle,
-                hint: RepoIssuesSectionCopy.emptyClosedHint
+                hint: RepoIssuesSectionCopy.emptyClosedHint,
+                systemImage: StateIcon.issueClosed
             )
         }
     }

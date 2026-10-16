@@ -83,19 +83,23 @@ struct HomeView: View {
             guard depth == 0 else { return }
             Task { await model.reloadVisits() }
         }
-        // ⚠️ 这里**是弹层，不是 `.confirmationDialog`**（2026-10-07 目视修正）：
-        //    动作表在本项目唯一的平台上贴着屏幕底、标题压成一行小字，
-        //    而 PRD §5.1 与原型 `openClearRecent()` 给的都是"标题 + 说明 + 两个整宽按钮"
-        //    那张卡片 —— 与 `DeleteBranchSheet` 同一套版式。详见 `ClearRecentSheet`。
+        // ⚠️ **2026-10-16 起这里是系统 `.alert`**（NATIVE-MIGRATION P1）。
+        //    此前它是自绘的 `ClearRecentSheet`（2026-10-07 从 `.confirmationDialog`
+        //    改回去的，理由是"原型画的是一张底部卡片"）—— 而原型现在只是**功能清单**
+        //    （`AGENTS.md §0`），视觉正本是 HIG。**清除浏览记录是破坏性且不可撤销的动作**，
+        //    HIG 给这种动作的正是 alert（居中的"标题 + 说明 + 两个按钮"），
+        //    不是动作表、也不是一张自绘卡。
         //
-        //    仍然是**一个布尔量**就够：本页只有这一张弹层（`RepoDetailView` 那边用枚举
-        //    是因为它有第二张，"哪一张盖在上面"会变成呈现顺序问题）。
-        .sheet(isPresented: $isConfirmingClear) {
-            ClearRecentSheet {
-                await model.clearVisits()
+        //    `role:` 是这次白拿回来的东西：`.destructive` 让系统把那颗按钮画成红色，
+        //    `.cancel` 让它自动成为"取消"那一档（含点遮罩 / 手势取消的等价语义），
+        //    **不用自己配颜色、也不用自己排顺序**。
+        .alert(HomeCopy.clearConfirmTitle, isPresented: $isConfirmingClear) {
+            Button(HomeCopy.clearConfirmAction, role: .destructive) {
+                Task { await model.clearVisits() }
             }
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
+            Button(HomeCopy.clearConfirmCancel, role: .cancel) {}
+        } message: {
+            Text(HomeCopy.clearConfirmHint)
         }
     }
 
@@ -126,7 +130,8 @@ struct HomeView: View {
     private var pinnedGrid: some View {
         let items = model.pinned.value ?? []
         if items.isEmpty {
-            EmptyBox(title: HomeCopy.pinnedEmptyTitle, hint: HomeCopy.pinnedEmptyHint)
+            EmptyBox(title: HomeCopy.pinnedEmptyTitle, hint: HomeCopy.pinnedEmptyHint,
+                    systemImage: "pin.slash")
         } else {
             // ⚠️ 2026-10-15 走查第 75 条：置顶从 **2 列灰块网格**改成**单列平铺行**；
             //    走查第 76 条（方案 A）又把这一组**装回一张白卡** —— 页面转回浅灰后，
@@ -193,7 +198,8 @@ struct HomeView: View {
                 }
             }
         } else {
-            EmptyBox(title: HomeCopy.recentEmptyTitle, hint: HomeCopy.recentEmptyHint)
+            EmptyBox(title: HomeCopy.recentEmptyTitle, hint: HomeCopy.recentEmptyHint,
+                    systemImage: "clock")
         }
     }
 

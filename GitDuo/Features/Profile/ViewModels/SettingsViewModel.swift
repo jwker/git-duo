@@ -32,8 +32,9 @@ final class SettingsViewModel {
 
     /// 本页的弹层路由（目前只有一张：§5.11）。
     ///
-    /// ⚠️ 仍然是枚举而不是布尔量：`SignOutConfirmSheet` 的确认按钮要**先关弹层、
-    /// 再登出**，而那一步靠"把值写回 `nil`"表达（见 `SettingsView`）。
+    /// ⚠️ 仍然是枚举而不是布尔量：登出确认（2026-10-16 起是**系统 `.alert`**）的
+    /// 「退出登录」按钮要**先关弹层、再登出**，而那一步靠"把值写回 `nil`"表达
+    /// （见 `SettingsView`：`.alert` 没有 `onDismiss`，用的是 `.onChange`）。
     enum SheetRoute: Identifiable, Hashable, Sendable {
         case signOut
 

@@ -1,17 +1,18 @@
 import SwiftUI
 import GitDuoDesign
+import GitDuoKit
 
-/// 搜索结果的首屏骨架屏（TECH_SPEC §8.5 第 1 档）。
+/// 搜索结果（与「我的会话」两个二级列表）的首屏骨架（TECH_SPEC §8.5 第 1 档）。
 ///
-/// 形状照着 `.sr-item` 那一族行写：**方形图标块 + 两行占位条**。
-/// 四种结果行的图标分别是 32 的仓库块 / 34 的头像 / 16 的文件图标 / 17 的状态图标，
-/// 骨架屏不可能同时对着四种 —— 取其中最宽的那一档（32，仓库块），
-/// 于是切换范围时那一片占位的**左边界不会跳**。
+/// ## ⚠️ 2026-10-16 起它**不再自己画灰条**（NATIVE-MIGRATION P1）
 ///
-/// ⚠️ 尺寸必须跟着真实行的改动一起改（§8.5 第 1 条）：行里的
-/// `padding(.vertical, 11)` 与 11 的间距一旦变了，这里的数字不跟，数据到达时整屏就会跳一下。
+/// 同 `RepoCardSkeleton`：渲染**真实的搜索结果行** + `.redacted(reason: .placeholder)`。
 ///
-/// ⚠️ 它是内容层 ⇒ **只用实色**，绝不加 Liquid Glass（§10.2）。
+/// ⚠️ 四种结果行（仓库 / 用户 / 代码 / 会话）的几何并不一样，而骨架**只铺其中一种**
+/// —— 取 `RepositoryHit`（最宽的那一档），于是切换范围时那一片占位的**左边界不会跳**
+/// （这条理由与从前"取 32 那个图标块"是同一条，只是现在宽度由真实行自己决定）。
+///
+/// ⚠️ 它也是**不可点**的：`action` 给空闭包 + 整片 `allowsHitTesting(false)`。
 struct SearchResultsSkeleton: View {
 
     /// 画几条。默认 6 —— 首屏（30 条一页）里能填满一屏，又不至于在数据到达时
@@ -19,33 +20,22 @@ struct SearchResultsSkeleton: View {
     var count = 6
 
     var body: some View {
-        // 方案 A：与真实结果同构 —— 一组行 = 一张白卡（`SearchView` 那处也这么包）。
+        // 与真实结果同构 —— 一组行 = 一张白卡（`SearchView` 那处也这么包）。
         CardBox(vertical: 0, horizontal: 0) {
             VStack(spacing: 0) {
                 ForEach(0..<count, id: \.self) { index in
-                    HStack(alignment: .center, spacing: 11) {
-                        SkeletonBar(height: 32, width: 32, cornerRadius: Theme.Radius.segment)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            SkeletonBar(height: 14)
-                            SkeletonBar(height: 11, width: 150)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    // 方案 A：与 `SearchRowBox` 一致（padding 14 / 内嵌缩进 57）。
-                    .padding(14)
-                    .overlay(alignment: .topLeading) {
-                        if index > 0 {
-                            Rectangle()
-                                .fill(Theme.Palette.borderSoft)
-                                .frame(height: 1)
-                                .padding(.leading, 57)
-                        }
-                    }
+                    SearchRowView(
+                        row: .repository(.placeholder),
+                        now: Placeholders.date,
+                        // 与真实列表同一条：hairline 画在顶上 ⇒ 首行不画。
+                        showsSeparator: index > 0,
+                        action: {}
+                    )
                 }
             }
         }
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }

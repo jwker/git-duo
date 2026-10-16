@@ -1,43 +1,32 @@
 import SwiftUI
 import GitDuoDesign
+import GitDuoKit
 
-/// 探索两个二级列表（Issues / PR）的首屏骨架屏（TECH_SPEC §8.5）。
+/// 探索两个二级列表（Issues / PR）与仓库详情 Issues 段的首屏骨架（TECH_SPEC §8.5）。
 ///
-/// 形状照着 `IssueCard` / `PullCard` 写：一行 = 卡片，卡片里是
-/// **状态图标方块 + 标题条 + 副标题条**。两页的卡片几何是同一个
-/// （原型 `10-explore-repo.js:102` 与 `:117` 的骨架一致），所以一份就够。
+/// ## ⚠️ 2026-10-16 起它**不再自己画灰条**（NATIVE-MIGRATION P1）
 ///
-/// ⚠️ 尺寸必须跟着真实卡片的改动一起改（§8.5 第 1 条）：卡片里
-/// `Theme.Spacing.s` 的间距与 `Theme.Font.rowTitle` 那一档字号一旦变了，
-/// 这里的数字不跟，数据到达时整屏就会跳一下。
+/// 同 `RepoCardSkeleton`：渲染**真实的 `IssueCard`** + `.redacted(reason: .placeholder)`。
+/// 从前它的形状是"照着 `IssueCard` / `PullCard` 抄一份几何"，而现在**那份几何不存在了**。
 ///
-/// ⚠️ 它是内容层 ⇒ **只用实色**，绝不加 Liquid Glass（§10.2）。
+/// 两页的卡片几何是同一个（原型 `10-explore-repo.js:102` 与 `:117` 的骨架一致），
+/// 所以一份就够 —— 这条理由不变。
+///
+/// ⚠️ `now` 用 `Placeholders.date`（**固定时刻**）：占位不该引入"每次渲染都不同"的值
+/// （`IssueCard` 的说明写了为什么相对时间必须稳定）。
 struct ExploreSubListSkeleton: View {
 
     /// 画几条。默认 5 —— 首屏能填满一屏又不至于在数据到达时"多出几条凭空消失"。
     var count = 5
 
     var body: some View {
-        // 方案 D：行间 hairline 由行自己画（顶上那条），骨架同样首行不画。
         VStack(spacing: 10) {
-            ForEach(0..<count, id: \.self) { index in
-                CardBox() {
-                    HStack(alignment: .top, spacing: Theme.Spacing.s) {
-                        // 16pt 的正方形 —— 它对着的是 `Theme.Font.body` 那一档的
-                        // SF Symbol，图标视觉高度大约就是这个数。
-                        SkeletonBar(height: 16, width: 16, cornerRadius: Theme.Radius.chip)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            SkeletonBar(height: 14)
-                            SkeletonBar(height: 11, width: 170)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                }
+            ForEach(0..<count, id: \.self) { _ in
+                IssueCard(row: .placeholder, now: Placeholders.date)
             }
         }
-        .accessibilityHidden(true)
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
     }
 }
 

@@ -85,7 +85,8 @@ struct ExplorePRListView: View {
         case .needsMore, .empty:
             EmptyBox(
                 title: PullListIndicator.emptyTitle,
-                hint: PullListIndicator.emptyHint
+                hint: PullListIndicator.emptyHint,
+                systemImage: StateIcon.pullRequestOpen
             )
 
         case let .failure(error):

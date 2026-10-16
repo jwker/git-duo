@@ -2534,7 +2534,40 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 > `ContentUnavailableView`、确认弹层 → `.alert`）起步：不碰观感、收益最大；P3 是最大的一期（列表主干）。
 > **每期结束 `make verify` + 真机目视，一期内可中断。**
 >
-> ⇒ 现在是**有效 74 条、含作废记录共 79 个编号**
+> ## 走查第 80 条：P1 落地 —— 骨架 / 空态·失败 / 确认弹层 / 搜索框 四批换官方件（2026-10-16）
+>
+> 第 79 条拍板后的**第一期执行**（`NATIVE-MIGRATION.md` 的 P1）。用户指令「开始p1」。
+>
+> ### 做了什么
+>
+> | 批 | 换成 | 落点 |
+> |---|---|---|
+> | 骨架 | `.redacted(reason: .placeholder)` | **7 个列表骨架**改成"真实行 + 占位数据 + redacted"，手抄几何全删；新增 `GitDuoKit/Models/Placeholders.swift` |
+> | 空态 / 失败 | `ContentUnavailableView` | `EmptyBox`（24 处）/ `PageFailure` / `SectionFailure` **换内部实现、调用点不动**；`EmptyBox` 新增 `systemImage` |
+> | 确认弹层 | `.alert` | `ClearRecentSheet` / `SignOutConfirmSheet` **两个文件删除**，改由系统 alert 承担（破坏性动作正是 alert 的场景） |
+> | 搜索框 | `.searchable(text:isPresented:)` | 自绘 `SearchField` **文件删除**；`.onSubmit(of: .search)` 接回车 |
+>
+> ### 三件"没做完 / 没做"的事（如实记，别当成已完成）
+>
+> 1. **详情页那批 `SkeletonBar` 直写处没换**（Profile / 仓库详情 ×2 / Issue·PR 详情 / 文件 / 编辑器 /
+>    分支 / README / commits / 两个弹层内）—— 需要再补"会话 / 提交 / diff"三个占位模型。
+>    ⇒ `SkeletonBar` **暂时保留**，`RepoTreeSkeleton` 里面包屑那一条也还是它。
+> 2. **P1.4（swipeActions / contextMenu）与 P1.5（设置页 Toggle·Picker）重新归类到 P3 / P4**：
+>    `.swipeActions` 只在 `List` 行里生效，而现在列表是 `ScrollView + CardBox`
+>    —— 现在改出来是一个不会响应的死手势；设置页的原生形态是 `Form`，属弹层那一批。
+> 3. **`.searchSuggestions` 没接**：建议层会盖住结果区，"有关键词时还显不显示建议"
+>    我没法在本机验证 ⇒ 等真机目视。
+>
+> ### 两条要真机看的
+>
+> - 系统搜索框**回车后键盘是否自动落下**（`.searchable` 没有 `@FocusState` 可绑，
+>   原 `isFieldFocused = false` 已删，`SearchView.submit` 里写了这条待验证）。
+> - `.redacted` 之下**占位块的实际观感**（灰块形状/圆角/深浅档），以及 `ContentUnavailableView`
+>   在"分区内小块"这个用法下会不会偏大（`SectionFailure`）。
+>
+> **验证**：`make verify`（强制全量重编）`exit=0` · 0 条 Swift 编译警告 · 1884 项通过 · `BUILD SUCCEEDED`。
+>
+> ⇒ 现在是**有效 75 条、含作废记录共 80 个编号**
 > （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
 
 > 第 22 条是 2026-10-07 目视陪跑时**补登**的（与 17–21 同批由 6.7 引出）。⚠️ 它只在**仓库真有受保护分支**时才看得见 ——

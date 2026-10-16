@@ -66,7 +66,8 @@ struct MyStarsView: View {
             continueLoading
 
         case .empty:
-            EmptyBox(title: ProfileCopy.starsEmptyTitle, hint: ProfileCopy.starsEmptyHint)
+            EmptyBox(title: ProfileCopy.starsEmptyTitle, hint: ProfileCopy.starsEmptyHint,
+                    systemImage: "star.slash")
                 .padding(pageInsets)
 
         case let .failure(error):

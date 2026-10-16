@@ -200,7 +200,8 @@ struct RepoSectionListView: View {
             continueLoading
 
         case .empty:
-            EmptyBox(title: CommitCopy.emptyTitle, hint: CommitCopy.emptyHint)
+            EmptyBox(title: CommitCopy.emptyTitle, hint: CommitCopy.emptyHint,
+                    systemImage: GitHubIcon.commit)
 
         case let .failure(error):
             // 切片 7 起这块是**共享件**（Issues / PR 两段也用同一个失败块）——

@@ -118,7 +118,8 @@ struct ExploreIssueListView: View {
             // 但此时**说明行会写成 `开放 0+ 个`**（下界），所以两者在屏幕上仍可分辨。
             EmptyBox(
                 title: OpenIssueIndicator.emptyTitle,
-                hint: OpenIssueIndicator.emptyHint
+                hint: OpenIssueIndicator.emptyHint,
+                systemImage: StateIcon.issueOpen
             )
 
         case let .failure(error):

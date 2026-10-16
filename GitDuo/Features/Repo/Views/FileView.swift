@@ -184,8 +184,9 @@ struct FileView: View {
         .sheet(item: $model.sheet, onDismiss: handleSheetDismissal) { route in
             presented(route)
                 // ⚠️ 原型所有弹层都是**内容高度**（`.sheet{bottom:10px}` 自适应），
-                //    而本仓从切片 1 起统一用 `.medium`（`ClearRecentSheet` 那张
-                //    "标题 + 说明 + 两个整宽按钮"的卡片就是先例）。
+                //    而本仓从切片 1 起统一用 `.medium`（先例是那张"标题 + 说明 +
+                //    两个整宽按钮"的确认卡 —— ⚠️ 它 2026-10-16 已换成系统 `.alert`，
+                //    见 `HomeView`）。
                 //    这两张都小，`.medium` 会留下半屏空白 —— 属既有偏差的延续，
                 //    已登记到逐屏对照 21 里一起看（收口要一套"内容高度"约定，不由本片拍板）。
                 .presentationDetents([.medium])

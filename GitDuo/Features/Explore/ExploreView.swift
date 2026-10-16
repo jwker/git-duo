@@ -170,7 +170,7 @@ struct ExploreView: View {
             // 在这里只可能出现在"第一页恰好为空、但还有下一页"这种极窄的情形。
             // 两者都落进空态框 —— 但文案不同：结果不完整时**不能说"没有符合条件的仓库"**
             // （那正是 `LoadTrendingBoard.Result.emptyText` 存在的理由）。
-            EmptyBox(title: model.emptyText)
+            EmptyBox(title: model.emptyText, systemImage: "magnifyingglass")
                 .padding(.top, Theme.Spacing.s)
 
         case let .failure(error):

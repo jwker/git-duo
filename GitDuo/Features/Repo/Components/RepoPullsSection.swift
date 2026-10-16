@@ -158,12 +158,14 @@ struct RepoPullsSection: View {
         case .open:
             EmptyBox(
                 title: RepoPullsSectionCopy.emptyOpenTitle,
-                hint: RepoPullsSectionCopy.emptyOpenHint
+                hint: RepoPullsSectionCopy.emptyOpenHint,
+                systemImage: StateIcon.pullRequestOpen
             )
         case .closed:
             EmptyBox(
                 title: RepoPullsSectionCopy.emptyMergedTitle,
-                hint: RepoPullsSectionCopy.emptyMergedHint
+                hint: RepoPullsSectionCopy.emptyMergedHint,
+                systemImage: StateIcon.pullRequestMerged
             )
         }
     }

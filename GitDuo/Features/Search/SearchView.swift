@@ -33,7 +33,13 @@ struct SearchView: View {
     /// `.sheet(item:)`，不用 `isPresented` 布尔量（同 `ExploreView` 的说明）。
     @State private var sheetUser: UserHit?
 
-    @FocusState private var isFieldFocused: Bool
+    /// 系统搜索框是否展开（`.searchable(text:isPresented:)`）。
+    ///
+    /// ⚠️ 2026-10-16 起取代了自绘 `SearchField` 的 `@FocusState`（NATIVE-MIGRATION P1）：
+    /// `.searchable` 的输入框**归系统**，没有 `@FocusState` 可绑（它不是本视图树里的
+    /// `TextField`）。"进页自动聚焦"的原生等价是**让搜索框展开** —— 展开时系统自己
+    /// 把光标放进去。
+    @State private var isSearchPresented = false
 
     /// 取数与历史存储由**组合根**经 `RouteView` 传下来（5.5 装配）。
     init(loader: LoadSearch, history: any SearchHistoryStore) {
@@ -42,10 +48,10 @@ struct SearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SearchField(text: keywordBinding, isFocused: $isFieldFocused, onSubmit: submit)
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.top, Theme.Spacing.s)
-
+            // ⚠️ 2026-10-16 起**输入框不在这里**（NATIVE-MIGRATION P1）：它归
+            // `.searchable`（下面那一条），由系统画在导航栏下方 ——
+            // 系统给的是那一整套：放大镜、占位文案、清除按钮、取消按钮、
+            // 键盘的 `search` 键、以及"搜索框常驻、内容区滚动"这个布局。
             SegmentedBar(
                 segments: SearchScope.allCases.map { SegmentedBar.Segment(id: $0.id, title: $0.title) },
                 selectedID: model.scope.id
@@ -61,16 +67,32 @@ struct SearchView: View {
         .background(Theme.Palette.background)
         .navigationTitle("搜索")
         .navigationBarTitleDisplayMode(.inline)
+        // ⚠️ **系统搜索框**（NATIVE-MIGRATION P1）—— 取代自绘 `SearchField`。
+        //    `prompt` 是占位文案；`placement: .always` 让它常驻（PRD §4.2 那条
+        //    "刷新结果区时保持输入焦点与光标" ⇒ 输入框不能随内容区一起滚/重建，
+        //    而系统搜索框本来就在滚动区之外，这条要求由系统满足，不用自己钉）。
+        .searchable(
+            text: keywordBinding,
+            isPresented: $isSearchPresented,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: SearchCopy.fieldPlaceholder
+        )
+        // 回车 —— 系统那颗键盘上的 `search` 键。
+        .onSubmit(of: .search, submit)
+        // 搜索词里出现大写与自动纠错都是碍事的（`SearchField` 里的同一条理由：
+        // 用户输入 `is:issue` 这种限定符时被纠错成 `is issue` 就白打了）。
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
         .sheet(item: $sheetUser) { user in
             UserProfileSheet(fallback: user, loader: env.userProfile)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
         .task {
-            // 进入时自动聚焦（PRD §4.2）。⚠️ 放在 `await` **之后**：
-            // 与视图出现同一轮里设焦点会被系统丢掉（键盘不弹，而代码看起来没错）。
+            // 进入时展开搜索框（PRD §4.2「自动聚焦」的原生等价）。
+            // ⚠️ 放在 `await` **之后**：与视图出现同一轮里改呈现状态会被系统丢掉。
             await model.loadHistory()
-            isFieldFocused = true
+            isSearchPresented = true
         }
     }
 
@@ -100,8 +122,11 @@ struct SearchView: View {
     /// 否则键盘与光标会跳）—— 本视图把输入框抽成 `SearchField` 且钉在滚动区之外，
     /// 正是为它；而这里是用户**主动提交**，收键盘是他的意图，不是把焦点弄丢。
     private func submit() {
-        // 先收再查：让键盘在请求发出前就开始落下，而不是等结果回来才动。
-        isFieldFocused = false
+        // ⚠️ 2026-10-16：这里**不再手工收键盘**（原 `isFieldFocused = false`）。
+        //    输入框现在是系统的 `.searchable`，键盘由系统管：点键盘上那颗 `search`
+        //    之后系统会自己收起它。手工再收一次没有能绑的对象（也没有 `@FocusState`
+        //    指向那个系统输入框）—— 强行做只能走 UIKit 那一层，不值得为它破例。
+        //    ⚠️ 真机上若回车后键盘不落，再回来补这一处（属"系统行为待目视"那一类）。
         Task { env.toast.show(await model.submit()) }
     }
 

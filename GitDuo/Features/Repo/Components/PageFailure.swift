@@ -32,6 +32,16 @@ import SwiftUI
 ///
 /// 只收 `GitHubError`（数据层的错误类型，不是领域模型）+ 一个闭包 ⇒ 不认识业务。
 /// 与 `SectionFailure` 一样**先留在 Feature**（"跨 Feature 才搬进设计包"）。
+///
+/// ## ⚠️ 2026-10-16 起它**用官方 `ContentUnavailableView` 画**（NATIVE-MIGRATION P1）
+///
+/// 从前是"30pt 警告三角 + 标题 + 重试"那一套手摆的 `VStack`。换成官方件之后：
+/// 图标与标题的间距、标题与说明的字号层级、按钮的位置、`padding`、
+/// 深浅两档配色、Dynamic Type —— **全部由系统给出**。
+///
+/// 收进 `actions:` 的重试按钮**必须留**（PRD §1 设计原则 4：任何失败都有出口）
+/// —— 官方件正是"空态 / 失败态 + 一个出口"这个完整形状，
+/// 从前那种"自己再摆一个按钮"的做法才是把它拆成了两件。
 struct PageFailure: View {
 
     let error: GitHubError
@@ -40,25 +50,18 @@ struct PageFailure: View {
     let onRetry: () -> Void
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "exclamationmark.triangle")
-                // 30 是原型里 `.empty-box` 一族图标那一档的裸值 —— 收口前六处全写的 30，
-                // 令牌里没有对应档（字号阶只管文字）。照既有值写一次，不新造令牌。
-                .font(.system(size: 30))
-                .foregroundStyle(Theme.Palette.textTertiary)
-
-            Text(Self.title)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-
+        ContentUnavailableView {
+            Label(Self.title, systemImage: Self.symbol(for: error))
+        } description: {
+            Text(SectionFailure.hint(for: error))
+        } actions: {
             Button(Self.retry, action: onRetry)
-                .font(Theme.Font.bodyStrong)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xxl)
-        .accessibilityElement(children: .combine)
         // 失败原因**只说确定的那一件事**：404 与无权限被 GitHub 混同（§4.3），
         // 不得替用户断定是"它不存在"还是"你没权限"。
+        //
+        // ⚠️ 这句 hint **仍然要手工给**：系统不知道 `GitHubError` 是什么，
+        // 而"断网"与"被限流"对读屏用户是两句不同的引导。
         .accessibilityHint(SectionFailure.hint(for: error))
     }
 
@@ -70,6 +73,19 @@ struct PageFailure: View {
 
     /// 重试按钮。
     static let retry = "重试"
+
+    /// **失败图标随原因变** —— 官方空态是"图标 + 标题"这个组合，图标就该说同一件事。
+    ///
+    /// ⚠️ 四个名字都**在宿主机上验过存在**（`NSImage(systemSymbolName:)`）；
+    ///    见 `GitHubIcon` 抬头那条告诫 —— 名字写错不会报错，只在界面上凭空消失。
+    static func symbol(for error: GitHubError) -> String {
+        switch error {
+        case .transport: "wifi.exclamationmark"
+        case .rateLimited: "clock.badge.exclamationmark"
+        case .unauthorized: "person.badge.key"
+        default: "exclamationmark.triangle"
+        }
+    }
 }
 
 #Preview {

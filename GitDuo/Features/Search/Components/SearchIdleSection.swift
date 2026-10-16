@@ -49,7 +49,7 @@ struct SearchIdleSection: View {
         )
 
         if history.isEmpty {
-            EmptyBox(title: SearchCopy.emptyHistory)
+            EmptyBox(title: SearchCopy.emptyHistory, systemImage: "clock")
         } else {
             // 方案 A：历史行装进**一张白卡**（与搜索结果、首页两组同构）。
             CardBox(vertical: 0, horizontal: 0) {

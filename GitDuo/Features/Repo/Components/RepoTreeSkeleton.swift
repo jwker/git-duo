@@ -1,4 +1,5 @@
 import GitDuoDesign
+import GitDuoKit
 import SwiftUI
 
 /// 文件树分区的首屏骨架（TECH_SPEC §8.5）—— 代码页（§4.4.1）与 §4.13 文件浏览**共用这一份**。
@@ -23,15 +24,14 @@ import SwiftUI
 /// **同一个 UI 元素有两处定义 ⇒ 必然分叉**（分叉之后，改一处的人不会想到还有第二处）。
 /// 此前 `RepoDetailView`（那时代码浏览还嵌在它里面）就自己抄了一份逐字相同的 `codeSkeleton`。
 ///
-/// ## ⚠️ 两条尺寸纪律（都是"看一眼看不出来"的那类）
+/// ## ⚠️ 2026-10-16 起目录那一片**不再自己画灰条**（NATIVE-MIGRATION P1）
 ///
-/// ① **容器参数必须与 `RepoTreeSection` 里那个真实 `CardBox` 逐字一致**
-///    （`vertical: Theme.Spacing.xs` = 4）—— 骨架此前写的是 `Theme.Spacing.m`（12）
-///    ⇒ 数据到达时**整块上移 8pt**。
-/// ② **每行要补上 `RepoFileRow` 自己的行内边距**（原型 `padding:11px 4px`）——
-///    少了它，骨架 6 行挤成一团、真实 6 行摊开，接上的那一瞬间每一行都往下挪。
+/// 同 `RepoCardSkeleton`：渲染**真实的 `RepoFileRow`** + `.redacted(reason: .placeholder)`。
+/// 从前那两条尺寸纪律（容器 padding 要与真实 `CardBox` 一致、行内边距要补 `11px 4px`）
+/// **随之作废** —— 它们本来就是为了"手抄的几何别抄错"，现在没有第二份几何可抄。
 ///
-/// ⚠️ 它是内容层 ⇒ **只用实色**，绝不加 Liquid Glass（§10.2）。
+/// ⚠️ **面包屑那一条仍是 `SkeletonBar`**：它对着的是 `BreadcrumbBar`（自绘件，C 组），
+/// 换成真实面包屑需要一整套假的分支 / 路径上下文，留到 P6 那批一起做。
 struct RepoTreeSkeleton: View {
 
     /// 画几行。取 6 是因为一屏能见到的行数大约就是这些。
@@ -39,19 +39,22 @@ struct RepoTreeSkeleton: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            // 面包屑那一条（`BreadcrumbBar` 高 32）。
+            // 面包屑那一条（`BreadcrumbBar` 高 32）—— ⚠️ 见类型说明：这行还是自绘块。
             SkeletonBar(height: 32)
 
-            CardBox() {
-                ForEach(0..<rows, id: \.self) { _ in
-                    SkeletonBar(height: 15, width: 190)
-                        // 与 `RepoFileRow` 的 `padding:11px 4px` 同值。
-                        .padding(.vertical, 11)
-                        .padding(.horizontal, Theme.Spacing.xs)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            CardBox {
+                ForEach(0..<rows, id: \.self) { index in
+                    RepoFileRow(
+                        entry: .placeholder,
+                        // `RepoFileRow` 是**底线件** ⇒ 最后一行不画（与真实树同一条）。
+                        showsSeparator: index < rows - 1,
+                        action: {}
+                    )
                 }
             }
         }
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }

@@ -137,13 +137,43 @@
 - 顺带：`archive/` 里前几轮为"对齐原型视觉"写的那些口径（hairline 缩进 66/56/57、卡片圆角 18、内嵌分隔线）标记为**作废**。
 
 ### P1 · 白拿系统行为（观感基本不变，收益最大）
-1. 骨架：8 个 `*Skeleton` + `SkeletonBar` → `.redacted(reason: .placeholder)`（**102 处**）
-2. 空态 / 失败：`EmptyBox`（24）· `PageFailure`（16）· `SectionFailure`（28）→ `ContentUnavailableView`
-3. 确认弹层：`ClearRecentSheet`（5）· `SignOutConfirmSheet` → `.alert` / `.confirmationDialog`
-4. 行的系统交互：`BranchRow` 删除 → `.swipeActions`；该有长按菜单的地方加 `contextMenu`
-5. 设置页：`Toggle` / `Picker` 用原生形态（现在只有主题三档用了 `Picker`）
-6. `.searchable(text:)` 替换 `SearchField`（5）+ `.searchSuggestions` 替换 `SearchIdleSection`（4）
-   ⚠️ 这一条**会改观感**（变系统搜索框），但属于"要原生"的应有之义
+
+> **状态（2026-10-16 执行中）**：1 / 2 / 3 / 6 已完成；4 / 5 **已重新归类**（见下），
+> 7 个列表骨架已换、详情页那批 `SkeletonBar` 直写处留给下一批。
+
+1. ✅ 骨架：8 个 `*Skeleton` + `SkeletonBar` → `.redacted(reason: .placeholder)`（**102 处**）
+   - **已完成 7 个列表骨架**：`RepoCardSkeleton` / `PinRowsSkeleton` / `ExploreBoardSkeleton` /
+     `ExploreSubListSkeleton` / `StarRowSkeleton` / `SearchResultsSkeleton` / `RepoTreeSkeleton`
+     ⇒ 它们现在渲染**真实行 + 占位数据 + `.redacted`**，手抄的几何全部删除。
+     配套新增 `GitDuoKit/Models/Placeholders.swift`（域模型的占位工厂）。
+   - ⏸ **详情页那批 `SkeletonBar` 直写处**（`ProfileView` / `RepoDetailView` /
+     `ExploreRepoDetailView` / Issue·PR 详情 / `FileView` / `EditorView` / `BranchesView` /
+     `RepoReadmeSection` / commits / 两个弹层内的小骨架）**下一批做** ——
+     它们需要为"会话 / 提交 / diff"再补三个占位模型，不是机械替换。
+   - ⚠️ `SkeletonBar` 因此**暂时保留**（上面那批还在用），它的 `animates` 单测仍在跑。
+2. ✅ 空态 / 失败：`EmptyBox`（24）· `PageFailure`（16）· `SectionFailure`（28）→ `ContentUnavailableView`
+   - 三者**保留类型名与入参**，内部换成官方件（24 个调用点一行不动）。
+   - `EmptyBox` 新增 `systemImage`（官方空态带图标，默认 `tray`），12 处按语义给了字形。
+   - `PageFailure.symbol(for:)` 新增"失败图标随原因变"（4 个字形名都已在宿主机验过存在）。
+3. ✅ 确认弹层：`ClearRecentSheet` · `SignOutConfirmSheet` → `.alert`（两个文件已删）
+   - 破坏性动作（清除浏览记录 / 退出登录）正是 HIG 给 alert 的场景；
+     `role: .destructive` / `.cancel` 白拿系统的红色与"取消"档位。
+   - ⚠️ `.alert` **没有 `onDismiss`** ⇒ 设置页那处改用 `.onChange(of: model.sheet)`
+     接住"关完了"，保持"先关完、再登出"的原有次序。
+   - ⏸ `DeleteBranchSheet` / `DeleteFileSheet` / `CloseIssueSheet` 三张**留到 P4** ——
+     它们要装"进行中"状态（`isWorking`），与 `SheetPrimitives` 一起重写更合适。
+4. ⏸ 行的系统交互 → **并入 P3**：`.swipeActions` 只在 `List` 行里生效，
+   而现在列表是 `ScrollView + LazyVStack`/`CardBox` —— 在 P3 换 `List` 时一并做，
+   否则改出来的是一个不会响应的死手势。`contextMenu` 同理，等行件换成系统行再说。
+5. ⏸ 设置页 `Toggle` / `Picker` → **并入 P4**：设置页现在是自绘 `MenuCard` + `MenuRow`
+   拼的，原生形态是 `Form` + `Section`，与弹层那批是同一件事。
+   （顺带：现在那处 `Menu { Picker }` 是冗余的 —— `Picker` 自带菜单，P4 一并收拾。）
+6. ✅ `.searchable(text:)` 替换 `SearchField`（自绘文件已删）
+   - 系统搜索框自带：放大镜 / 占位 / 清除 / 取消 / 键盘 `search` 键 / 常驻不随内容滚。
+   - ⏸ `.searchSuggestions` 替换 `SearchIdleSection` **没做**：建议层会**盖住结果区**，
+     而"有关键词时该不该还显示建议"这件事我没法在本机验证 ⇒ 留到真机目视后再接。
+   - ⚠️ 一条待目视：回车后键盘是否自动落下（系统的 `.searchable` 没有
+     `@FocusState` 可绑，原 `isFieldFocused = false` 那句已删，见 `SearchView.submit`）。
 
 ### P2 · 按钮与控件样式
 - `ActionButton`（50）→ `Button` + 系统 `.buttonStyle` + `.tint()`
