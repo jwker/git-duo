@@ -2,11 +2,24 @@ import SwiftUI
 
 /// 四个底部 Tab。
 /// 依据：PRD §1（首页 / 仓库 / 探索 / 我的）。**通知本期不做**（决策 → Tab 由 5 减为 4）。
+///
+/// ## ⚠️ 2026-10-16 起第 4 格是「搜索」而不是「我的」（走查第 85 条）
+///
+/// 用户要求：**「我的」让位给「搜索」**，而「我的」改从**首页右上角那颗头像**进
+/// （`Route.profile` —— 它现在是一条推入页，不再是根页）。
+///
+/// 为什么这个交换说得通：搜索是**高频入口**，而它从前挂在三个根页右上角那颗放大镜上
+/// —— 三处重复、且都不是"可以在任何地方按下去"的位置；「我的」相反，是低频页。
+/// 交换之后搜索拿到了底部一格（任何 Tab 下都够得到），「我的」保留一个**看得见头像**的入口。
+/// App Store 的 Today 页用的正是这个形状（大标题 + 右上角头像，搜索在底部一格）。
+///
+/// ⚠️ 连带的一条：`Route.search` **已删除** —— 三个放大镜没有了，
+/// 搜索页现在只由本 Tab 呈现，它不再需要一条路由。
 enum AppTab: String, Hashable, Sendable, CaseIterable, Identifiable {
     case home
     case repos
     case explore
-    case profile
+    case search
 
     var id: String { rawValue }
 
@@ -15,7 +28,7 @@ enum AppTab: String, Hashable, Sendable, CaseIterable, Identifiable {
         case .home: "首页"
         case .repos: "仓库"
         case .explore: "探索"
-        case .profile: "我的"
+        case .search: "搜索"
         }
     }
 
@@ -24,7 +37,7 @@ enum AppTab: String, Hashable, Sendable, CaseIterable, Identifiable {
         case .home: "house"
         case .repos: "folder"
         case .explore: "safari"
-        case .profile: "person.crop.circle"
+        case .search: "magnifyingglass"
         }
     }
 }
@@ -47,7 +60,7 @@ final class Router {
     var home = NavigationPath()
     var repos = NavigationPath()
     var explore = NavigationPath()
-    var profile = NavigationPath()
+    var search = NavigationPath()
 
     /// 当前选中的 Tab
     var selection: AppTab = .home
@@ -58,7 +71,7 @@ final class Router {
         case .home: home
         case .repos: repos
         case .explore: explore
-        case .profile: profile
+        case .search: search
         }
     }
 
@@ -67,7 +80,7 @@ final class Router {
         case .home: home = newPath
         case .repos: repos = newPath
         case .explore: explore = newPath
-        case .profile: profile = newPath
+        case .search: search = newPath
         }
     }
 
@@ -96,7 +109,7 @@ final class Router {
         home = NavigationPath()
         repos = NavigationPath()
         explore = NavigationPath()
-        profile = NavigationPath()
+        search = NavigationPath()
         selection = .home
     }
 }

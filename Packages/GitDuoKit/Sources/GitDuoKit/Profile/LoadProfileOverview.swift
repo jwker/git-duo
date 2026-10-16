@@ -89,6 +89,30 @@ public struct LoadProfileOverview: Sendable {
         )
     }
 
+    /// 只取**身份那一路**（`GET /user`），**不发**活动那一路。
+    ///
+    /// ## 它存在的理由：首页右上角那颗头像
+    ///
+    /// 2026-10-16 起首页右上角是一个圆形头像（走查第 85 条），它只需要
+    /// `ViewerProfile.avatarURL`。而 `load(year:)` 是**两路并发**：`GET /user`
+    /// 外加一发 GraphQL `contributionCalendar`（整整一年、365 天的日历）。
+    /// 首页没有热力图 —— 为了一颗 30pt 的头像把那一发也带上，等于每次冷启动都白花
+    /// 一次 GraphQL 配额，而那一桶只有 5,000 点/小时（§13.2）。
+    ///
+    /// ## ⚠️ 它不是 `load(year:)` 的替代品
+    ///
+    /// 它给不出 `grid` / `stats`，而「我的」页两样都要 ⇒ 那一页仍然走 `load(year:)`。
+    /// 两条方法并存、各自说清"我要哪几路"，比给 `load` 加一排
+    /// `includeActivity: Bool` 之类的开关干净 —— 那种开关的每一个取值
+    /// 都会在某个调用点上是错的。
+    ///
+    /// 失败语义与 `load(year:)` 里那一路完全相同（折进 `ProfileSection`，
+    /// 调用方拿 `nil` 就回落首字母圆），所以这里直接复用同一个 `attempt`。
+    public func loadIdentity() async -> ProfileSection<ViewerProfile> {
+        let identityAttempt = await attempt { try await source.loadProfile() }
+        return identityAttempt.map { mapper.profile($0) }
+    }
+
     /// 把一次"可能抛错的取数"折成 `ProfileSection`。
     ///
     /// ## 为什么 `catch` 有一个兜底分支

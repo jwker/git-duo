@@ -3,12 +3,23 @@ import GitHubAPI
 import GitDuoDesign
 import GitDuoKit
 
-/// 搜索页（推入页）（PRD §4.2、TECH_SPEC §9.2；切片 5 之 5.4）。
+/// 搜索页 —— **底部第 4 格 Tab 的根页**（2026-10-16 起；PRD §4.2、TECH_SPEC §9.2）。
 ///
 /// 结构（PRD §4.2）：
 /// 1. 搜索输入框（系统 `.searchable`）；
 /// 2. 范围分段：仓库 / 用户 / 代码 / Issue · PR；
 /// 3. 内容区（随输入与范围变化）：空闲态 / 骨架屏 / 结果 / 空态 / 失败。
+///
+/// ## ⚠️ 2026-10-16：它从推入页变成了 Tab 根页（走查第 85 条）
+///
+/// 用户要求把底部「我的」那一格让给「搜索」，「我的」改从首页右上角头像进
+/// （见 `AppTab` 的说明）。连带的两件事：
+///
+/// 1. **`Route.search` 已删除** —— 从前首页 / 仓库 / 探索三处右上角的放大镜
+///    都推到那一条路由，那三颗放大镜随本次改动一并移除 ⇒ 那条路由没有调用方了。
+/// 2. **结果行的跳转不受影响**：本页仍然坐在一条 `NavigationStack(path: $router.search)`
+///    里（`MainTabView` 给每个 Tab 各配一条），行里的 `NavigationLink(value:)`
+///    照旧由那一条 `navigationDestination(for: Route.self)` 接住。
 ///
 /// ## ⚠️ 顶部两块**固定在滚动区之外**
 ///
@@ -30,10 +41,11 @@ import GitDuoKit
 /// ⚠️ 三处**有意保留**的自定观感（属 P5 令牌收尾）：页面底 `Theme.Palette.background`、
 ///    行底 `Theme.Palette.surface`（`.scrollContentBackground(.hidden)` 让开系统底色）。
 ///
-/// ## 三个入口共用本页
+/// ## ⚠️ 标题保持 `inline`
 ///
-/// 首页 / 仓库 / 探索三处右上角的放大镜都推到 `.search`（PRD §4.2、§6.3）。
-/// 本视图**不认识**它们中的任何一个 —— 路由由 `RouteView` 决定。
+/// 它从前是推入页（那时 inline 是必然的）。成为 Tab 根页之后仍然保持 inline，
+/// 是一个**有意的选择**：本页顶部那两块（搜索框 + 范围分段）本身就是"标题区"，
+/// 再叠一行大标题「搜索」要多吃掉约 50pt，而这一屏的价值全在结果区。
 struct SearchView: View {
 
     @Environment(AppEnvironment.self) private var env

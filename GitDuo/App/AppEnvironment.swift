@@ -685,6 +685,9 @@ enum AuthNotice: Equatable {
 /// 已消解：`TokenStore` 的 Keychain 实现（切片 1 → `KeychainTokenStore`，前置条件 P4）。
 /// 已消解：`GitHubGraphQLClient` 的"尚无调用方"（切片 4 → 首页置顶经 `pinnedRepositories` 调用）。
 /// 已消解：`RouteView` 的 `.search`（切片 5 → `SearchView` + `search` / `searchHistory` 装配）。
+///        ⚠️ **该 case 于 2026-10-16 删除**（走查第 85 条）—— 搜索搬去底部 Tab，
+///        于是没有页面再 `push(.search)`。装配（`search` / `searchHistory` 两个 let）
+///        原样保留，只是落点从 `RouteView` 换成了 `MainTabView`。
 /// 已消解：`RouteView` 的 `.repoDetail` / `.fileView` / `.commitDetail` / `.branches`
 ///        （切片 6.5 → 四个真页面 + `repoDetail` / `repoTree` / `fileContent` /
 ///        `repoCommits` / `branches` / `deleteBranch` / `createBranch` / `mergeBranch`

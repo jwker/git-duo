@@ -7,10 +7,11 @@ import SwiftUI
 ///         justify-content:center;font-weight:700;color:#fff;font-size:13px}
 /// ```
 ///
-/// ## 三处消费场景，三个尺寸档
+/// ## 四处消费场景，四个尺寸档
 ///
 /// | 档 | 直径 | 出处 |
 /// |---|---|---|
+/// | `.navigationDiameter` | 30 | 首页右上角那颗（走查第 85 条，2026-10-16 加） |
 /// | `.rowDiameter` | 34 | `.sr-item .avatar`（搜索结果行 / 贡献者） |
 /// | `.sheetDiameter` | 52 | §5.10 用户资料弹层（原型 `openUserSheet` 的 52×52） |
 /// | `.profileDiameter` | 86 | §4.17「我的」页头部（原型 `.profile-head .big-avatar`，切片 9 加） |
@@ -60,6 +61,17 @@ import SwiftUI
 ///
 /// 头像属内容（§10.2），**实色，不加 Liquid Glass**。
 public struct UserAvatar: View {
+
+    /// 首页右上角那颗的直径（2026-10-16 走查第 85 条加）。
+    ///
+    /// ⚠️ **30 这个数没有原型出处** —— 原型（`redesign/prototype/`）里从来没有
+    /// "导航栏头像"这一件；它来自本次改版的参照物 App Store 的 Today 页，
+    /// 量出来约 30pt。导航栏里自定义视图的常规尺寸也正是这一段
+    /// （系统 `UIBarButtonItem` 常见 24–32）—— 既有的三档（34 / 52 / 86）在那一栏里都偏大。
+    ///
+    /// ⚠️ `initialFont` **不传**（用 `Theme.Font.label` 11pt）：它只比
+    /// `rowDiameter` 小 4pt，为这 4pt 换一档字号没有道理。
+    public static let navigationDiameter: CGFloat = 30
 
     /// 列表行 / 搜索结果行的直径（原型 `.avatar` = 34×34）。
     public static let rowDiameter: CGFloat = 34

@@ -23,8 +23,11 @@ enum ExploreSheet: Identifiable {
 
 /// 探索 Tab 根页（PRD §4.12、TECH_SPEC §9.10）。
 ///
-/// 结构：大标题「探索」+ 右上角搜索 · 榜单分段（新星榜 / 活跃榜）· 两个筛选 chip ·
+/// 结构：大标题「探索」· 榜单分段（新星榜 / 活跃榜）· 两个筛选 chip ·
 /// （可选）结果不完整说明行 · 趋势卡片列表。
+///
+/// ⚠️ **2026-10-16：右上角那颗放大镜已移除**（走查第 85 条）——
+/// 搜索搬去了底部第 4 格 Tab（`AppTab.search`）。理由同 `ReposView`。
 ///
 /// ⚠️ **列表标题那一行已删**（2026-10-16 用户要求，走查第 **78** 条）：原本是
 /// 「新星榜 · 30 个仓库」这样一句 —— 榜单名分段条上已经有了，条数又随翻页变，
@@ -88,16 +91,6 @@ struct ExploreView: View {
         .background(Theme.Palette.background)
         .refreshable { await model.refresh() }
         .navigationTitle("探索")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    env.router.push(.search)
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .accessibilityLabel("搜索")
-            }
-        }
         .sheet(item: $sheet) { route in
             switch route {
             case let .filter(kind):

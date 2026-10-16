@@ -323,10 +323,11 @@ struct FileView: View {
 
     /// 右上角那颗「⋯」—— 原来那条底部操作行**整个搬进来了**。
     ///
-    /// ## ⚠️ 位置与控件都是**照抄另外三个根页**的
+    /// ## ⚠️ 位置与控件都是照着**根页右上角那一颗**做的
     ///
-    /// `HomeView` / `ExploreView` / `ReposView` 三处右上角都有一颗
-    /// `ToolbarItem(placement: .topBarTrailing)` 的搜索按钮（`env.router.push(.search)`）。
+    /// `HomeView` 右上角有一颗 `ToolbarItem(placement: .topBarTrailing)` 的按钮
+    /// —— 2026-10-16 起它是**头像**（进「我的」）；在那之前它是三处根页各一颗的
+    /// 搜索放大镜（走查第 85 条把搜索搬去了底部 Tab）。
     /// 这里用的是**同一个位置**，label 从 `Button` 换成一个 `Menu`
     /// —— SwiftUI 会把它渲染成系统的菜单按钮（UIKit 的 `UIBarButtonItem` + `UIMenu`），
     /// **不用自己画底色 / 圆角 / 尺寸**（那正是 `crumbMenu` 当初要手画的原因：

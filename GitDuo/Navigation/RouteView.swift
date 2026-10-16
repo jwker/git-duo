@@ -22,10 +22,17 @@ struct RouteView: View {
 
     var body: some View {
         switch route {
-        case .search:
-            // 三个入口（首页 / 仓库 / 探索右上角的放大镜）都推到这一处（PRD §4.2、§6.3）。
-            // 本视图只负责把组合根的两件依赖传下去；页面自己不认识"是谁推的它"。
-            SearchView(loader: env.search, history: env.searchHistory)
+        case .profile:
+            // PRD §4.17。⚠️ 2026-10-16 起它是**推入页**（走查第 85 条）——
+            // 由首页右上角那颗头像推入（`Route.profile` 的说明写着这次交换的理由）。
+            //
+            // ⚠️ `login` 与 `.settings` 完全同一条口径：取自 `authState`（本机就有），
+            //    **不再打一次 `/user`**（§9.15）。这里一定能拿到值 —— `RouteView` 只活在
+            //    `MainTabView` 里，而后者由 `RootView` 在 `.authenticated` 那支才构建。
+            ProfileView(
+                login: env.authState.login ?? "",
+                overview: env.profileOverview
+            )
         case let .repoDetail(fullName):
             // PRD §4.4（**自己的仓库**）—— 2026-10-14 起这一页是**枢纽**：
             // 头部大卡 + 四行入口（代码 / Issues / Pull Requests / Commits）+ README。

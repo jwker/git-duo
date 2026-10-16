@@ -233,6 +233,39 @@ struct LoadProfileOverviewTests {
         }
     }
 
+    @Test("`loadIdentity()` 只打 `GET /user` 一发 —— **不碰** GraphQL")
+    func loadIdentityOnlyTouchesProfile() async {
+        // 它是给**首页右上角那颗头像**用的（走查第 85 条）：那一屏没有热力图，
+        // 为了一颗 30pt 的圆把一年的 `contributionCalendar` 也拉回来，
+        // 每次冷启动都白花一次 GraphQL 配额（那一桶只有 5,000 点/小时，§13.2）。
+        let source = ScriptedProfileSource(
+            profile: .success(profile(avatar: "https://avatars.githubusercontent.com/u/1?v=4")),
+            activity: .success(activity())
+        )
+
+        let identity = await LoadProfileOverview(source: source, board: board).loadIdentity()
+
+        #expect(identity.value?.avatarURL == URL(string: "https://avatars.githubusercontent.com/u/1?v=4"))
+        #expect(await source.profileCalls == 1)
+        #expect(await source.activityCalls == 0, "首页没有热力图，不该顺带发那一发 GraphQL")
+    }
+
+    @Test("`loadIdentity()` 失败 ⇒ `.failure`（调用方据此回落首字母圆，不当成页面失败）")
+    func loadIdentityFailureIsReported() async {
+        let source = ScriptedProfileSource(
+            profile: .failure(.unauthorized),
+            activity: .success(activity())
+        )
+
+        let identity = await LoadProfileOverview(source: source, board: board).loadIdentity()
+
+        #expect(identity == .failure(.unauthorized))
+        #expect(identity.value == nil)
+        // 与 `load(year:)` 同一条口径：失败是**这一路**的事，不是"整块没取到"。
+        #expect(identity.isFailure)
+        #expect(identity.error == .unauthorized)
+    }
+
     @Test("`GET /user` 失败 ⇒ 资料头部降级，**热力图与两个计数照常在**")
     func profileFailureIsIsolated() async {
         let source = ScriptedProfileSource(

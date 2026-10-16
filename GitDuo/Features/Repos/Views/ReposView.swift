@@ -5,8 +5,12 @@ import GitDuoKit
 
 /// 仓库 Tab 根页（PRD §4.3）。
 ///
-/// 结构：大标题「仓库」+ 右上角搜索图标 · 四个分段（全部 / 公开 / 私有 / Starred）· 卡片列表。
+/// 结构：大标题「仓库」· 四个分段（全部 / 公开 / 私有 / Starred）· 卡片列表。
 /// 状态：骨架屏 →「继续加载」/ 内容 / 逐段空态 / 失败重试（§8.5 的三档统一）。
+///
+/// ⚠️ **2026-10-16：右上角那颗放大镜已移除**（走查第 85 条）。
+/// 搜索搬去了底部第 4 格 Tab（`AppTab.search`）—— 从前它在首页 / 本页 / 探索页
+/// 右上角各挂一颗，三处重复且都不是"任何地方都按得到"的位置；底部一格才是。
 ///
 /// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3）
 ///
@@ -54,16 +58,6 @@ struct ReposView: View {
         }
         .background(Theme.Palette.background)
         .navigationTitle("仓库")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    env.router.push(.search)
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .accessibilityLabel("搜索")
-            }
-        }
         .task { await model.loadIfNeeded() }
     }
 

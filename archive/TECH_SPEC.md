@@ -989,8 +989,13 @@ RootView                             ← 按 authState 二分（§3.8）
         ├── Tab 首页   → NavigationStack(path:) ← 独立栈
         ├── Tab 仓库   → NavigationStack(path:)
         ├── Tab 探索   → NavigationStack(path:)
-        └── Tab 我的   → NavigationStack(path:)
+        └── Tab 搜索   → NavigationStack(path:)   ← 2026-10-16 起（走查第 85 条）
 ```
+
+⚠️ **2026-10-16：第 4 格由「我的」换成「搜索」**（走查第 85 条，用户要求）。
+「我的」不再是根页，它改从**首页右上角那颗圆形头像**进（`Route.profile`，形状照 App Store 的 Today 页）；
+搜索则从"首页 / 仓库 / 探索三处右上角各一颗放大镜"改成底部一格（任何 Tab 下都够得到）。
+连带：`Route.search` **已删除**（详见 §8.2）。
 
 - 【已定】**未认证时不构建 `TabView`**：登录流程是**门禁**而非普通页面，不占任何 Tab 的导航栈（§3.8）。
 - 【已定】**每个 Tab 各持一条独立导航栈**，切 Tab 保留各自层级（PRD §2.1）。
@@ -1023,7 +1028,7 @@ enum EditorMode: Hashable, Sendable {
 报错会指向一行完全正常的代码（`Route.swift` 抬头留了这条坑的记录）。
 
 enum Route: Hashable {
-    case search
+    case profile
     case repoDetail(fullName: String)
     case repoCode(fullName: String, readOnly: Bool, path: String?)
     case repoSection(fullName: String, section: RepoSection)
@@ -1042,6 +1047,13 @@ enum Route: Hashable {
     case settings
 }
 ```
+
+⚠️ **2026-10-16 改了一个 case**（走查第 85 条）：
+
+| 原来 | 现在 | 为什么 |
+|---|---|---|
+| `search` | **删除** | 它原是首页 / 仓库 / 探索三处右上角放大镜的共同落点。那三颗放大镜随本次改动一并移除（搜索改挂底部 Tab）⇒ 这条路由**没有任何调用方**。留一个永不命中的分支，等于削弱本节引以为据的那道穷尽性检查 |
+| —— | `profile` | 「我的」从底部第 4 格变成**推入页**，由首页右上角那颗头像推入（形状照 App Store 的 Today 页）。⚠️ 它**没有参数**：登录名取自 `authState`、资料取自组合根那份 `profileOverview` —— 与 `.settings` 完全同一条口径，**不要**给它加一个 `login:`（两个来源一旦不一致，表现是"头像是一个人、列表是另一个人"） |
 
 ⚠️ **2026-10-14 顺带对齐了两处本节与代码的既有漂移**（都不是这次改动引入的，是抄录时漏的）：
 ① `issueDetail` **有一个 `readOnly`**（决策 **#79**）—— 它的含义**比 `.prDetail` 那个窄**：

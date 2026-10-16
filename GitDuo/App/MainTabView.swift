@@ -1,7 +1,7 @@
 import GitDuoDesign
 import SwiftUI
 
-/// 主界面容器：4 个 Tab，每个 Tab 一条独立导航栈。
+/// 主界面容器：4 个 Tab（首页 / 仓库 / 探索 / **搜索**），每个 Tab 一条独立导航栈。
 ///
 /// 依据：TECH_SPEC §8.1。
 /// 铁律：
@@ -9,8 +9,19 @@ import SwiftUI
 /// 2. `TabView` 是系统组件 → Liquid Glass 自动生效，**不要自己给 Tab 栏加玻璃**（§10.2）。
 /// 3. 各 Feature 的依赖**在这里（组合根的下游一格）经本视图传给根页** ——
 ///    根页自己不构造客户端（AGENTS.md §3）。
+///
+/// ## ⚠️ 2026-10-16：「我的」不再是根页（走查第 85 条）
+///
+/// 第 4 格从「我的」换成「搜索」，而「我的」改从**首页右上角那颗头像**进 ——
+/// 它现在是一条普通推入页（`Route.profile`，由 `RouteView` 组装）。
+/// 交换的理由与连带影响写在 `AppTab` 的类型说明里。
 struct MainTabView: View {
 
+    /// 登录名 —— ⚠️ 现在**只服务 `HomeView`**（它要拿它拼「管理」跳网页端那个地址）。
+    ///
+    /// 它从前还给 `ProfileView` 用（那时「我的」是本容器的根页之一）；
+    /// 那一页成为推入页之后，它的 `login` 由 `RouteView` 从 `authState` 取
+    /// —— 两处都取自同一个来源，不会出现"两个登录名"。
     let login: String
 
     @Environment(AppEnvironment.self) private var env
@@ -26,6 +37,7 @@ struct MainTabView: View {
                         login: login,
                         pinned: env.pinnedRepositories,
                         visits: env.recentVisits,
+                        identity: env.profileOverview,
                         toast: env.toast
                     )
                     .navigationDestination(for: Route.self) { RouteView(route: $0) }
@@ -44,12 +56,13 @@ struct MainTabView: View {
                         .navigationDestination(for: Route.self) { RouteView(route: $0) }
                 }
             }
-            Tab(AppTab.profile.title, systemImage: AppTab.profile.systemImage, value: AppTab.profile) {
-                NavigationStack(path: $router.profile) {
-                    // ⚠️ `login` 这个参数是切片 9.4 补上的：本页要画大头像与 `@登录名`，
-                    //    而它们**不从网络来**（本机由登录名画出来）⇒ 拿的就是这里这个值。
-                    //    它同时是 `ProfileView` 里"昵称 / 简介"之外的**唯一不可失败项**。
-                    ProfileView(login: login, overview: env.profileOverview)
+            // ⚠️ 2026-10-16：这一格从「我的」换成「搜索」（走查第 85 条）——
+            //    理由写在 `AppTab` 的类型说明里。⚠️ `login` 这个参数**本 Tab 用不到**
+            //    （它只服务 `HomeView`）；「我的」现在是**推入页**，由 `RouteView` 组装
+            //    （那边的 `login` 取自 `authState`，同 `.settings`）。
+            Tab(AppTab.search.title, systemImage: AppTab.search.systemImage, value: AppTab.search) {
+                NavigationStack(path: $router.search) {
+                    SearchView(loader: env.search, history: env.searchHistory)
                         .navigationDestination(for: Route.self) { RouteView(route: $0) }
                 }
             }

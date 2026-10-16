@@ -5,8 +5,24 @@ import GitDuoKit
 
 /// 首页 —— Tab 根页（PRD §4.1、TECH_SPEC §9.1）。
 ///
-/// 结构：大标题「首页」+ 右上角搜索 · 「置顶仓库」**行列表**（最多 6 条，
+/// 结构：大标题「首页」+ 右上角**头像**（进「我的」）· 「置顶仓库」**行列表**（最多 6 条，
 /// ⚠️ 2026-10-15 走查第 75 条起不再是 2 列网格）·「最近访问」列表。
+///
+/// ## ⚠️ 2026-10-16：右上角从「搜索」换成「我的」（走查第 85 条）
+///
+/// 用户要求把底部「我的」那一格让给「搜索」，而「我的」改从本页右上角进
+/// —— 形状照 App Store 的 Today 页（大标题 + 右上角圆形头像）。于是：
+///
+/// | | 从前 | 现在 |
+/// |---|---|---|
+/// | 本页右上角 | 一颗放大镜（`push(.search)`） | 一颗**圆形头像**（`push(.profile)`） |
+/// | 「我的」 | 底部第 4 格 Tab 的根页 | 一条普通推入页（`Route.profile`） |
+/// | 「搜索」 | 三处根页右上角各一颗放大镜 | 底部第 4 格 Tab |
+///
+/// ⚠️ 头像地址要**单独取一发**（`LoadProfileOverview.loadIdentity()`，只打 `/user`）——
+/// 本页的两块内容（置顶 / 最近访问）跟它没关系，取不到时那颗按钮照常可点
+/// （`UserAvatar` 自己回落成首字母圆）。**不要**把它并进 `HomeViewModel` 的 `LoadState`：
+/// 那会让"头像没取到"变成"首页有一块失败了"，而它其实只是换一种画法。
 ///
 /// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3）
 ///
@@ -45,21 +61,37 @@ struct HomeView: View {
 
     let login: String
 
+    /// 右上角那颗头像的取数（只取身份那一路）。见 `init` 与 `avatarURL` 的说明。
+    let identity: LoadProfileOverview
+
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
 
     @State private var model: HomeViewModel
     @State private var isConfirmingClear = false
 
+    /// 右上角那颗头像要的**当前账号头像地址**（`GET /user` 的 `avatar_url`）。
+    ///
+    /// ⚠️ 它是本视图的一个**独立小状态**，不属于 `HomeViewModel`：本页的两块内容
+    /// （置顶 / 最近访问）与头像毫无关系，取不到时按钮照常可点（`UserAvatar` 回落成
+    /// 首字母圆）。并进 VM 的 `LoadState` 会把"头像没取到"渲染成"首页有一块失败了"
+    /// —— 而它其实只是换一种画法（偏差第 43 条同一条口径）。
+    @State private var avatarURL: URL?
+
     /// 依赖由**组合根**经父视图传下来（`MainTabView` 读 `env.*`），
     /// 本视图与 ViewModel 都不自行构造客户端（AGENTS.md §3）。
+    ///
+    /// ⚠️ `identity` 只被**右上角那颗头像**用（`loadIdentity()` 一发 `/user`）：
+    /// 本页没有热力图，不要在这里调 `load(year:)`（见 `LoadProfileOverview.loadIdentity()`）。
     init(
         login: String,
         pinned: LoadPinnedRepositories,
         visits: any RecentVisitStore,
+        identity: LoadProfileOverview,
         toast: ToastCenter
     ) {
         self.login = login
+        self.identity = identity
         // `State(initialValue:)` 只在首次构造时生效 —— 视图重建不会把状态冲掉。
         _model = State(initialValue: HomeViewModel(
             pinnedLoader: pinned,
@@ -79,19 +111,35 @@ struct HomeView: View {
         .background(Theme.Palette.background)
         .navigationTitle(HomeCopy.title)
         .toolbar {
+            // ⚠️ 2026-10-16：这里从前是一颗放大镜（`push(.search)`）。
+            //    搜索搬去了底部 Tab、「我的」搬来了这里 —— 见文件头那张表。
+            //
+            // ⚠️ 它是一颗**普通 `Button`**，不是 `NavigationLink`：导航栏里没有
+            //    "整行可点"那回事，`Button` 就是系统给 `UIBarButtonItem` 的写法。
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    env.router.push(.search)
+                    env.router.push(.profile)
                 } label: {
-                    Image(systemName: "magnifyingglass")
+                    UserAvatar(
+                        login: login,
+                        // 取不到就是 `nil` ⇒ 画首字母兜底圆（本页不因此报错、不因此变灰）。
+                        avatarURL: avatarURL,
+                        diameter: UserAvatar.navigationDiameter
+                    )
                 }
-                .accessibilityLabel("搜索")
+                .accessibilityLabel(HomeCopy.profileAction)
             }
         }
         .refreshable { await model.refresh() }
         .task {
+            // ⚠️ 头像与两块内容**互不等待**：它是独立的一发（`loadIdentity()` 只打
+            //    `/user`），串在置顶后面只会让它晚出来 —— 而首页最先看见的正是它。
+            async let avatar = identity.loadIdentity()
+
             await model.loadPinnedIfNeeded()
             await model.reloadVisits()
+
+            avatarURL = await avatar.value?.avatarURL
         }
         // ⚠️ 这段不是多余的：`RecentVisitStore` **刻意不含观察入口**（否则"进入详情页写入 →
         //    首页重绘 → 再写入"会成环），所以首页只能主动读。而"从详情页返回"时
@@ -271,6 +319,7 @@ struct HomeView: View {
             login: "jiangjiang",
             pinned: environment.pinnedRepositories,
             visits: environment.recentVisits,
+            identity: environment.profileOverview,
             toast: environment.toast
         )
     }

@@ -127,6 +127,13 @@ enum HomeCopy {
 
     static let title = "首页"
 
+    /// 右上角那颗头像的读屏名（走查第 85 条加的）。
+    ///
+    /// ⚠️ 头像本身**看不见字**，读屏只说 `UserAvatar` 默认给的那句登录名
+    /// —— 而"这是我的登录名"与"点它进我的页"是两件事，读屏用户听到前者会不知道为什么
+    /// 这里有一颗按钮、也不知道按下去会去哪。所以这一层要明确说"我的"。
+    static let profileAction = "我的"
+
     static let pinnedSection = "置顶仓库"
     static let pinnedManage = "管理"
     static let pinnedEmptyTitle = "GitHub 个人主页还没有置顶仓库"
