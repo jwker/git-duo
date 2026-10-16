@@ -139,85 +139,33 @@ struct UserProfileSheet: View {
 
     // MARK: - 两个纯展示按钮
 
+    /// ⚠️ **2026-10-16（P2）收拢了本文件里那个 `SheetActionButton` 私有副本** ——
+    /// 它就是设计包 `ActionButton` 的复制品（切片 5 落地时那一件还没收入设计包）。
+    /// 两处的 `.btn` 视觉逐字相同，现在直接复用 `ActionButton`，
+    /// 副本连同它自己那份 `Style` 枚举一并删除（`REVIEW-CHECKLIST §5` 那条待办结清）。
+    ///
+    /// 这里只补"不可点"的三件套（同原来的副本，理由见类型抬头）：
+    /// `allowsHitTesting(false)` + 去掉 `.isButton` + 一句 `hint`。
     private var followButton: some View {
-        SheetActionButton(
-            title: SearchCopy.followAction,
-            style: .primary,
-            hint: Self.followHint
-        )
+        ActionButton(title: SearchCopy.followAction, style: .primary) {}
+            .allowsHitTesting(false)
+            .accessibilityRemoveTraits(.isButton)
+            .accessibilityHint(Self.followHint)
     }
 
     private var publicReposButton: some View {
-        SheetActionButton(
-            title: SearchCopy.publicReposAction,
-            style: .ghost,
-            hint: Self.publicReposHint
-        )
-        // 原型两个按钮之间 `margin-top:8px`。
-        .padding(.top, Theme.Spacing.s)
+        ActionButton(title: SearchCopy.publicReposAction, style: .ghost) {}
+            .allowsHitTesting(false)
+            .accessibilityRemoveTraits(.isButton)
+            .accessibilityHint(Self.publicReposHint)
+            // 原型两个按钮之间 `margin-top:8px`。
+            .padding(.top, Theme.Spacing.s)
     }
 
     /// 读屏用的原因说明。原型没给这两句（它的按钮是能点的演示），
     /// 按 `RepoHeroCard` 的 `watchHint` / `forkHint` 同一口径补。
     static let followHint = "关注是账号级写操作，落地方案未定，本版本不可用"
     static let publicReposHint = "会打开 App 外的页面，本版本不可用"
-}
-
-/// 弹层里的胶囊形按钮（原型 `.btn.primary` / `.btn.ghost`）。
-///
-/// ```css
-/// .btn{border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:650}
-/// .btn.primary{background:var(--green);color:#fff}
-/// .btn.ghost{background:var(--chip);color:var(--text)}
-/// ```
-private struct SheetActionButton: View {
-
-    enum Style {
-        case primary
-        case ghost
-
-        var background: Color {
-            switch self {
-            case .primary: Theme.Palette.accentStrong
-            case .ghost: Theme.Palette.surfaceSunken
-            }
-        }
-
-        var foreground: Color {
-            switch self {
-            case .primary: Theme.Palette.surface
-            case .ghost: Theme.Palette.textPrimary
-            }
-        }
-    }
-
-    let title: String
-    let style: Style
-    let hint: String
-
-    var body: some View {
-        Button(action: {
-            // ⚠️ 真的什么都不做 —— `allowsHitTesting(false)` 挡不住读屏的激活动作，
-            // 留一个空闭包是"这个按钮确实没有行为"的明确表达。
-        }) {
-            Text(title)
-                .font(Theme.Font.footnote.weight(.semibold))
-                .foregroundStyle(style.foreground)
-                .frame(maxWidth: .infinity)
-                // 原型 `padding:11px`（它在这一处覆写了 `.btn` 的 `9px 16px`）。
-                .padding(.vertical, 11)
-                .background(
-                    // 9 是原型原值（`.btn{border-radius:9px}`），4pt 阶里没有这一档。
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(style.background)
-                )
-        }
-        .buttonStyle(.plain)
-        .allowsHitTesting(false)
-        // 去掉"可点"的语义：它不是暂时不可用，而是这一层根本不该点。
-        .accessibilityRemoveTraits(.isButton)
-        .accessibilityHint(hint)
-    }
 }
 
 #Preview {

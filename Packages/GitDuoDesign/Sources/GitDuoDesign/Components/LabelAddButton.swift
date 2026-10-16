@@ -1,41 +1,36 @@
 import SwiftUI
 
-/// 虚线「＋ 标签 / 新建」按钮 —— 原型 `styles/03-components.css` 第 58 行的 `.lbl-add`（PRD §4.10）。
-///
-/// ```css
-/// .lbl-add{border:1px dashed var(--link);color:var(--link);background:transparent;
-///          border-radius:20px;font-size:11.5px;font-weight:600;padding:3px 10px}
-/// ```
+/// 标签行末尾那颗「＋ 标签 / 新建」按钮 —— 原型 `styles/03-components.css` 第 58 行的
+/// `.lbl-add`（PRD §4.10）。
 ///
 /// ## 它和 `LabelPill` 并排站在同一行
 ///
 /// 新建 Issue 页的标签区是：**已选标签（`.lbl-tag`）× N + 这一颗**。
-/// 两者几何几乎一样（胶囊、11pt 档、横向内边距 9 与 10），差的正是**语义**：
-/// 实心 = 一个已经选上的标签；虚线圈 = **这里还能加东西**。
+/// 两者几何几乎一样（胶囊、11pt 档），差的正是**语义**：
+/// 实心 = 一个已经选上的标签；这颗 = **这里还能加东西**。
 /// 所以它宁可单独一件，也不做成 `LabelPill` 的一个 `Style` ——
 /// 那会让"这颗是可点的、那颗不是"这件事只体现在一个枚举分支里。
 ///
-/// ## 为什么是"虚线"而不是一个深色按钮
+/// ## ⚠️ 2026-10-16（P2）：外观换成官方的 `.bordered` 小胶囊按钮
 ///
-/// 它在视觉权重上必须**低于**旁边的实心标签：标签是内容，它是入口。
-/// 用实心强调色按钮会和标签抢眼，用灰字又像"不可点"——虚线描边正好是
-/// "这里空着、可以往里放"的既有词汇（`EmptyBox` 用的是同一个）。
+/// 口径见 `NATIVE-MIGRATION.md`：**「按原型」= 功能按原型，视觉正本 = Apple HIG**。
+/// 原型那套「虚线描边 + 蓝字」已经作废 —— 虚线是 CSS 时代的表达，
+/// 系统件里"这里还能加东西、且点得动"由 `.bordered` 承担
+/// （虚线在官方控件里没有对应档，且它本身就与"不可用"的观感相邻）。
 ///
-/// ## 两处数值说明
+/// 留下的两条结论仍然成立：
 ///
-/// | 项 | 出处 |
-/// |---|---|
-/// | 字号 11.5px | 落到 `.caption2`(11) + semibold ⇒ 复用 `Font.tag`。⚠️ 旁边的 `.lbl-tag` 是 11px，两者**有意同档**：差 0.5px 肉眼不可见，而并排的两颗胶囊字号不一致反而看得出来 |
-/// | 虚线的 dash 图案 | ⚠️ CSS 的 `dashed` **不给具体图案**（由浏览器按边框宽度自定）⇒ 「规格未给」。取 `[4, 4]`，与 `EmptyBox` 的 `.empty-box{border:1px dashed}` 用同一个（同一份原型里两处同类边框，没理由画成两种虚线） |
+/// 1. 它在视觉权重上**低于**旁边的实心标签（`.small` + 次要按钮样式）；
+/// 2. 文案**由调用方给**（`IssueCopy.addLabelAction`，本身已含 `＋`）——
+///    这里不再补一个 `Image(systemName: "plus")`，否则屏幕上会出现两个加号。
 ///
 /// ## 判据 #43：它进设计包
 ///
 /// 只收 `title: String` + 一个闭包，**不认识** `Label` 或"已选集合"。
-/// 文案由调用方给（`IssueCopy.addLabelAction`）。
 ///
 /// ## 它是内容层
 ///
-/// **透明底 + 描边，不加 Liquid Glass**（§10.2）。
+/// **不加 Liquid Glass**（§10.2）。
 public struct LabelAddButton: View {
 
     public let title: String
@@ -50,22 +45,12 @@ public struct LabelAddButton: View {
     public var body: some View {
         Button(action: action) {
             Text(title)
-                // 原型 11.5px/600 ⇒ `.caption2`(11) + semibold = `Font.tag`。
-                .font(Theme.Font.tag)
-                .foregroundStyle(Theme.Palette.accent)
-                // 原型 `padding:3px 10px`（3 不在 4pt 阶里 ⇒ 写原值）。
-                .padding(.vertical, 3)
-                .padding(.horizontal, 10)
-                .background(
-                    // 原型 `border-radius:20px` + `background:transparent`
-                    // ⇒ 胶囊描边、不填底。
-                    Capsule().strokeBorder(
-                        Theme.Palette.accent,
-                        style: StrokeStyle(lineWidth: 1, dash: [4, 4])
-                    )
-                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        // 它要能塞进标签行、不与实心标签抢眼 ⇒ 小号。
+        .controlSize(.small)
+        .tint(Theme.Palette.accent)
         .accessibilityAddTraits(.isButton)
     }
 }

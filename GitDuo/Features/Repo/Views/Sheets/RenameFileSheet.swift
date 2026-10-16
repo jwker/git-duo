@@ -95,7 +95,6 @@ struct RenameFileSheet: View {
                 title: FileCopy.renameConfirmAction,
                 style: .primary,
                 // 弹层底部的确认按钮统一 12（原型 `.browser-body .btn{padding:12px}`）。
-                verticalPadding: 12,
                 isWorking: isWorking
             ) {
                 Task { failure = await onRename(newPath) }
@@ -103,7 +102,7 @@ struct RenameFileSheet: View {
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.top, Theme.Spacing.m)
 
-            ActionButton(title: FileCopy.cancelAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: FileCopy.cancelAction, style: .ghost) {
                 dismiss()
             }
             .padding(.horizontal, Theme.Spacing.s)

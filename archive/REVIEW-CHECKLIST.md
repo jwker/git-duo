@@ -2611,7 +2611,66 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 > · 五包 **1788 项 / 154 套件**（422/38 · 59/4 · 63/8 · **112/13** · 1132/91 ——
 > 第 4 个包少了 2 项 / 1 套件，就是删掉的 `SkeletonBarTests`）· `BUILD SUCCEEDED`。
 >
-> ⇒ 现在是**有效 76 条、含作废记录共 81 个编号**
+> ## 走查第 82 条：P2 —— 按钮与控件样式换成官方件（2026-10-16）
+>
+> 用户目视 P1 后说「继续下一步」= 开 P2（`NATIVE-MIGRATION.md`）。
+> ⚠️ **这一期是第一次真正改"长什么样"**（P1 只改骨架/空态/弹层，观感基本不变）。
+>
+> ### 换成什么
+>
+> | 件 | 从前 | 现在 |
+> |---|---|---|
+> | `ActionButton`（34 个调用点） | 自绘 `.btn`（浅灰/绿底 + 9pt 圆角 + 手填内边距） | `Button` + `.borderedProminent`(主/危险) / `.bordered`(次) + `.tint()` |
+> | `StatInfo` | 手写 `HStack`（图标 + 文字） | 官方 **`Label`** |
+> | `StatButton` | 自绘 `.stat-btn`（浅灰底 + 圆角矩形） | `.bordered` + `.buttonBorderShape(.capsule)` |
+> | `LabelAddButton` | **虚线**描边 + 蓝字胶囊 | `.bordered` + `.capsule` + `.controlSize(.small)` |
+> | `SegmentedBar` | 自绘 `.segbar`（横滑、深底白字） | `Picker` + `.pickerStyle(.segmented)` |
+> | `SectionTabs` | 自绘 `.prtabs`（等分、白底浮起） | **删除** —— 并入 `SegmentedBar` |
+> | `FilterChip` | 白底/浅蓝底 + 强调边 + 强调字 | `.bordered` / `.borderedProminent` + `.capsule` |
+>
+> ### 四条判读结论（比"换了什么"更值得记）
+>
+> 1. **`ActionButton` 删掉了 `verticalPadding` / `horizontalPadding` 两个入参** ——
+>    它们是"逐点复刻原型 CSS 内边距"的产物，而官方按钮样式的内边距由 `controlSize` 说了算。
+>    34 个调用点只是去掉那一个参数，**逻辑一行没改**。
+>    ⚠️ 顺手发现一处真坑：`fillsWidth` 撑的必须是 **label**，不是按钮外层 ——
+>    官方样式的底色画在 label 上，加在按钮外层只会多出一块**空白点击区**。
+> 2. **30 处 `.buttonStyle(.plain)` 逐处判读完毕，结论是"全部保留"** ——
+>    它们全是"**label 即内容**"的自绘行件（`LinkRow` / `BranchRow` / `MenuRow` / `SearchRowBox` /
+>    `RepoRows` / `StarRow` / `ProfileStatBar` / 各页列表行）。`plain` 在这些地方**不是遗留问题**。
+>    `ColorSwatch` 判读后也**有意保留自绘**：它的 label 是一个色块，套 `.bordered` 会变成
+>    "里面有个色块的按钮"。⇒ **"要换系统样式"的判据是"它长得像个按钮"，不是"它用了 `Button`"。**
+> 3. **`SegmentedBar` 里的「动作格」移出了分段控件** —— `Picker` 里放不进"点它不切档"的项
+>    （每一项都是一个 `tag`，选中即切换），所以「筛选」画成分段条**右侧的一颗独立按钮**。
+>    这是**有意的形状变更**（从"长得像一格"变成"旁边一个操作"），HIG 里正是这个布局。
+>    ⚠️ 系统分段控件**等分**整行（不再按内容宽横滑）⇒ 长标签必须给
+>    `lineLimit(1)` + `minimumScaleFactor(0.7)`（`CommitSheet` 的「提交到 {分支名}」会顶破一格）。
+> 4. **`SectionTabs` 删除、并入 `SegmentedBar`** —— P2 之后两者内胆完全相同、功能也完全相同。
+>    ⚠️ 判据补充：**"要不要合成一件"看的是功能，不是形状** —— 功能相同、只差外观 ⇒ 合并；
+>    功能不同、只是形状相近 ⇒ 不合并（`FileView` 的面包屑与 `BreadcrumbBar` 属于后者，
+>    它那句"与 `SectionTabs` 不复用 `SegmentedBar` 是同一条理由"的注释已按新判据改写）。
+>
+> ### 两处顺手结清的历史欠账
+>
+> - **`StatButton` 已 Star 时"整块吃金色"**（2026-10-11 查出、一直挂着）：现在 `activeTint`
+>   **只染图标**、文字恒 `textPrimary`。原型 `.stat-btn.starred svg{fill:#eac54f}` 本来就只命中 `svg`，
+>   而 `Theme.Palette.starActive` 的抬头明写"绝不用作文字色"。**第 50 条**至此收口。
+> - **`UserProfileSheet` 里那个私有 `SheetActionButton` 副本**（切片 5 时代 `ActionButton`
+>   还没进设计包）：删除，改用 `ActionButton` + 不可点三件套。`REVIEW-CHECKLIST §5` 那条待办结清。
+>
+> ### 要真机看的（本期是第一次改观感，务必过一眼）
+>
+> - 弹层底部那两颗满宽按钮（`.controlSize(.large)`）**是否过高**；
+> - 「筛选 / 日期 / 语言」这类小 chip 在 `.small` 档下与旁边的实心标签**字号是否协调**；
+> - 仓库 Tab 那条**四档**分段条（`全部 / 公开 / 私有 / Starred`）等分后**文字是否被缩得难看**。
+>
+> **验证**：`make verify` `exit=0` · **0 条 Swift 编译警告** · `BUILD SUCCEEDED` ·
+> 五包 **1788 项 / 154 套件**（422/38 · 59/4 · 63/8 · **112/13** · 1132/91 ——
+> 与第 81 条**逐包一致**，本期零测试增减，因为改的全是视图层）。
+> ⚠️ 第一次跑时设计包报了 **1 条失败**（`112 / 13` 里 1 issue），**单包重跑即全过**；
+> 与第 77 / 78 条记的是同一类**负载敏感偶发**（`ToastCenter` 的时长注入断言），**不是本次回归**。
+>
+> ⇒ 现在是**有效 77 条、含作废记录共 82 个编号**
 > （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
 
 > 第 22 条是 2026-10-07 目视陪跑时**补登**的（与 17–21 同批由 6.7 引出）。⚠️ 它只在**仓库真有受保护分支**时才看得见 ——

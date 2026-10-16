@@ -21,9 +21,9 @@
 | `List` / `Form` / `.searchable` / `ContentUnavailableView` / `Toggle` / `swipeActions` / `contextMenu` | **0 处** |
 | `.redacted`（官方骨架方案） | ~~**0 处** —— 骨架全靠自绘 `SkeletonBar`（102 处）~~ ✅ P1 已换（`SkeletonBar` 已删） |
 | `@ScaledMetric`（官方动态类型方案） | **0 处** |
-| `Button` 构造点 | 143 处，其中 **30 处 `.buttonStyle(.plain)`**（= 明确绕开系统样式），真正用系统样式的只有 **1 处** |
+| `Button` 构造点 | 143 处，其中 **30 处 `.buttonStyle(.plain)`**（= 明确绕开系统样式），真正用系统样式的只有 **1 处** ⇒ ✅ **P2 已判读**：真按钮全换官方样式，剩 20 处 `.plain` 全是"label 即内容"的自绘行件（判读结论见 §3 P2 第 2 条） |
 | 自绘弹层 | 16 个 sheet 视图，全靠自绘的 `SheetPrimitives` 五件套拼 |
-| 已经用上官方的 | `NavigationStack` · `.sheet` · `.refreshable` · `ProgressView` · `Menu` · `Picker` · `.photosPicker` · `.confirmationDialog` · `glassEffect` |
+| 已经用上官方的 | `NavigationStack` · `.sheet` · `.refreshable` · `ProgressView` · `Menu` · `Picker` · `.photosPicker` · `.confirmationDialog` · `glassEffect` · ✅ P2 起还有 `.buttonStyle(_:)` · `.buttonBorderShape(_:)` · `.controlSize(_:)` · `Label` |
 
 ---
 
@@ -38,13 +38,13 @@
 | `SkeletonBar`（+ 7 个 `*Skeleton`） | `.redacted(reason: .placeholder)` | 102 ✅ **P1 已完成**（组件已删） |
 | `UserAvatar` | `AsyncImage` + `.clipShape(.circle)` | 86 |
 | `CardBox` | `List` + `Section` / `.listRowBackground` | 69 |
-| `ActionButton` | `Button` + `.buttonStyle(.borderedProminent/.bordered/.borderless)` + `.tint()` | 50 |
+| `ActionButton` | `Button` + `.buttonStyle(.borderedProminent/.bordered)` + `.tint()` | 50 ✅ **P2 已完成** |
 | `RepoAvatar`（已退役，只剩骨架常量） | `AsyncImage` / `Image(systemName:)` | 47 |
-| `StatInfo` | `Label` / `LabeledContent` | 38 |
-| `StatButton` | `Button` + `.buttonStyle(.bordered)` | 37 |
+| `StatInfo` | `Label` | 38 ✅ **P2 已完成**（官方 `Label`） |
+| `StatButton` | `Button` + `.buttonStyle(.bordered)` + `.capsule` | 37 ✅ **P2 已完成** |
 | `SectionHeader` | `Section("…")` 的 header | 36 |
 | `StateIcon` | `Image(systemName:)`（本就是 SF Symbols） | 33 |
-| `SegmentedBar` | `Picker` + `.pickerStyle(.segmented)` | 31 |
+| `SegmentedBar` | `Picker` + `.pickerStyle(.segmented)` | 31 ✅ **P2 已完成**（动作格移到右侧按钮） |
 | `EmptyBox` | `ContentUnavailableView` | 24 |
 | `LinkRow` | `NavigationLink` | 21 |
 | `CodeTextArea` | `TextEditor` / `TextField(axis: .vertical)` | 16 |
@@ -52,9 +52,9 @@
 | `PanelBox` | `Section` + `.background(_:in:)` | 13 |
 | `BranchRow` | `List` 行 + `.swipeActions(edge: .trailing)` | 11 |
 | `LabelDot` | `Circle` / 直接删（用 `Label` 的图标位） | 8 |
-| `SectionTabs` | `Picker` + `.pickerStyle(.segmented)` | 6 |
+| `SectionTabs` | 删除 —— **并入 `SegmentedBar`**（P2 之后两者功能与内胆完全相同） | 6 ✅ **P2 已完成** |
 | `CodePreviewLine` | `Text` + `.monospaced()` | 6 |
-| `LabelAddButton` | `Button` + `.buttonBorderShape(.capsule)` | 4 |
+| `LabelAddButton` | `Button` + `.buttonBorderShape(.capsule)` | 4 ✅ **P2 已完成** |
 | `MarkdownImage` | `AsyncImage` | 17 |
 | `RepoTreeSection` | `List` + `NavigationLink`（层级进栈） | 28 |
 | `IssueCard` | `List` 行 + `NavigationLink` + `Label` | 22 |
@@ -94,12 +94,12 @@
 | `TrendCard` | `List` 行 + `NavigationLink` | 10 |
 | `CommentComposer` | `TextField(axis: .vertical)` + `Button` + `.safeAreaBar` | 8 |
 | `SelectedLabelRow` | `LazyVGrid` + `Button` | 12 |
-| `FilterChip` | `Menu`（自带 label + indicator）或 `Picker` + `.menu` | 9 |
+| `FilterChip` | `Menu`（自带 label + indicator）或 `Picker` + `.menu` | 9 ✅ **P2 已完成**（实做否掉了 `Menu`，见 §3 P2 第 6 条） |
 | `UserProfileSheet` | `.sheet` + `Form` + `AsyncImage` + `LabeledContent` | 7 |
 | `DiffCard` | `DisclosureGroup` 收口折叠，展开内容仍自绘 | 20 |
 | `ClearRecentSheet` | `.alert` / `.confirmationDialog` | 5 |
 | `ReleaseNotesSheet` | `.sheet` + `Text(AttributedString(markdown:))` | 5 |
-| `ColorSwatch` | `Button` + `.bordered` + `.overlay` | 12 |
+| `ColorSwatch` | `Button` + `.bordered` + `.overlay` | 12 —— ⚠️ **P2 判读后有意保留自绘**（label 是色块不是按钮外观，见 §3 P2 第 2 条） |
 | `BreadcrumbBar` | `NavigationStack` path + `Menu`（分支）+ `Text` | 13 |
 | `SheetPrimitives`（5 件） | `Form` + `Section` header / `TextField` / `Button(.bordered)` / `Text(.caption)` | 高频 |
 | `StatStar`（分派件） | `Button` / `Label` | 13 |
@@ -185,11 +185,66 @@
      `@FocusState` 可绑，原 `isFieldFocused = false` 那句已删，见 `SearchView.submit`）。
 
 ### P2 · 按钮与控件样式
-- `ActionButton`（50）→ `Button` + 系统 `.buttonStyle` + `.tint()`
-- 30 处 `.buttonStyle(.plain)` **逐处判读**：自绘行（会消失的那批）保留 plain，真按钮换系统样式
-- `StatButton`（37）· `LabelAddButton`（4）· `ColorSwatch`（12）→ `.bordered` / `.borderless` + `.buttonBorderShape(.capsule)`
-- `SegmentedBar`（31）· `SectionTabs`（6）→ `Picker` + `.pickerStyle(.segmented)`
-- `FilterChip`（9）→ `Menu`
+
+> **状态（2026-10-16）**：**已做完**（1–7 全清）。⚠️ 这一期是**第一次真正改"长什么样"**
+> —— 拖控件前请先看一眼真机（`make device`）。
+
+1. ✅ `ActionButton`（含声明与预览共 50 处匹配 / **34 个真实调用点**）
+   → `Button` + 官方 `.borderedProminent` / `.bordered`
+   - `.primary` ⇒ `.borderedProminent` + `.tint(accentStrong)`；`.ghost` ⇒ `.bordered`（吃系统 tint）；
+     `.destructive` ⇒ `.borderedProminent` + `.tint(destructive)`。
+   - **删掉了 `verticalPadding` / `horizontalPadding` 两个入参**：它们是"逐点复刻原型 CSS 内边距"的
+     产物（原型在四处覆写过 5 / 9 / 11 / 12），而官方按钮样式的内边距由 `controlSize` 决定。
+     ⇒ 34 个调用点只是去掉那一个参数，**逻辑一行没改**。
+   - `fillsWidth` 保留：`true`（弹层 / 页面满宽）⇒ `.controlSize(.large)`；`false`（行内）⇒ `.regular`。
+   - ⚠️ `fillsWidth` 撑的是 **label**，不是按钮外层 —— 官方样式的底色画在 label 上，
+     加在按钮外层只会多出一块**空白点击区**（看起来像"按钮没撑满、但点得着"）。
+2. ✅ 30 处 `.buttonStyle(.plain)` **逐处判读完毕，结论是"全部保留"**
+   - 它们全部是"**label 即内容**"的自绘行件（`LinkRow` / `BranchRow` / `MenuRow` /
+     `SearchRowBox` / `RepoRows` / `StarRow` / `ProfileStatBar` / 各页列表行）——
+     `plain` 在这些地方不是遗留问题，**是正确选择**；行件本身归 P3。
+   - 真正"长得像按钮"的那几件（`ActionButton` / `StatButton` / `FilterChip` /
+     `LabelAddButton` / `SegmentedBar`）已全部换成系统样式，它们的 `plain` 随之消失。
+   - `ColorSwatch` 判读后**有意保留自绘**（它的 label 是一个**色块**，不是按钮外观；
+     套 `.bordered` 会让它变成"里面有个色块的按钮"）。只改了一处：
+     选中态的深描边换成系统语义色 `Color.primary`。
+3. ✅ `StatButton` / `StatInfo` → 官方件
+   - `StatInfo`：手写 `HStack` → 官方 **`Label`**（它本来就是"图标 + 文字"这一形态），
+     那句手工的 `.accessibilityElement(children: .ignore)` 随之删掉（`Label` 自带这个语义）。
+   - `StatButton`：→ `.bordered` + `.buttonBorderShape(.capsule)`。
+   - ⚠️ 顺手修掉一条**挂了很久的既有偏差**：已 Star 时"**整块**吃金色" ⇒ 现在 `activeTint`
+     **只染图标**、文字恒 `textPrimary`（`Theme.Palette.starActive` 的抬头本来就写着
+     "绝不用作文字色"）。这条对原型的有意偏差（`REVIEW-CHECKLIST` **第 50 条**）至此收口。
+4. ✅ `LabelAddButton` → `.bordered` + `.buttonBorderShape(.capsule)` + `.controlSize(.small)`
+   - 原型那套「虚线描边 + 蓝字」作废（虚线在官方控件里没有对应档，
+     且它本身就与"不可用"的观感相邻）。
+   - 文案里本来就有 `＋`（`IssueCopy.addLabelAction`）⇒ **不再补** `Image(systemName: "plus")`，
+     否则屏幕上会出现两个加号。
+5. ✅ `SegmentedBar` → `Picker` + `.pickerStyle(.segmented)`；**`SectionTabs` 删除**
+   - **调用点入参一个都没变**（`segments` / `selectedID` / `onSelect` 原样）：
+     内胆换成 `Picker`，选中项用 `Binding` **只转发、不落地本地状态**（唯一真相仍在 ViewModel）。
+   - ⚠️ **「动作格」不再是一格，而是分段条右侧的一颗独立按钮**：`Picker` 里放不进
+     "点它不切档"的项（它的每一项都是一个 `tag`，选中即切换）。
+     这是**有意的形状变更** —— 从"长得像分段的一格"变成"分段条旁边的一个操作"
+     （HIG 里"分段 + 右侧动作"正是这个布局）。
+   - ⚠️ 系统分段控件**等分**整行（不再按内容宽横滑）⇒ 长标签必须给
+     `lineLimit(1)` + `minimumScaleFactor(0.7)`（`CommitSheet` 的「提交到 {分支名}」会顶破一格）。
+   - `SectionTabs` 与 `SegmentedBar` 在 P2 之后**内胆完全相同、功能也完全相同**（都是"切一档"）
+     ⇒ 合并成一件，`SectionTabs` 删除（它生前只有 `PullDetailView` 一个调用点）。
+   - ⚠️ 判据补充（写给下一次）：**"要不要合成一件"看的是功能，不是形状** ——
+     功能相同、只差外观 ⇒ 合并；功能不同、只是形状相近 ⇒ 不合并
+     （`FileView` 的面包屑与 `BreadcrumbBar` 属于后者）。
+6. ✅ `FilterChip` → `.bordered`（未选，`.tint(textPrimary)`）/ `.borderedProminent`
+   （已选，`.tint(accent)`）+ `.buttonBorderShape(.capsule)` + `.controlSize(.small)`
+   - 原型的"白底 / 浅蓝底 + 强调边 + 强调字，三处一起换"作废；现在是**整块底色的反转**，
+     读法更硬，而且是系统在所有 App 里共用的那一种。
+   - ⚠️ **没有按本计划原来写的换成 `Menu`**：这两个 chip 的 `action` 打开的是**一个 medium detent 弹层**
+     （`ExploreFilterSheet`，里面有十档色板与横滑列表），不是一份选项清单 ——
+     `Menu` 装不下它，硬套会把一个弹层降级成一个列表。系统件里对应的形态就是
+     "一个打开弹层的胶囊按钮"，即本件现在的样子。
+7. ✅ 顺手收拢一处私有副本：`UserProfileSheet` 里那个 `SheetActionButton`
+   （切片 5 落地时 `ActionButton` 还没进设计包）⇒ 删除，改用 `ActionButton` + 不可点三件套
+   （`allowsHitTesting(false)` / 去掉 `.isButton` / 补一句 `hint`）。`REVIEW-CHECKLIST §5` 那条待办结清。
 
 ### P3 · 列表主干（**最大的一期**）
 - 各页 `ScrollView + LazyVStack` → `List`（含 `.listStyle` 选型，iOS 26 下建议先用默认 / `.insetGrouped`）

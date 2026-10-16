@@ -218,7 +218,6 @@ struct CommitDetailView: View {
             ActionButton(
                 title: CommitCopy.revertAction,
                 style: .ghost,
-                verticalPadding: 12
             ) {
                 revert()
             }

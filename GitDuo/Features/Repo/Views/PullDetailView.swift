@@ -155,13 +155,20 @@ struct PullDetailView: View {
     // MARK: - 三分区条
 
     /// ⚠️ 第三格的标题**要数据**（`文件 +842 −156`）⇒ 走 `title(stats:)`（必传）。
+    ///
+    /// ⚠️ 2026-10-16（P2）：这里从 `SectionTabs`（本仓自绘的等分切换条）换成了
+    /// `SegmentedBar` —— 两者在 P2 之后内胆都是官方的 `Picker(.segmented)`，
+    /// **形状已经完全没有差别**，留着两份实现只会让"改一处忘了另一处"迟早发生。
+    /// `SectionTabs` 已删除（它生前只有这一个调用点）。
     private func sectionTabs(_ detail: PullDetail) -> some View {
-        SectionTabs(
+        SegmentedBar(
             // 顺序走 `allCases`，不写数组（`PullSection` 的说明）。
-            items: PullSection.allCases.map {
-                SectionTabs.Item(id: $0.rawValue, title: $0.title(stats: detail.statsLabel))
+            segments: PullSection.allCases.map {
+                SegmentedBar.Segment(id: $0.rawValue, title: $0.title(stats: detail.statsLabel))
             },
-            selectedID: model.segment.rawValue
+            selectedID: model.segment.rawValue,
+            // 本件在已经内缩的内容区里（同 §4.4 两段）。
+            padsHorizontally: false
         ) { picked in
             guard let section = PullSection(rawValue: picked.id) else { return }
             Task { await model.select(segment: section) }
@@ -304,7 +311,6 @@ struct PullDetailView: View {
                         title: PullCopy.mergeAction,
                         style: .primary,
                         // 原型 `style="width:100%;padding:12px"`。
-                        verticalPadding: 12,
                         // 在途（点完确认之后请求还在飞）⇒ 按钮内联转圈 + 防重复提交。
                         isWorking: model.isWorking
                     ) {
@@ -316,7 +322,6 @@ struct PullDetailView: View {
                         style: .ghost,
                         // 原型 `style="width:100%;padding:12px;margin-top:8px"` ⇒
                         // 那个 8 由外层 `spacing: Spacing.s` 给。
-                        verticalPadding: 12,
                         isWorking: model.isWorking
                     ) {
                         Task { await model.close() }
@@ -325,7 +330,6 @@ struct PullDetailView: View {
                     ActionButton(
                         title: PullCopy.reopenAction,
                         style: .primary,
-                        verticalPadding: 12,
                         isWorking: model.isWorking
                     ) {
                         Task { await model.reopen() }

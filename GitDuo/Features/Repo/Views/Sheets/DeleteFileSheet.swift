@@ -75,7 +75,6 @@ struct DeleteFileSheet: View {
             ActionButton(
                 title: FileCopy.deleteConfirmAction,
                 style: .destructive,
-                verticalPadding: 12,
                 isWorking: isWorking
             ) {
                 Task { await onConfirm() }
@@ -83,7 +82,7 @@ struct DeleteFileSheet: View {
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.top, Theme.Spacing.m)
 
-            ActionButton(title: FileCopy.cancelAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: FileCopy.cancelAction, style: .ghost) {
                 dismiss()
             }
             .padding(.horizontal, Theme.Spacing.s)

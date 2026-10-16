@@ -79,7 +79,7 @@ struct RepoIssuesSection: View {
 
             if !selectedLabels.isEmpty {
                 // ⚠️ 不传 `addLabelTitle` —— 这一行的末尾**没有**那颗「＋ 标签 / 新建」：
-                //    本分区的「筛选」按钮在分段条上（它才是打开弹层的入口）。
+                //    本分区的「筛选」入口在**分段条右侧**（它才是打开弹层的那个按钮）。
                 //    这是两处宿主唯一的形状差别（见 `SelectedLabelRow` 的说明）。
                 SelectedLabelRow(
                     labels: selectedLabels,
@@ -105,7 +105,8 @@ struct RepoIssuesSection: View {
             segments: [
                 .init(id: RepoSectionSegment.open.rawValue, title: openTitle),
                 .init(id: RepoSectionSegment.closed.rawValue, title: closedTitle),
-                // 第三格是**按钮**、不是分段（2026-10-08 裁定）：点它开标签弹层，
+                // 第三项是**动作**、不是分段（2026-10-08 裁定；2026-10-16 P2 起它画在
+                // 分段条**右侧**的一颗独立按钮上）：点它开标签弹层，
                 // 它自己**永远不高亮**（`isAction`）—— "选中"这个状态只属于上面两档。
                 .init(id: Self.filterID, title: RepoIssuesSectionCopy.filterAction, isAction: true),
             ],
@@ -234,7 +235,6 @@ struct RepoIssuesSection: View {
             title: RepoIssuesSectionCopy.newIssueAction,
             style: .primary,
             // 原型 `style="width:100%;padding:12px"` —— 12 是原型原值覆写。
-            verticalPadding: 12,
             action: onCreate
         )
     }

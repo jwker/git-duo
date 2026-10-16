@@ -145,7 +145,7 @@ struct EditorView: View {
     }
 
     private var submitButton: some View {
-        ActionButton(title: EditorCopy.submitAction, style: .primary, verticalPadding: 12) {
+        ActionButton(title: EditorCopy.submitAction, style: .primary) {
             // ⚠️ 按钮**任何时候都可点**（原型与 §4.6 都没有"空内容则禁用"这一档）：
             //    "路径没填 / 该分支上已有同名文件"都要走到提交那一步才说得清，
             //    而一颗点不动的按钮不会告诉用户为什么。

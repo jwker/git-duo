@@ -60,7 +60,6 @@ struct MergePRSheet: View {
                 title: PullCopy.mergeConfirmAction(base: base),
                 style: .primary,
                 // 原型 `style="width:100%;padding:12px"` —— 弹层底部的确认按钮统一 12。
-                verticalPadding: 12
             ) {
                 onConfirm(method)
             }

@@ -146,7 +146,6 @@ struct BranchesView: View {
             ActionButton(
                 title: BranchCopy.createAction,
                 style: .primary,
-                verticalPadding: 12,
                 isWorking: model.isWorking
             ) {
                 model.sheet = .createBranch
@@ -156,7 +155,6 @@ struct BranchesView: View {
             ActionButton(
                 title: BranchCopy.mergeAction(current: model.currentBranch),
                 style: .ghost,
-                verticalPadding: 12
             ) {
                 model.sheet = .merge
             }

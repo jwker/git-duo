@@ -532,10 +532,10 @@ public struct SheetField: View {
         // 见类型说明：它的存在理由是弹层把页面级的提示条盖住了）。
         SheetFailureHint("已有同名标签")
 
-        ActionButton(title: "合并", style: .primary, verticalPadding: 12, action: {})
-        ActionButton(title: "取消", style: .ghost, verticalPadding: 12, action: {})
+        ActionButton(title: "合并", style: .primary, action: {})
+        ActionButton(title: "取消", style: .ghost, action: {})
             .padding(.top, Theme.Spacing.s)
-        ActionButton(title: "删除分支", style: .destructive, verticalPadding: 12, isWorking: true, action: {})
+        ActionButton(title: "删除分支", style: .destructive, isWorking: true, action: {})
             .padding(.top, Theme.Spacing.s)
     }
     .padding(.horizontal, 10)

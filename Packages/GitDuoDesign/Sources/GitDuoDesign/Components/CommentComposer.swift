@@ -83,17 +83,14 @@ public struct CommentComposer: View {
             ActionButton(
                 title: sendTitle,
                 style: .primary,
-                // 原型那两处的按钮都是 `padding:9px 14px`（`.btn` 默认纵向 9、横向覆写成 14）。
-                verticalPadding: 9,
-                horizontalPadding: 14,
-                // 行内按钮：按内容宽、`fixedSize` 保证不被输入框压扁。
+                // 行内按钮：按内容宽（不撑满），与输入框并排。
                 fillsWidth: false,
                 isWorking: isSending,
                 action: onSend
             )
         }
-        // 原型 `padding:10px` ⇒ 最近一档（8 与 12 各差 2）。取 12 是为了保住
-        // "容器内边距 > 按钮纵向内边距(9)" 这个比例 —— 取 8 会让按钮比容器边距还厚。
+        // 原型 `padding:10px` ⇒ 最近一档（8 与 12 各差 2）。取 12 是为了让输入框与
+        // 容器边缘之间留出比系统按钮内边距更厚的一圈，否则整块看起来是"贴边的"。
         .padding(Theme.Spacing.m)
         .background(
             // 方案 A（2026-10-15，走查第 76 条）：输入区是**白卡**，边框去掉，圆角 18

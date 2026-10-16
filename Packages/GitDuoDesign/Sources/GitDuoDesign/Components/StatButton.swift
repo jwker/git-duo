@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// ⚠️ **它现在只有一个使用者**：`StatStar` 里"**能写**"的那一档（2026-10-15，走查第 66 / 67 条）。
 ///
-/// 这一天连着砍掉了本件的两个使用者，理由是同一条（**形状即信号**）：
+/// 那一天连着砍掉了本件的两个使用者，理由是同一条（**形状即信号**）：
 ///
 /// | 谁 | 何时不再用本件 | 为什么 |
 /// |---|---|---|
@@ -15,22 +15,25 @@ import SwiftUI
 /// ⇒ 于是"有底色 + 边框"在这个 App 里成了"**这块点得动**"的唯一信号。
 /// **别随手把它加到别处** —— 加一处，这条线索就弱一分。
 ///
-/// ## ⚠️ 形态**有意偏离原型**：横排、宽度随内容（2026-10-11）
+/// ## ⚠️ 2026-10-16（P2）：外观换成官方的 `.bordered` 胶囊按钮
 ///
-/// 原型是 `.stat-btn{flex:1;flex-direction:column;padding:9px 0}` —— 图标在上、文字在下，
-/// 三颗**等分整宽**，单颗约 52pt 高。用户反馈"太大了，重新设计、排版"后改为：
+/// 口径见 `NATIVE-MIGRATION.md`：**「按原型」= 功能按原型，视觉正本 = Apple HIG**。
+/// 于是本件不再手画"浅灰底 + 圆角矩形"，改成 `Button` + `.buttonStyle(.bordered)`
+/// + `.buttonBorderShape(.capsule)` —— 白拿按下高亮、禁用变灰、动态类型，
+/// 以及"这确实是个按钮"的系统语义（形状即信号这条判据反而更硬了：底和形状由系统给）。
 ///
-/// | | 原型 / 改造前 | 现在 |
-/// |---|---|---|
-/// | 图标与文字 | **上下两行** | **同一行**（`HStack`） |
-/// | 宽度 | `flex:1` 三等分撑满整行 | **随内容**（每颗只包住自己那一串） |
-/// | 内边距 | `padding:9px 0` | `Theme.Spacing.s` 四边 |
-/// | 图标 | 17px | **与文案同字号**（`Theme.Font.label`，12pt） |
-/// | 高度 | ≈ 52pt | ≈ 34pt |
+/// 随之作废的有两件（都记在下面，免得将来又被人当成"还没改完"）：
 ///
-/// ⚠️ 承载的**三态语义一个都没变**（已选中换实心符号 + 自定前景色、`.disabled` 的灰、
-/// 在途时那颗 `ProgressView`）—— 变的只有几何。
-/// 已登记为对原型的有意偏差（`REVIEW-CHECKLIST` **第 50 条**）。
+/// 1. **"横排 / 随内容宽"那套自定义几何**（2026-10-11 为「太大了」那次反馈改的）
+///    —— 现在由 `controlSize` 与 `Label` 决定，而两条结论仍然成立：
+///    按钮**不撑满整行**（这是 HIG 的常态，也是这里要的）；**不要**加回
+///    `.frame(maxWidth: .infinity)`（那是当年"三等分整宽"的写法）。
+/// 2. **「已 Star 时整块吃金色」那条既有偏差**（2026-10-11 查出、一直挂着未处置）
+///    —— 已顺手修掉：`activeTint` 现在**只染图标**，文字吃按钮的 tint
+///    （`Theme.Palette.textPrimary`）。原型 `.stat-btn.starred svg{fill:#eac54f}`
+///    本来就只命中 `svg`，而 `Theme.Palette.starActive` 的抬头明写
+///    "只用于星形图标，**绝不用作文字色**"（金色在白底上对比度约 1.5:1）。
+///    这条对原型的有意偏差（`REVIEW-CHECKLIST` **第 50 条**）至此收口。
 ///
 /// ## 它为什么收文案而不是收计数
 ///
@@ -66,21 +69,10 @@ public struct StatButton: View {
 
     public let isActive: Bool
 
-    /// 激活时**图标与文字**的颜色（见下方那条"与原型不符"）。默认强调色；Star 按钮传 `Theme.Palette.starActive`。
+    /// 激活时**图标**的颜色。默认强调色；Star 按钮传 `Theme.Palette.starActive`。
     ///
-    /// ## ⚠️ 它在**已 Star** 那一档与原型不符（既有问题，2026-10-11 查出、未处置）
-    ///
-    /// 这里把 `activeTint` 一次性套在**整块**（图标 + 文字）上，而原型
-    /// `.stat-btn.starred svg{fill:#eac54f}` 的选择器**只命中 `svg`** —— 文字仍是正文色。
-    /// `Theme.Palette.starActive` 的抬头也明写"只用于星形图标的填充 / 描边，**绝不用作文字色**"
-    /// （金色在白底上对比度约 1.5:1）。⇒ **原型 / 令牌注释 / 实现**三处不一致。
-    ///
-    /// ⚠️ 单测拦不住它：`ThemeTests` 那条测的是"与状态色的距离"与"对比度区间"，
-    /// **没有一行代码知道它被用在了文字上**。
-    ///
-    /// ⇒ 修法只有一处（图标吃 `activeTint`、文字恒 `textPrimary`），但**要不要改得单独决定**
-    /// —— 它会把"已 Star"的观感从"整块金"变回"金星 + 深字"。
-    /// 本次只动几何、保持现状；原委记在 `REVIEW-CHECKLIST` 第 50 条那一段末尾。
+    /// ⚠️ 2026-10-16（P2）起它**只作用于图标** —— 从前它被套在整块（图标 + 文字）上，
+    /// 而 `Theme.Palette.starActive` 的抬头明写"绝不用作文字色"。原委见类型抬头第 2 条。
     public let activeTint: Color
 
     public let action: () -> Void
@@ -104,7 +96,7 @@ public struct StatButton: View {
 
     /// 带**自定义图标视图**的构造器。
     ///
-    /// `icon` 优先级高于 `systemImage`；传进来后会直接放进 `HStack`，
+    /// `icon` 优先级高于 `systemImage`；传进来后会直接放进 `Label` 的图标位，
     /// 不再包一层 `Image(systemName:)`。调用方负责尺寸（建议 `Theme.Font.label` 同大）。
     /// 自定义图标目前**没有激活态**（只有 Fork 使用，而 Fork 没有 on/off 状态）。
     public init<Icon: View>(
@@ -145,16 +137,14 @@ public struct StatButton: View {
                     activeSystemImage: activeSystemImage,
                     isActive: isActive
                 ))
-                // 用户裁定的比例：图标必须和文字**同字号**，不能大一号。
-                // 用 `Theme.Font.label`（12pt semibold）而非硬编码点数，
+                // 与文字**同字号**（同 `StatInfo`）：`Theme.Font.label` 而非硬编码点数，
                 // 这样 Dynamic Type 放大时图标与文字仍然同步。
                 .font(Theme.Font.label)
             )
         }()
 
         Button(action: action) {
-            HStack(spacing: Theme.Spacing.xs) {
-                iconView
+            Label {
                 Text(title)
                     .font(Theme.Font.label)
                     .lineLimit(1)
@@ -162,21 +152,17 @@ public struct StatButton: View {
                     //    但若将来被放进一个**定宽**容器（或 Dynamic Type 放大到一行放不下），
                     //    截断会连数字一起吃掉 —— 而那个数正是用户要看的东西。
                     .minimumScaleFactor(0.8)
+            } icon: {
+                // ⚠️ `activeTint` **只染图标**（见属性说明）。
+                iconView.foregroundStyle(isActive ? activeTint : Theme.Palette.textPrimary)
             }
-            .foregroundStyle(isActive ? activeTint : Theme.Palette.textPrimary)
-            // ⚠️ **不要加回 `.frame(maxWidth: .infinity)`** —— 那是"三等分整宽"的写法，
-            //    加回去等于把这次改造撤销掉（而且单看一颗按钮看不出来）。
-            .padding(Theme.Spacing.s)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .fill(Theme.Palette.surfaceSunken)
-            )
-            // 方案 D（2026-10-15，走查第 73 条）：边框去掉 —— 浅灰面本身就是形状，
-            // 原型 `.stat-btn{border:none}`。
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        // 胶囊：与同屏的信息块（`StatInfo`）在高度上接近，形状上明确区分。
+        .buttonBorderShape(.capsule)
+        // ⚠️ 文字恒 `textPrimary`（不吃 `activeTint`）—— 见属性说明。
+        .tint(Theme.Palette.textPrimary)
         // 读屏："Star · 2,341，已选中" —— 图标与文字本就是一个整体，不要逐块念。
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
@@ -189,23 +175,22 @@ public struct StatButton: View {
             StatButton(systemImage: "star", activeSystemImage: "star.fill",
                        title: "Starred · 2,342", isActive: true,
                        activeTint: Theme.Palette.starActive) {}
-            StatButton(systemImage: "eye", title: "Watch · 45") {}
-            StatButton(
+            StatInfo(systemImage: "eye", title: "Watch · 45")
+            StatInfo(
                 icon: ForkIcon().frame(width: 12, height: 12),
                 title: "Fork · 88"
-            ) {}
+            )
         }
 
-        // 长数字 + 窄容器：放不下就折到下一行 —— 这正是 `FlowLayout` 在这里的用途
-        //（改造前是三等分整宽，数字长了只会把字号压小）。
+        // 长数字 + 窄容器：放不下就折到下一行。
         FlowLayout {
             StatButton(systemImage: "star", activeSystemImage: "star.fill",
                        title: "Star · 128,441", activeTint: Theme.Palette.starActive) {}
-            StatButton(systemImage: "eye", title: "Watch · 12,004") {}
-            StatButton(
+            StatInfo(systemImage: "eye", title: "Watch · 12,004")
+            StatInfo(
                 icon: ForkIcon().frame(width: 12, height: 12),
                 title: "Fork · 9,318"
-            ) {}
+            )
         }
         .frame(width: 300)
     }

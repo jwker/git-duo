@@ -49,7 +49,6 @@ struct CloseIssueSheet: View {
                 title: IssueCopy.closeAction,
                 style: .primary,
                 // 弹层底部的按钮统一 12（原型 `padding:12px`）。
-                verticalPadding: 12,
                 action: onConfirm
             )
             .padding(.horizontal, Theme.Spacing.s)
@@ -57,7 +56,7 @@ struct CloseIssueSheet: View {
 
             // ⚠️ 「取消」这两个字全项目同一串，直接复用设置页那一份 ——
             //    再写一个 `IssueCopy.cancelAction` 只会多一处将来要同步的副本。
-            ActionButton(title: ProfileCopy.cancelAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: ProfileCopy.cancelAction, style: .ghost) {
                 dismiss()
             }
             .padding(.horizontal, Theme.Spacing.s)

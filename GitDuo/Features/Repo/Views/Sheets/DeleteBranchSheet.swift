@@ -42,7 +42,6 @@ struct DeleteBranchSheet: View {
             ActionButton(
                 title: BranchCopy.deleteConfirmAction,
                 style: .destructive,
-                verticalPadding: 12,
                 isWorking: isWorking
             ) {
                 Task { await onConfirm() }
@@ -50,7 +49,7 @@ struct DeleteBranchSheet: View {
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.top, Theme.Spacing.m)
 
-            ActionButton(title: BranchCopy.cancelAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: BranchCopy.cancelAction, style: .ghost) {
                 dismiss()
             }
             .padding(.horizontal, Theme.Spacing.s)

@@ -269,7 +269,6 @@ struct IssueDetailView: View {
                         title: IssueCopy.closeAction,
                         style: .ghost,
                         // 那两颗满宽按钮在原型的 PR 页上都是 `padding:12px` ⇒ 取同一档。
-                        verticalPadding: 12,
                         // 在途（确认之后请求还在飞）⇒ 按钮内联转圈 + 防重复提交。
                         isWorking: model.isWorking
                     ) {
@@ -279,7 +278,6 @@ struct IssueDetailView: View {
                     ActionButton(
                         title: IssueCopy.reopenAction,
                         style: .primary,
-                        verticalPadding: 12,
                         isWorking: model.isWorking
                     ) {
                         // ⚠️ **不弹确认**，直接发（PRD §4.9 操作区末条）。

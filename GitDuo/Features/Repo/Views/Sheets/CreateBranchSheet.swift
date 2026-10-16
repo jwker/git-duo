@@ -59,7 +59,6 @@ struct CreateBranchSheet: View {
             ActionButton(
                 title: BranchCopy.createConfirmAction,
                 style: .primary,
-                verticalPadding: 12,
                 isWorking: isWorking
             ) {
                 Task { failure = await onCreate(name) }
@@ -67,7 +66,7 @@ struct CreateBranchSheet: View {
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.top, Theme.Spacing.m)
 
-            ActionButton(title: BranchCopy.cancelAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: BranchCopy.cancelAction, style: .ghost) {
                 dismiss()
             }
             .padding(.horizontal, Theme.Spacing.s)

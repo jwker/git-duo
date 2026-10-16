@@ -194,7 +194,6 @@ struct CommitSheet: View {
             ActionButton(
                 title: CommitSheetCopy.confirmAction,
                 style: .primary,
-                verticalPadding: 12,
                 isWorking: isWorking
             ) {
                 Task { await submit() }
@@ -202,7 +201,7 @@ struct CommitSheet: View {
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.top, Theme.Spacing.m)
 
-            ActionButton(title: FileCopy.cancelAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: FileCopy.cancelAction, style: .ghost) {
                 dismiss()
             }
             .padding(.horizontal, Theme.Spacing.s)
@@ -317,7 +316,7 @@ struct CommitSheet: View {
                 .padding(.top, Theme.Spacing.s)
 
             // 出口一：看过了再决定（**不自动重提**，§5.9③ 明写）。
-            ActionButton(title: CommitSheetCopy.viewLatestAction, style: .primary, verticalPadding: 12) {
+            ActionButton(title: CommitSheetCopy.viewLatestAction, style: .primary) {
                 phase = .latest(latest)
             }
             .padding(.horizontal, Theme.Spacing.s)
@@ -327,14 +326,13 @@ struct CommitSheet: View {
             ActionButton(
                 title: CommitSheetCopy.forceOverwriteAction,
                 style: .destructive,
-                verticalPadding: 12
             ) {
                 isConfirmingOverwrite = true
             }
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.top, Theme.Spacing.s)
 
-            ActionButton(title: FileCopy.cancelAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: FileCopy.cancelAction, style: .ghost) {
                 dismiss()
             }
             .padding(.horizontal, Theme.Spacing.s)
@@ -381,7 +379,7 @@ struct CommitSheet: View {
                     .padding(.top, Theme.Spacing.s)
             }
 
-            ActionButton(title: CommitSheetCopy.backToSheetAction, style: .ghost, verticalPadding: 12) {
+            ActionButton(title: CommitSheetCopy.backToSheetAction, style: .ghost) {
                 // ⚠️ 返回之后基准换成**刚看过的那一版**（`overrideSHA`）——
                 //    用户此刻的处境是"我知道远端长什么样了，仍然要用我这份内容"。
                 //    这一步正是本屏与「强制覆盖」唯一的形式差别（见类型说明的落差那条）。
@@ -415,7 +413,6 @@ struct CommitSheet: View {
                 ActionButton(
                     title: CommitSheetCopy.openCompareInBrowserAction,
                     style: .primary,
-                    verticalPadding: 12
                 ) {
                     if let url = RepoWebLinks.compare(fullName: fullName, base: branch, head: head) {
                         openURL(url)
@@ -428,7 +425,6 @@ struct CommitSheet: View {
             ActionButton(
                 title: CommitSheetCopy.partialDoneAction,
                 style: .ghost,
-                verticalPadding: 12
             ) {
                 dismiss()
             }

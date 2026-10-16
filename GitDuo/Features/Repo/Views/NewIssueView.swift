@@ -134,7 +134,6 @@ struct NewIssueView: View {
             title: IssueCopy.submitAction,
             style: .primary,
             // 原型 `style="width:100%;padding:12px"` —— 12 是原型原值覆写。
-            verticalPadding: 12,
             // §8.5「操作类」：在途时按钮内联 loading + 禁用，防重复提交。
             isWorking: model.isSubmitting
         ) {

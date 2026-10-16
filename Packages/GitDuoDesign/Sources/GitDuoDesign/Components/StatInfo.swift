@@ -80,21 +80,24 @@ public struct StatInfo: View {
             return AnyView(Image(systemName: systemImage).font(Theme.Font.label))
         }()
 
-        HStack(spacing: Theme.Spacing.xs) {
-            // ⚠️ 图标与文字**分开着色**（2026-10-15 起）：`iconTint` 只作用于图标。
-            //    从前这里是盖住整块的一个 `.foregroundStyle` —— 那时图标没有自己的颜色。
-            iconView
-                .foregroundStyle(iconTint ?? Theme.Palette.textSecondary)
+        // ⚠️ 2026-10-16（P2）：手写的 `HStack` 换成官方的 `Label` ——
+        //    这块东西的**语义**本来就是"一个图标 + 一段文字"，而 `Label` 正是那件官方件
+        //    （它天然是"图标与文字是一个整体"的读屏单位，从前那句
+        //    `.accessibilityElement(children: .ignore)` 就是手工补这一条）。
+        Label {
             Text(title)
                 .font(Theme.Font.label)
                 .lineLimit(1)
                 // 与 `StatButton` 同口径的兜底：常态下宽度随内容，不会被压缩。
                 .minimumScaleFactor(0.8)
                 .foregroundStyle(Theme.Palette.textSecondary)
+        } icon: {
+            // ⚠️ 图标与文字**分开着色**（2026-10-15 起）：`iconTint` 只作用于图标。
+            iconView
+                .foregroundStyle(iconTint ?? Theme.Palette.textSecondary)
         }
         .padding(.vertical, Theme.Spacing.s)
-        // 读屏："Watch · 45" —— 图标与文字是一个整体，不要逐块念。
-        .accessibilityElement(children: .ignore)
+        // 读屏："Watch · 45" —— 图标是纯装饰（`ForkIcon` 也没有名字），只念文案。
         .accessibilityLabel(title)
     }
 }

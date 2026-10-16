@@ -10,7 +10,7 @@ import SwiftUI
 /// ## 选中态是**两层**，不是一层
 ///
 /// 未选中：30×30 的圆角色块 + 一圈 **2px 透明**描边（占位，所以选中时尺寸不跳）。
-/// 选中：那圈描边变成 `--text`（深），**再往内加一圈 2px 白环**。
+/// 选中：那圈描边变成 `Color.primary`（深），**再往内加一圈 2px 白环**。
 ///
 /// ⚠️ 两层都要画。只画深色描边的话，选中态在一排彩色方块里**几乎看不出来**
 /// —— 描边紧贴着色块，四周又都是别的彩块。中间那圈白是让它"浮起来"的那一笔。
@@ -19,6 +19,20 @@ import SwiftUI
 /// ⚠️ 透明描边**不能省**：省掉它，未选中的是 30×30、选中的是 34×34，
 /// 点一下整排色块会互相挤动 —— 这正是原型用 `border:2px solid transparent` 而不是
 /// `border:none` 的原因。
+///
+/// ## ⚠️ 2026-10-16（P2）：本件**有意保留自绘**
+///
+/// `NATIVE-MIGRATION.md` 曾把本件标成"→ `Button` + `.bordered` + `.overlay`"，
+/// 实做时否掉了：这里的 label **不是按钮外观，是一个色块本身** ——
+/// 套上 `.bordered`（系统灰底 + 圆角矩形 + 内边距）会让它从一个 30×30 的色样
+/// 变成一颗"里面有个色块的按钮"，而这一整屏要读的正是**颜色本身**。
+///
+/// ⇒ `.buttonStyle(.plain)` 在这一处是**正确的选择**（这正是"逐处判读 30 处 plain"
+/// 的产出之一：plain 不是遗留问题，它在"label 即内容"的地方就是对的）。
+///
+/// 变的只有一处：选中态的深色描边从 `Theme.Palette.textPrimary` 换成 **`Color.primary`**
+/// —— 系统语义色，深浅色与"提高对比度"辅助功能自动生效，语义也更准
+/// （它不是"正文色"，是"前景色"）。
 ///
 /// ## 判据 #43：它进设计包
 ///
@@ -59,10 +73,11 @@ public struct ColorSwatch: View {
                 }
                 // 深色描边（原型 `border:2px solid var(--text)`）。
                 // ⚠️ 未选中时画的是**透明**描边，不是不画 —— 尺寸必须一致。
+                // 2026-10-16（P2）：色值换成系统语义色 `Color.primary`（见类型说明）。
                 .overlay {
                     RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                         .strokeBorder(
-                            isSelected ? Theme.Palette.textPrimary : Color.clear,
+                            isSelected ? Color.primary : Color.clear,
                             lineWidth: Self.borderWidth
                         )
                 }

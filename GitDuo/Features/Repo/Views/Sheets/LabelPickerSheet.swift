@@ -114,8 +114,6 @@ struct LabelPickerSheet: View {
             ActionButton(
                 title: IssueCopy.createLabelAction,
                 style: .primary,
-                // 原型 `style="width:100%;padding:11px"`。
-                verticalPadding: 11,
                 isWorking: model.isCreating
             ) {
                 Task { await create() }
