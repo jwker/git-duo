@@ -64,14 +64,6 @@ final class ExploreViewModel {
     /// 最近一次失败。**与 `rows` 并存** —— 有内容时它只驱动底部的重试行（§8.5）。
     var error: GitHubError? { state.error }
 
-    /// 列表标题：`新星榜 · 5 个仓库`（PRD §4.12）。
-    ///
-    /// ⚠️ 计数是**已加载的条数**，不是服务端的 `total_count` —— 这份列表是翻页累计的，
-    /// 说一个用户翻不到的总数只会让标题与列表长度对不上。
-    var listTitle: String {
-        "\(board.title) · \(rows.count) 个仓库"
-    }
-
     // MARK: - 生命周期
 
     func loadIfNeeded() async {

@@ -13,7 +13,6 @@ SCR.explore = {
     <div class="row" style="gap:8px;margin:0 0 14px;flex-wrap:wrap">
       ${exploreChip('range')}${exploreChip('lang')}
     </div>
-    <div class="section-label" id="trendTitle">${trendTitle()} · ${boardRows().length} 个仓库</div>
     <div id="trendList">${trendRows()}</div>
     ${fnote('探索',[
       '<b>两个榜</b>：新星榜（近 90 天新建 · 按新增 Star 排序）/ 活跃榜（近期有推送 · 按最近推送排序），同一批仓库两个视角',
@@ -27,7 +26,6 @@ SCR.explore = {
 };
 const EXPLORE_FILTERS = { range:'本周', lang:'' };
 let EXPLORE_BOARD = 'rising';
-const BOARDS = { rising:'新星榜', active:'活跃榜' };
 const BASE_DATE = new Date('2026-10-05T00:00:00Z');  // 演示基准日：静态数据下保证排序稳定
 const NEW_DAYS = 90;
 const RANGE_OPTS = ['今天','本周','本月'];
@@ -77,10 +75,7 @@ function boardRows(){
   }
   return list;
 }
-function trendTitle(){ return BOARDS[EXPLORE_BOARD] || '趋势'; }
 function paintTrend(){
-  const tt = document.getElementById('trendTitle');
-  if(tt) tt.textContent = `${trendTitle()} · ${boardRows().length} 个仓库`;
   const tl = document.getElementById('trendList');
   if(tl) tl.innerHTML = trendRows();
 }

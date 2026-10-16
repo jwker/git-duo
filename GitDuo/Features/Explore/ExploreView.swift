@@ -24,7 +24,12 @@ enum ExploreSheet: Identifiable {
 /// 探索 Tab 根页（PRD §4.12、TECH_SPEC §9.10）。
 ///
 /// 结构：大标题「探索」+ 右上角搜索 · 榜单分段（新星榜 / 活跃榜）· 两个筛选 chip ·
-/// 列表标题 · （可选）结果不完整说明行 · 趋势卡片列表。
+/// （可选）结果不完整说明行 · 趋势卡片列表。
+///
+/// ⚠️ **列表标题那一行已删**（2026-10-16 用户要求，走查第 **78** 条）：原本是
+/// 「新星榜 · 30 个仓库」这样一句 —— 榜单名分段条上已经有了，条数又随翻页变，
+/// 用户认为这两块字是重复的噪音。原型 `09-explore.js` 的 `.section-label#trendTitle`
+/// 与 `ExploreViewModel.listTitle` 一并删除。
 ///
 /// ## ⚠️ 这一屏最贵的是配额
 ///
@@ -131,7 +136,6 @@ struct ExploreView: View {
     private var mainArea: some View {
         VStack(alignment: .leading, spacing: 0) {
             chips
-            listTitle
 
             // ⚠️ `incomplete_results` 的说明行**不是错误态**（PRD §4.12）：
             //    已拿到的条目照常显示，只是这一页少了些本该在里面的仓库。
@@ -149,10 +153,6 @@ struct ExploreView: View {
         }
         .padding(.horizontal, Theme.Spacing.page)
         .padding(.bottom, Theme.Spacing.xl)
-    }
-
-    private var listTitle: some View {
-        SectionHeader(title: model.listTitle)
     }
 
     @ViewBuilder
