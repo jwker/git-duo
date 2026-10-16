@@ -280,21 +280,26 @@ struct RepoSectionListView: View {
 
     /// 提交段的骨架。
     ///
-    /// ⚠️ **容器参数与行内边距必须与上面那个真实的 `commitsList` 对齐**
-    /// （`CardBox()` + `RepoCommitRow` 的 `padding:11px 4px`）。
-    /// 2026-10-09 切片 10 修：此前写的是 `Theme.Spacing.m`（12）且没有行内边距 ⇒
-    /// 数据到达时**整块上移 8pt**，随后每一行再各挪一次。
+    /// ## ⚠️ 2026-10-16 起不再手抄行几何（NATIVE-MIGRATION P1）
+    ///
+    /// 上面那段"容器参数与行内边距必须对齐"（2026-10-09 切片 10 修的整块上移 8pt）
+    /// 从此**不可能再犯** —— 这里画的就是 `RepoCommitRow` 本身。
+    ///
+    /// ⚠️ `allowsHitTesting(false)`：`.redacted` 不拦截点击，遮住的行被点到会推一张
+    /// `sha = 0000000` 的提交详情页。
     private var commitsSkeleton: some View {
         CardBox() {
-            ForEach(0..<6, id: \.self) { _ in
-                HStack(spacing: 10) {
-                    SkeletonBar(height: 28, width: 28, cornerRadius: 14)
-                    SkeletonBar(height: 13, width: 200)
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 11)
-                .padding(.horizontal, Theme.Spacing.xs)
+            ForEach(0..<6, id: \.self) { index in
+                RepoCommitRow(
+                    commit: .placeholder,
+                    now: now,
+                    showsSeparator: index < 5,
+                    action: {}
+                )
             }
         }
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

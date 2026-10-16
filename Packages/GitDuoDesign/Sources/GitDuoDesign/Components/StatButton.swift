@@ -125,7 +125,7 @@ public struct StatButton: View {
 
     /// 实际使用的符号名：有激活态且已激活时才换名。
     ///
-    /// 做成 **`nonisolated static` 纯函数**（与 `SkeletonBar.animates` 同一模式）：
+    /// 做成 **`nonisolated static` 纯函数**（本包那条"reduceMotion 判定可单测"的老规矩）：
     /// `View` 协议的成员默认继承主 actor 隔离，而"已 Star 时用的是 `star.fill`"这件事
     /// 最好能被单测钉住 —— 不必靠肉眼看着一个 15pt 的图标去分辨它是实心还是空心。
     nonisolated static func resolvedSystemImage(

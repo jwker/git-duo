@@ -78,8 +78,7 @@ public struct StatusPill: View {
     // MARK: - Tone → 三处配色（纯函数，可单测）
 
     // 三个都标 `nonisolated`：它们不碰 UI 状态，而 `View` 的成员默认继承主 actor 隔离。
-    // 不标的话，任何非隔离上下文（例如领域层的映射测试）调它们都会被挡下（沿
-    // `SkeletonBar.animates` 的先例）。
+    // 不标的话，任何非隔离上下文（例如领域层的映射测试）调它们都会被挡下。
 
     /// 前景色。复用 `state*` 那三个 —— **不新开一套同值的 token**。
     public nonisolated static func foreground(_ tone: Tone) -> Color {

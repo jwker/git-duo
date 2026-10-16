@@ -87,6 +87,18 @@ struct RepoReadmeSection: View {
         // ⚠️ 双层 Optional 在这里**压平再判**（见 `state` 的说明）：
         //    外层 `?? nil` 解掉 `LoadState` 那一层，`if let` 解掉"有没有 README"。
         if let document = state.value ?? nil, !document.isEmpty {
+            documentBody(document)
+        }
+        // 走完 `if let` 都不成立 ⇒ README 确实不存在（或全空白）⇒ **什么都不画**。
+        // ⚠️ 这里**不画空态文案**：README 不是"数据"，它是仓库自己写的东西 ——
+        //    "这个仓库没写 README"不值得在首页占一行字（阅读体验上反而像出了错）。
+    }
+
+    /// 标题 + 正文 —— **有内容那一档与骨架共用的那一段**（NATIVE-MIGRATION P1：
+    /// 骨架 = 这一段 + 一份占位文档 + `.redacted`，于是"标题条 + 白卡 + 正文条"
+    /// 那套手抄的形状不再需要守着）。
+    private func documentBody(_ document: MarkdownDocument) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: RepoCopy.readmeSectionTitle)
 
             MarkdownBody(
@@ -134,36 +146,21 @@ struct RepoReadmeSection: View {
                     return .discarded
                 }
             }
+            .textSelection(.enabled)
         }
-        // 走完 `if let` 都不成立 ⇒ README 确实不存在（或全空白）⇒ **什么都不画**。
-        // ⚠️ 这里**不画空态文案**：README 不是"数据"，它是仓库自己写的东西 ——
-        //    "这个仓库没写 README"不值得在首页占一行字（阅读体验上反而像出了错）。
     }
 
     // MARK: - 骨架
 
-    /// 一小块骨架 —— **形状与真实内容对齐**（标题条 + 几行长短不一的正文条），
-    /// 数据到达时整块不跳动。
+    /// 一小块骨架 —— **就是真实的 `documentBody(_:)`** + 占位文档 + `.redacted`
+    /// （NATIVE-MIGRATION P1）。
     ///
-    /// ⚠️ 高度与 `RepoTreeSkeleton` 同一套口味：不留空行（正文条之间只给 `s`），
-    /// 因为 README 出现时是"接着往下长"，不是"替换一整屏"。
+    /// ⚠️ 白卡那件事随之自动成立（`MarkdownBody` 的 `.document` 档自己就是白卡），
+    /// 上面那条"第 75 条那句'不画'已反转"的注释连同手抄的三根灰条一起作废。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            // 小节标题那一行（`SectionHeader` 的字号比正文矮一档）。
-            SkeletonBar(height: 13, width: 84)
-                .padding(.top, Theme.Spacing.l)
-
-            // ⚠️ 骨架要**画白卡**（2026-10-15 走查第 76 条）：方案 A 把 README 翻回一张
-            //    白卡 ⇒ 骨架不画卡的话，数据到达时会"卡突然出现"跳一下
-            //    （第 75 条那句"不画"是白页面下正文无面板时的结论，本条已反转）。
-            PanelBox {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 15)
-                    SkeletonBar(height: 15)
-                    SkeletonBar(height: 15, width: 240)
-                }
-            }
-        }
-        .accessibilityHidden(true)
+        documentBody(MarkdownDocument(Placeholders.document))
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }

@@ -2565,9 +2565,53 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 > - `.redacted` 之下**占位块的实际观感**（灰块形状/圆角/深浅档），以及 `ContentUnavailableView`
 >   在"分区内小块"这个用法下会不会偏大（`SectionFailure`）。
 >
-> **验证**：`make verify`（强制全量重编）`exit=0` · 0 条 Swift 编译警告 · 1884 项通过 · `BUILD SUCCEEDED`。
+> **验证**：`make verify`（强制全量重编）`exit=0` · 0 条 Swift 编译警告 · `BUILD SUCCEEDED`。
+> ⚠️ **条数当时写的是"1884 项通过"（错的，同日更正）**：那个数是拿
+> `grep -c "passed after"` 数出来的，它数的是**每一条测试的输出行**，不是测试项数。
+> 五包的真实口径是 `Test run with N tests in M suites` 那五行：**1790 项 / 155 套件**。
 >
-> ⇒ 现在是**有效 75 条、含作废记录共 80 个编号**
+> ## 走查第 81 条：P1 收尾 —— 详情页那批骨架也换官方件，`SkeletonBar` 退休（2026-10-16）
+>
+> 用户目视 P1 后说「看了没问题，继续」。这一条把第 80 条里如实登记的"没做完"那一项做完。
+>
+> ### 做了什么
+>
+> 把剩下的**全部** `SkeletonBar` 直写处（详情页那批，共 13 个文件）改成
+> **"把真实的那个视图喂一份占位数据再 `.redacted`"**，于是"骨架与真实内容失配"
+> 这一类问题在**整条链上**都不再可能发生：
+>
+> | 页面 | 改成 |
+> |---|---|
+> | `RepoDetailView` | `loaded` 拆成 `RepoDetailHero(.placeholder)` + 真实 `entries` |
+> | `ExploreRepoDetailView` | 真实的 `sections(RepoInsights.placeholder)`（七分区同源） |
+> | `IssueDetailView` / `PullDetailView` | 抽出 `loaded(_:)`，骨架画它；`bubbleSkeleton` 改画真 `CommentRow` |
+> | `CommitDetailView` | 抽出 `loaded(_:)`（头部卡 + 真 `DiffCard`） |
+> | `PullDetailView` commits / 文件 两段 | 真 `RepoCommitRow` / 真 `DiffCard(file: .placeholder)` |
+> | `FileView` / `EditorView` | 真 `fileBody(_:)` / 真 `editorBody` |
+> | `BranchesView` / `BranchSheet` | 真 `loaded(_:)` / 真 `rows(_:)` + `BranchList.placeholder()` |
+> | `LabelPickerSheet` | 真 `rows(_:)` + `Label.placeholder(index:)` |
+> | `ProfileView`（热力图） | 真 `ContributionHeatmap` + `Placeholders.heatmapLevels()`（53×7 最浅档） |
+> | `RepoReadmeSection` | 抽出 `documentBody(_:)`，骨架画它 + 占位 Markdown |
+> | `RepoTreeSkeleton` 的面包屑 | 真 `BreadcrumbBar` + 占位分支名 / 路径（原先说"留到 P6"，实际两个回调都不给就够） |
+>
+> ### ⚠️ 一条必须记牢的坑：`.redacted` **不拦截点击**
+>
+> 遮成灰块的行 / 按钮**照样能点**。所有骨架都补了 `.allowsHitTesting(false)` ——
+> 漏掉它的后果是骨架期点一下「新建分支」/「Revert」/ 分段条，会真的发出动作
+> （或推一页 `placeholder/placeholder`）。自绘 `SkeletonBar` 时代没有这个问题
+> （灰条本来就不是控件），**这是换官方占位方案新引入的一类风险**。
+>
+> ### `SkeletonBar` 已删除（组件 + 单测一起）
+>
+> 生产代码里一处调用都没有了 ⇒ 删组件、删它的 `SkeletonBarTests`（−2 项 / −1 套件）、
+> 改写四处把它当"先例"引用的注释（`Toast` / `StatButton` / `StatusPill` / `UserAvatar`）。
+> ⇒ `TECH_SPEC §8.5` 判据 ① 的"单一原子"随之改判（见该处 2026-10-16 注）。
+>
+> **验证**：`make verify`（强制全量重编）`exit=0` · **0 条 Swift 编译警告**
+> · 五包 **1788 项 / 154 套件**（422/38 · 59/4 · 63/8 · **112/13** · 1132/91 ——
+> 第 4 个包少了 2 项 / 1 套件，就是删掉的 `SkeletonBarTests`）· `BUILD SUCCEEDED`。
+>
+> ⇒ 现在是**有效 76 条、含作废记录共 81 个编号**
 > （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
 
 > 第 22 条是 2026-10-07 目视陪跑时**补登**的（与 17–21 同批由 6.7 引出）。⚠️ 它只在**仓库真有受保护分支**时才看得见 ——

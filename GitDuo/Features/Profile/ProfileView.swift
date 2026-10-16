@@ -170,7 +170,10 @@ struct ProfileView: View {
             }
         } else {
             // 首帧：还没取到任何结果 ⇒ 骨架（§8.5：加载中 ≠ 无数据）。
-            PanelBox(vertical: 14, horizontal: 14) { skeleton }
+            // ⚠️ 外面**不再包 `PanelBox`**（NATIVE-MIGRATION P1）：骨架画的是
+            //    `ContributionHeatmap` 本人，而它**自己就是那张面板**（见它的类型说明）
+            //    —— 再包一层会得到"两层底 + 双份内边距"。
+            skeleton
         }
     }
 
@@ -187,32 +190,41 @@ struct ProfileView: View {
         Task { await model.select(year: ContributionYear(year: year)) }
     }
 
-    /// 热力图卡片的骨架 —— 照着它的真实布局画那三行（§8.5 第 1 条纪律：尺寸要匹配）。
+    /// 热力图卡片的骨架 —— **就是真实的 `ContributionHeatmap`**（NATIVE-MIGRATION P1）。
     ///
-    /// ⚠️ 网格那一行的高度从 `ContributionHeatmap.gridHeight` 取（**不是**写死 44）：
-    /// 2026-10-09 格子改成固定的 11pt 之后，整张图是 `7 × 11 + 6 × 2.5 = 92pt`，
-    /// 骨架写死旧值会让首帧与内容差出整整一倍（那正是切片 10 修的那一类失配）。
+    /// ⚠️ 上面那段"网格高度必须从 `ContributionHeatmap.gridHeight` 取"的注释随之作废：
+    /// 现在画出来的网格**就是**那一份网格（`Placeholders.heatmapLevels()` 给一个
+    /// 53 列 × 7 行的最浅档矩阵），高度不可能对不上 —— 那正是当年写死旧值翻车的根因。
+    ///
+    /// ⚠️ `totalText` 不写 `0 次贡献`（同失败态那条）：骨架期是"还没拿到"，
+    /// 不是"这一年确实零贡献"。redacted 之下看不见，但口径不能反。
+    ///
+    /// ⚠️ 月份标签按"每个月大约隔 4.35 列"摆一个：真实标签来自 `grid.monthLabels`，
+    /// 占位只要**形状**（一行字摊在旁边）对得上就够。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // 头部那行：左边「1,024 次贡献」、右边年份切换器（`2026 年` + 小箭头）。
-            // ⚠️ 宽度那 68 里含**在途指示器那一小块恒定槽位**（`HeatmapHeader.loadingSlot`
-            //    + 一个 `xs`）—— 它是恒占位的，所以骨架也得把它算进去，否则首帧与内容
-            //    在这一行上差 16pt（§8.5 那条"骨架尺寸要匹配"）。
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-                SkeletonBar(height: 13, width: 104)
-                Spacer(minLength: 0)
-                SkeletonBar(height: 11, width: 68)
-            }
-            .padding(.bottom, 10)
-
-            // 月份表头那一行（caption 11pt ⇒ 14pt 高，宽度按几个标签估）。
-            SkeletonBar(height: 11, width: 148)
-                .padding(.bottom, Theme.Spacing.xs)
-
-            // 网格。⚠️ 横向一定溢出（内容约 713pt）⇒ 骨架也不该铺满卡片宽度，
-            //    但宽度是次要维度（真实内容会滚动），高度必须准。
-            SkeletonBar(height: ContributionHeatmap.gridHeight)
-        }
+        ContributionHeatmap(
+            levels: Placeholders.heatmapLevels(),
+            totalText: ProfileCopy.contributionCount(0),
+            monthMarks: (1...12).map {
+                ContributionHeatmap.MonthMark(
+                    column: Int(Double($0 - 1) * 4.35),
+                    title: ProfileCopy.monthLabel($0)
+                )
+            },
+            // 年份选项在首帧可能还没取到（`model.years` 为空）⇒ 占位给一档，
+            // 免得切换器画成一个空菜单。
+            yearTitle: model.years.first?.label ?? Placeholders.shortLine,
+            yearOptions: yearOptions.isEmpty
+                ? [HeatmapYear(year: 0, title: Placeholders.shortLine)]
+                : yearOptions,
+            selectedYear: model.years.first?.year ?? 0,
+            isLoading: false,
+            yearAccessibilityLabel: "",
+            onSelectYear: { _ in }
+        )
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     // MARK: - 两张菜单卡片

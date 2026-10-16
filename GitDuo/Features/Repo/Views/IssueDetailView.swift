@@ -1,4 +1,5 @@
 import GitHubAPI
+import GitDuoCore
 import GitDuoDesign
 import GitDuoKit
 import SwiftUI
@@ -154,34 +155,41 @@ struct IssueDetailView: View {
 
         case .content:
             if let detail = model.detail.value {
-                // 原型各块之间是 `margin-bottom:12px` ⇒ `Spacing.m`。
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    ConversationHeader(
-                        stateTitle: detail.pillTitle,
-                        stateTone: StateTone.tone(isOpen: detail.isOpen),
-                        note: detail.headNote(now: now),
-                        title: detail.title,
-                        meta: detail.metaLabel(fullName: fullName, now: now)
-                    )
-
-                    if detail.hasBody {
-                        bodyBubble(detail)
-                    }
-
-                    commentsSection
-
-                    operations(detail)
-
-                    if let notice = model.sendNotice {
-                        NoticeBar(text: notice)
-                    }
-
-                    composer
-                }
+                loaded(detail)
             }
 
         case let .failure(error):
             PageFailure(error: error) { Task { await model.refresh() } }
+        }
+    }
+
+    /// 有内容那一档 —— 抽成一个函数，是为了让**骨架与内容走同一份布局**
+    /// （NATIVE-MIGRATION P1：骨架 = 这份布局 + 占位数据 + `.redacted`）。
+    ///
+    /// ⚠️ 原型各块之间是 `margin-bottom:12px` ⇒ `Spacing.m`。
+    private func loaded(_ detail: IssueDetail) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            ConversationHeader(
+                stateTitle: detail.pillTitle,
+                stateTone: StateTone.tone(isOpen: detail.isOpen),
+                note: detail.headNote(now: now),
+                title: detail.title,
+                meta: detail.metaLabel(fullName: fullName, now: now)
+            )
+
+            if detail.hasBody {
+                bodyBubble(detail)
+            }
+
+            commentsSection
+
+            operations(detail)
+
+            if let notice = model.sendNotice {
+                NoticeBar(text: notice)
+            }
+
+            composer
         }
     }
 
@@ -299,44 +307,34 @@ struct IssueDetailView: View {
 
     // MARK: - 骨架
 
+    /// ## ⚠️ 2026-10-16 起不再手抄几何（NATIVE-MIGRATION P1）
+    ///
+    /// 它画的就是真实的 `loaded(_:)`，只是喂了一份占位详情再 `.redacted` ——
+    /// 上面那句"三行与 `ConversationHeader` 一一对应、以免跳动"从此自动成立。
+    ///
+    /// ⚠️ `allowsHitTesting(false)`：`.redacted` **不拦截点击**，
+    /// 被遮住的操作区按钮（关闭 / 重开）真的会被点到。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            // 头部卡：胶囊 + 说明那一行、标题、元信息行 —— 三行，与 `ConversationHeader`
-            // 的三行一一对应（骨架的用处就是让"东西来了之后"不发生跳动）。
-            CardBox() {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 11, width: 120)
-                    SkeletonBar(height: 17, width: 260)
-                    SkeletonBar(height: 11, width: 200)
-                }
-            }
-
-            ForEach(0..<2, id: \.self) { _ in bubbleSkeleton }
-
-            // 输入区。
-            SkeletonBar(height: 58, width: nil)
-        }
-        .accessibilityHidden(true)
+        loaded(.placeholder)
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
-    /// 一条评论 / 正文气泡的骨架。
+    /// 一条评论气泡的骨架（评论慢一步到、正文还没出来时用）。
     ///
-    /// ⚠️ 它**不画头像** —— 骨架的作用是占位与定高，不是把成品预先画一遍。
-    /// 形状（圆角 `Radius.bubble` + 1pt 浅边 + 内边距 `m`）与 `CommentBubble` 的
-    /// 气泡那一半对齐，所以真内容到来时整块的位置不会跳。
+    /// ⚠️ 同上面那条：画的是**真实的 `CommentRow`** + 占位评论 ⇒ 圆角、内边距、
+    /// 头像那一列的位置都自动与真气泡一致（原先手抄的
+    /// `Radius.bubble` + `Spacing.m` 那套只对了形状的那一半）。
     private var bubbleSkeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            SkeletonBar(height: 11, width: 120)
-            SkeletonBar(height: 13, width: nil)
-            SkeletonBar(height: 13, width: 180)
-        }
-        .padding(Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // 方案 A：气泡是**白卡**（与 `CommentBubble` 一致：圆角 18、无边框）。
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                .fill(Theme.Palette.surface)
+        CommentRow(
+            login: "placeholder",
+            authorName: AuthorName.display("placeholder"),
+            timeText: RelativeTime.string(from: Placeholders.date, now: now),
+            blocks: MarkdownDocument(Placeholders.line).blocks
         )
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
     }
 }
 

@@ -54,18 +54,3 @@ struct LanguageColorTests {
         #expect(LanguageColor.color(for: "Swift") != LanguageColor.fallback)
     }
 }
-
-/// 骨架屏（TECH_SPEC §8.5）。
-@Suite("SkeletonBar · 降低动态效果")
-struct SkeletonBarTests {
-
-    @Test("默认播放呼吸动画")
-    func animatesByDefault() {
-        #expect(SkeletonBar.animates(reduceMotion: false))
-    }
-
-    @Test("系统开启「降低动态效果」时**不播**动画（§10.5）")
-    func respectsReduceMotion() {
-        #expect(!SkeletonBar.animates(reduceMotion: true))
-    }
-}

@@ -172,33 +172,19 @@ struct BranchesView: View {
         }
     }
 
-    /// ⚠️ **容器参数与行内边距必须与上面那个真实的 `loaded(_:)` 对齐**：
-    /// 真实卡是 `CardBox(vertical: 0, horizontal: 0)` —— 因为 `BranchRow` **自带**
-    /// `padding:13px 14px`（原型 `.menu-item`）。
-    /// 2026-10-09 切片 10 修：骨架此前写的是 `CardBox(vertical: Theme.Spacing.m, horizontal: 14)`
-    /// 且行内没有任何内边距 ⇒ 卡片上下多 12pt、左右多缩进 14pt，且 5 行挤成一条。
+    /// ## ⚠️ 2026-10-16 起它**不再自己画灰条**（NATIVE-MIGRATION P1）
+    ///
+    /// 直接把真实的 `loaded(_:)` 喂一份占位列表再 `.redacted` —— 上面那段注释里写过的
+    /// "容器参数 / 行内边距必须对齐"（2026-10-09 切片 10 修的那次失配）从此**不可能再犯**：
+    /// 骨架与内容走的是同一个 `loaded(_:)`，不存在第二份几何。
+    ///
+    /// 两个按钮也被遮成灰块 ⇒ 必须 `allowsHitTesting(false)`：**`.redacted` 不拦截点击**，
+    /// 遮住的"新建分支"仍然会被点到，那时 `model.sheet` 一翻开就是空的。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SkeletonBar(height: 12, width: 200)
-                .padding(.top, Theme.Spacing.l)
-                .padding(.horizontal, Theme.Spacing.xxs)
-
-            CardBox(vertical: 0, horizontal: 0) {
-                ForEach(0..<5, id: \.self) { _ in
-                    SkeletonBar(height: 18, width: 170)
-                        // 与 `BranchRow` 的 `padding:13px 14px` 同值。
-                        .padding(.vertical, 13)
-                        .padding(.horizontal, 14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-
-            SkeletonBar(height: 40)
-                .padding(.top, Theme.Spacing.m)
-            SkeletonBar(height: 40)
-                .padding(.top, Theme.Spacing.s)
-        }
-        .accessibilityHidden(true)
+        loaded(BranchList.placeholder())
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。

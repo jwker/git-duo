@@ -70,7 +70,8 @@ public struct Toast: View {
 
     /// 进出场是否播动画（原型 `animation:up .25s`）。
     ///
-    /// 纯函数（同 `SkeletonBar.animates(reduceMotion:)`）：这样"设置里开了降低动态效果"
+    /// 纯函数（`nonisolated static`，本包那条"reduceMotion 判定可单测"的老规矩）：
+    /// 这样"设置里开了降低动态效果"
     /// 可以被单测钉住，而不是只能靠肉眼。
     public nonisolated static func animates(reduceMotion: Bool) -> Bool { !reduceMotion }
 

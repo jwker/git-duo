@@ -267,52 +267,29 @@ struct RepoDetailView: View {
     /// ⚠️ 它此前是"大卡 + 分段条 + 代码分区骨架"三块 ——
     /// 后两块随分段条一起删掉了（这次改动的核心就是**别让骨架盖住半屏**）。
     ///
-    /// ⚠️ 四行那一段的形状必须与真实内容**对齐**（`MenuRow` 的 40pt 色块行，每行约 64pt）
-    /// —— 数据到达时整块跳动是最容易被做出来、也最容易被忽略的瑕疵。
+    /// ## ⚠️ 2026-10-16 起两块都**不再手抄几何**（NATIVE-MIGRATION P1）
+    ///
+    /// 头部就是 `RepoDetailHero` 本人、四行就是 `entries` 本人，只是喂了一份占位数据
+    /// 再 `.redacted` —— "四行的形状必须与真实内容对齐（40pt 色块行）"那条从此自动成立。
+    ///
+    /// ⚠️ `allowsHitTesting(false)`：`.redacted` **不拦截点击**，四行入口被点到会推一页
+    /// 带上 `placeholder/placeholder` 的列表（那一页必然失败一次）。
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 方案 D：头部去卡形 ⇒ 骨架同样不画底与圆角（与 `RepoDetailHero` 对齐）。
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                HStack(spacing: Theme.Spacing.m) {
-                    SkeletonBar(
-                        height: RepoAvatar.standard.diameter,
-                        width: RepoAvatar.standard.diameter,
-                        // ⚠️ 2026-10-15 起占位块也是**圆的**（走查第 72 条：真实内容换成了 owner 头像）。
-                        cornerRadius: RepoAvatar.standard.diameter / 2
-                    )
-                    SkeletonBar(height: 17, width: 160)
-                    Spacer(minLength: 0)
-                }
-                SkeletonBar(height: 13)
-                SkeletonBar(height: 13, width: 200)
-                HStack(spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 44)
-                    SkeletonBar(height: 44)
-                    SkeletonBar(height: 44)
-                }
-                .padding(.top, Theme.Spacing.s)
-            }
-            // 方案 A：头部骨架也是一张白卡（与 `RepoDetailHero` 同形状）。
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                    .fill(Theme.Palette.surface)
-            )
+            RepoDetailHero(
+                detail: .placeholder,
+                // ⚠️ 占位也走"能写"那一档（`canStar: true`）：不确定就不拦（决策 #80），
+                //    骨架期恰恰是"还没查到" ⇒ 照 `StarWriteScope` 的口径给 `true`。
+                star: .placeholder(),
+                canStar: true,
+                isTogglingStar: false
+            ) {}
 
-            // 四行入口的骨架：与 `MenuRow` 对齐（40pt 色块 + 14pt 标题行）。
-            CardBox(vertical: 0, horizontal: 0) {
-                ForEach(0..<4, id: \.self) { _ in
-                    HStack(spacing: 12) {
-                        SkeletonBar(height: 40, width: 40, cornerRadius: Theme.Radius.container)
-                        SkeletonBar(height: 14, width: 120)
-                        Spacer(minLength: 0)
-                    }
-                    // 方案 A：行回到卡内 ⇒ padding 14（与 `MenuRow` 一致）。
-                    .padding(14)
-                }
-            }
-            .padding(.top, Theme.Spacing.m)
+            entries
+                .padding(.top, Theme.Spacing.m)
         }
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }

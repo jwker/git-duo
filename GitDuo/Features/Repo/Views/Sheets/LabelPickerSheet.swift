@@ -200,19 +200,16 @@ struct LabelPickerSheet: View {
 
     // MARK: - 骨架 / 色板
 
+    /// 与 `BranchSheet` 同一条口径（NATIVE-MIGRATION P1）：渲染真实的 `rows(_:)`
+    /// + 占位标签 + `.redacted`。
+    ///
+    /// ⚠️ 那条"给一个最小高度、免得上跳"的注释随灰条一起作废了：现在行高就是
+    /// `SheetRow` 的真实行高，骨架与内容不可能差出高度。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            ForEach(0..<4, id: \.self) { _ in
-                SkeletonBar(height: 18, width: 160)
-            }
-        }
-        // 原型 `.sheet-row{padding:12px 10px}` ⇒ 与真行左边缘对齐。
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        // 首帧骨架的行高（4 × 18 + 3 × 12 = 108）撑不住"换页之后再量"这件事，
-        // 给一个最小高度，免得色板那一段在骨架消失时整体上跳一下。
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityHidden(true)
+        rows((0..<4).map { Label.placeholder(index: $0) })
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// 10 格色板（`LabelPalette.hexes`）。

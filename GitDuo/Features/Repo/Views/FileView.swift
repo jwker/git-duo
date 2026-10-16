@@ -642,26 +642,18 @@ struct FileView: View {
 
     // MARK: - 骨架 / 失败
 
+    /// ## ⚠️ 2026-10-16 起不再手抄几何（NATIVE-MIGRATION P1）
+    ///
+    /// 画的是真实的 `fileBody(_:)` + 占位内容 + `.redacted` —— 上面那句"与
+    /// `CodeSurface` 的 11 / 13 同值、否则到位时会跳"从此自动成立（同一份布局）。
+    ///
+    /// ⚠️ 占位是**代码块**那一档（`FileContent.placeholder` 的 `markdown: nil`）：
+    /// 真实内容若是 `.md`，到位时形状会换 —— 占位只能选一档，多数文件是代码。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            SkeletonBar(height: 32)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                ForEach(0..<8, id: \.self) { _ in
-                    SkeletonBar(height: 13, width: 210)
-                }
-            }
-            // 与 `CodeSurface` 的 11 / 13 同值：骨架的形状要与它替换的东西对得上，
-            // 否则内容到位那一刻整块会跳一下。
-            .padding(.vertical, 11)
-            .padding(.horizontal, 13)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                    .fill(Theme.Palette.codeSurface)
-            )
-        }
-        .accessibilityHidden(true)
+        fileBody(.placeholder)
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。

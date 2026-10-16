@@ -13,12 +13,13 @@
 结构层（导航 / 弹层 / 刷新 / 转圈）已经是原生的；**"长什么样"这一层几乎全是自绘的** ——
 `GitDuoDesign` 44 个组件 + 各域 App 组件，配一套自定的 `Theme` 令牌（48 色 / 8 间距 / 12 圆角 / 21 字体档）。
 
-几个能说明问题数字：
+几个能说明问题数字（**下面这张是 2026-10-16 体检时的原始快照**，用来解释"为什么要迁移"；
+不再是现状 —— 带 ✅ 的行已经改完，进度见 §3）：
 
 | 指标 | 值 |
 |---|---|
 | `List` / `Form` / `.searchable` / `ContentUnavailableView` / `Toggle` / `swipeActions` / `contextMenu` | **0 处** |
-| `.redacted`（官方骨架方案） | **0 处** —— 骨架全靠自绘 `SkeletonBar`（102 处） |
+| `.redacted`（官方骨架方案） | ~~**0 处** —— 骨架全靠自绘 `SkeletonBar`（102 处）~~ ✅ P1 已换（`SkeletonBar` 已删） |
 | `@ScaledMetric`（官方动态类型方案） | **0 处** |
 | `Button` 构造点 | 143 处，其中 **30 处 `.buttonStyle(.plain)`**（= 明确绕开系统样式），真正用系统样式的只有 **1 处** |
 | 自绘弹层 | 16 个 sheet 视图，全靠自绘的 `SheetPrimitives` 五件套拼 |
@@ -34,7 +35,7 @@
 
 | 组件 | 换成 | 调用点 |
 |---|---|---|
-| `SkeletonBar`（+ 7 个 `*Skeleton`） | `.redacted(reason: .placeholder)` | 102 |
+| `SkeletonBar`（+ 7 个 `*Skeleton`） | `.redacted(reason: .placeholder)` | 102 ✅ **P1 已完成**（组件已删） |
 | `UserAvatar` | `AsyncImage` + `.clipShape(.circle)` | 86 |
 | `CardBox` | `List` + `Section` / `.listRowBackground` | 69 |
 | `ActionButton` | `Button` + `.buttonStyle(.borderedProminent/.bordered/.borderless)` + `.tint()` | 50 |
@@ -138,19 +139,27 @@
 
 ### P1 · 白拿系统行为（观感基本不变，收益最大）
 
-> **状态（2026-10-16 执行中）**：1 / 2 / 3 / 6 已完成；4 / 5 **已重新归类**（见下），
-> 7 个列表骨架已换、详情页那批 `SkeletonBar` 直写处留给下一批。
+> **状态（2026-10-16）**：骨架那条已**做到底**（含详情页整批 + `SkeletonBar` 退休）；
+> 1 / 2 / 3 / 6 已完成；4 / 5 **已重新归类**（见下）。
 
-1. ✅ 骨架：8 个 `*Skeleton` + `SkeletonBar` → `.redacted(reason: .placeholder)`（**102 处**）
-   - **已完成 7 个列表骨架**：`RepoCardSkeleton` / `PinRowsSkeleton` / `ExploreBoardSkeleton` /
+1. ✅ 骨架：8 个 `*Skeleton` + `SkeletonBar` → `.redacted(reason: .placeholder)`（**102 处全清**）
+   - **7 个列表骨架**：`RepoCardSkeleton` / `PinRowsSkeleton` / `ExploreBoardSkeleton` /
      `ExploreSubListSkeleton` / `StarRowSkeleton` / `SearchResultsSkeleton` / `RepoTreeSkeleton`
-     ⇒ 它们现在渲染**真实行 + 占位数据 + `.redacted`**，手抄的几何全部删除。
-     配套新增 `GitDuoKit/Models/Placeholders.swift`（域模型的占位工厂）。
-   - ⏸ **详情页那批 `SkeletonBar` 直写处**（`ProfileView` / `RepoDetailView` /
-     `ExploreRepoDetailView` / Issue·PR 详情 / `FileView` / `EditorView` / `BranchesView` /
-     `RepoReadmeSection` / commits / 两个弹层内的小骨架）**下一批做** ——
-     它们需要为"会话 / 提交 / diff"再补三个占位模型，不是机械替换。
-   - ⚠️ `SkeletonBar` 因此**暂时保留**（上面那批还在用），它的 `animates` 单测仍在跑。
+     ⇒ 渲染**真实行 + 占位数据 + `.redacted`**，手抄的几何全部删除。
+   - **详情页那一批（第二波，同批完成）**：`RepoDetailView` · `ExploreRepoDetailView` ·
+     `IssueDetailView` · `PullDetailView` · `CommitDetailView` · `FileView` · `EditorView` ·
+     `BranchesView` · `ProfileView`（热力图）· `RepoReadmeSection` · `RepoSectionListView`（commits）
+     · `BranchSheet` / `LabelPickerSheet` / `PullDetailView` 的 commits 与 diff 骨架
+     ⇒ 一律改成"**把真实的那个函数喂一份占位数据再 `.redacted`**"：能抽的函数抽出来
+     （`loaded(_:)` / `documentBody(_:)` / `editorBody` / `rows(_:)`），骨架与内容**同源**。
+   - 配套 `GitDuoKit/Models/Placeholders.swift` 扩到 **19 个占位**（域模型 + `Placeholders.document`
+     / `heatmapLevels()` 这类纯填料工厂）。
+   - ⚠️ **`.redacted` 不拦截点击** ⇒ 每一处骨架都要 `.allowsHitTesting(false)`：
+     否则被遮住的"新建分支 / Revert / 提交 / 分段条"真的会被点到（骨架期点出来的必然失败）。
+   - ✅ **`SkeletonBar` 已删除**（组件 + 它的 `animates` 单测 + 四处指向它的注释已改写）
+     —— 生产代码里一处调用都没有了。"骨架色 + 圆角矩形"这个组合从此在项目里不存在，
+     `TECH_SPEC` §8.5 判据 ① 由"单一原子"改判成"**不存在自绘骨架**"（见该处 2026-10-16 注）。
+
 2. ✅ 空态 / 失败：`EmptyBox`（24）· `PageFailure`（16）· `SectionFailure`（28）→ `ContentUnavailableView`
    - 三者**保留类型名与入参**，内部换成官方件（24 个调用点一行不动）。
    - `EmptyBox` 新增 `systemImage`（官方空态带图标，默认 `tray`），12 处按语义给了字形。

@@ -108,17 +108,24 @@ struct CommitDetailView: View {
 
         case .content:
             if let detail = model.detail.value {
-                // 原型 `.conv-head{margin-bottom:12px}` 与 `.diffcard{margin-bottom:12px}`
-                // ⇒ 三块之间同一个间距。
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    header(detail)
-                    files(detail)
-                    footer
-                }
+                loaded(detail)
             }
 
         case let .failure(error):
             failureState(error)
+        }
+    }
+
+    /// 有内容那一档 —— 抽成函数是为了让**骨架与内容走同一份布局**
+    /// （NATIVE-MIGRATION P1）。
+    ///
+    /// ⚠️ 原型 `.conv-head{margin-bottom:12px}` 与 `.diffcard{margin-bottom:12px}`
+    /// ⇒ 三块之间同一个间距。
+    private func loaded(_ detail: CommitDetail) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            header(detail)
+            files(detail)
+            footer
         }
     }
 
@@ -231,33 +238,18 @@ struct CommitDetailView: View {
 
     // MARK: - 骨架 / 失败
 
+    /// ## ⚠️ 2026-10-16 起不再手抄几何（NATIVE-MIGRATION P1）
+    ///
+    /// 画的是真实的 `loaded(_:)` + 占位详情 + `.redacted` ⇒ 头部卡与两张 diff 卡的
+    /// 形状（含 diff 行高）自动与内容一致。
+    ///
+    /// ⚠️ `allowsHitTesting(false)`：`.redacted` **不拦截点击** —— 遮住的
+    /// 「Revert」（自己的仓库）真的会弹提示并打开浏览器。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            CardBox() {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 17, width: 240)
-                    SkeletonBar(height: 11, width: 180)
-                }
-            }
-
-            ForEach(0..<2, id: \.self) { _ in
-                // 与 `DiffCard` 同形状：一行文件名 + 若干 diff 行。
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 13, width: 220)
-                    SkeletonBar(height: 11, width: 260)
-                    SkeletonBar(height: 11, width: 200)
-                }
-                .padding(Theme.Spacing.m)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // 方案 A：diff 卡是**白卡**（与 `DiffCard` 一致：圆角 18、无边框）。
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                        .fill(Theme.Palette.surface)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous))
-            }
-        }
-        .accessibilityHidden(true)
+        loaded(.placeholder)
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。

@@ -113,15 +113,16 @@ struct BranchSheet: View {
         }
     }
 
+    /// 与 `BranchesView.skeleton` 同一条口径（NATIVE-MIGRATION P1）：渲染真实的
+    /// `rows(_:)` + 占位列表 + `.redacted`，不再手抄行高。
+    ///
+    /// ⚠️ `allowsHitTesting(false)`：**`.redacted` 不拦截点击** —— 遮住的行被点到
+    /// 会把一条叫 `placeholder-0` 的分支名回调出去，那是一次必然失败的切换。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            ForEach(0..<4, id: \.self) { _ in
-                SkeletonBar(height: 18, width: 160)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .accessibilityHidden(true)
+        rows(BranchList.placeholder(count: 4))
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private var failure: some View {

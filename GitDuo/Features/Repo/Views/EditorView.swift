@@ -195,27 +195,19 @@ struct EditorView: View {
     // MARK: - 骨架 / 失败
 
     /// 编辑模式在读既有内容（那一次读同时给编辑区初值与乐观锁基准）。
+    ///
+    /// ## ⚠️ 2026-10-16 起不再手抄几何（NATIVE-MIGRATION P1）
+    ///
+    /// 画的是真实的 `editorBody` + `.redacted` —— 上面那句"与
+    /// `CodeTextArea(minLines: 13)` 的形状对得上"从此自动成立。
+    ///
+    /// ⚠️ `allowsHitTesting(false)`：`.redacted` **不拦截点击** —— 遮住的
+    /// 「提交」按钮与路径输入框都还能被打到（路径框会弹键盘）。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SkeletonBar(height: 13, width: 240)
-
-            // 与 `CodeTextArea(minLines: 13)` 的形状对得上，否则内容到位那一刻整块会跳。
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                ForEach(0..<13, id: \.self) { _ in
-                    SkeletonBar(height: 13, width: 210)
-                }
-            }
-            .padding(Theme.Spacing.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // 方案 A：编辑器容器是**白卡**（与页面上的其它内容块同形状），无边框。
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                    .fill(Theme.Palette.surface)
-            )
-
-            SkeletonBar(height: 42)
-        }
-        .accessibilityHidden(true)
+        editorBody
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。

@@ -30,8 +30,8 @@ import SwiftUI
 /// 从前那两条尺寸纪律（容器 padding 要与真实 `CardBox` 一致、行内边距要补 `11px 4px`）
 /// **随之作废** —— 它们本来就是为了"手抄的几何别抄错"，现在没有第二份几何可抄。
 ///
-/// ⚠️ **面包屑那一条仍是 `SkeletonBar`**：它对着的是 `BreadcrumbBar`（自绘件，C 组），
-/// 换成真实面包屑需要一整套假的分支 / 路径上下文，留到 P6 那批一起做。
+/// ⚠️ 面包屑那一条（`BreadcrumbBar`，自绘件、C 组）**也换成了真件 + 占位路径**
+/// —— 它只是一行纯展示（两个可选回调都不给），不需要"整套假的分支 / 路径上下文"。
 struct RepoTreeSkeleton: View {
 
     /// 画几行。取 6 是因为一屏能见到的行数大约就是这些。
@@ -39,8 +39,11 @@ struct RepoTreeSkeleton: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            // 面包屑那一条（`BreadcrumbBar` 高 32）—— ⚠️ 见类型说明：这行还是自绘块。
-            SkeletonBar(height: 32)
+            // 面包屑：真件 + 占位分支名 / 路径段（两个回调都不给 ⇒ 整条不可点）。
+            BreadcrumbBar(
+                branch: Placeholders.shortLine,
+                path: [Placeholders.line, Placeholders.shortLine]
+            )
 
             CardBox {
                 ForEach(0..<rows, id: \.self) { index in

@@ -411,49 +411,18 @@ struct ExploreRepoDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// ## ⚠️ 2026-10-16 起不再手抄几何（NATIVE-MIGRATION P1）
+    ///
+    /// 画的是真实的 `sections(_:)` + 占位洞察 + `.redacted` —— 七个分区的形状
+    /// （头部大卡、三张卡的标题条与内容条）从此与内容同源。
+    ///
+    /// ⚠️ `allowsHitTesting(false)`：`.redacted` **不拦截点击** —— 被遮住的那几行
+    /// 入口（文件浏览 / Issues / PR）真的会推页，而且推过去的是 `placeholder/placeholder`。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // 头部大卡
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                HStack(spacing: Theme.Spacing.m) {
-                    SkeletonBar(
-                        height: RepoAvatar.standard.diameter,
-                        width: RepoAvatar.standard.diameter,
-                        // ⚠️ 2026-10-15 起占位块也是**圆的**（走查第 72 条：真实内容换成了 owner 头像）。
-                        cornerRadius: RepoAvatar.standard.diameter / 2
-                    )
-                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                        SkeletonBar(height: 16, width: 150)
-                        SkeletonBar(height: 11, width: 190)
-                    }
-                    Spacer(minLength: 0)
-                }
-                SkeletonBar(height: 12)
-                SkeletonBar(height: 12, width: 210)
-                HStack(spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 44)
-                    SkeletonBar(height: 44)
-                    SkeletonBar(height: 44)
-                }
-                .padding(.top, Theme.Spacing.s)
-            }
-            .padding(Theme.Spacing.l)
-            .background(Theme.Palette.surface)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous))
-
-            // 三张卡
-            ForEach(0..<3, id: \.self) { _ in
-                SkeletonBar(height: 12, width: 96).padding(.top, Theme.Spacing.xl)
-                CardBox {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                        SkeletonBar(height: 12)
-                        SkeletonBar(height: 12, width: 180)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityHidden(true)
+        sections(.placeholder)
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。

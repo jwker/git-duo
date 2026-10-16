@@ -1,4 +1,5 @@
 import Foundation
+import GitDuoCore
 
 /// 占位数据 —— 官方骨架方案 `.redacted(reason: .placeholder)` 的配套（NATIVE-MIGRATION P1）。
 ///
@@ -37,6 +38,30 @@ public enum Placeholders {
     /// 一个固定时刻。**不要在这里取 `Date()`** —— 占位数据是值，每次渲染都变会让
     /// 相对时间（`#42 · 3 天前`）在 redacted 下也跟着变，且无从稳定。
     public static let date = Date(timeIntervalSince1970: 0)
+
+    /// 一份"看起来像一篇文档"的 Markdown 源文 —— README / 正文 / 版本说明那一族的占位。
+    ///
+    /// ⚠️ 它会被 `MarkdownDocument` 真解析一遍（`MarkdownBody` 吃的是块），
+    /// 所以这里要是**合法 Markdown**，否则解析出来是空块、占位区什么都不画。
+    public static let document = """
+        # 占位占位占位
+
+        占位占位占位占位占位占位占位占位占位占位
+
+        占位占位占位占位占位占位占位
+        """
+
+    /// 文件名 / 路径那一类占位（文件页、编辑器、diff 卡的文件名行）。
+    public static let fileName = "Placeholder.swift"
+
+    /// 热力图骨架用的占位矩阵：`columns` 列 × 7 行、全是**最浅档**（`0`）。
+    ///
+    /// ⚠️ 行数取 `ContributionGrid.rowCount`（领域层常量），不在这里再写一个 7。
+    /// 列数写 53 是**"一整年"这件事本身**（`ContributionHeatmap` 的说明里那串
+    /// `53 × 11 + 52 × 2.5`），不是抄某个像素值。
+    public static func heatmapLevels(columns: Int = 53) -> [[Int?]] {
+        Array(repeating: Array(repeating: 0, count: ContributionGrid.rowCount), count: columns)
+    }
 }
 
 extension Repository {
@@ -103,6 +128,67 @@ extension TreeEntry {
     )
 }
 
+extension RepositoryDetail {
+
+    /// 仓库详情页头部（`RepoDetailHero`）的占位。
+    ///
+    /// ⚠️ `starCount` / `forkCount` / `watcherCount` / `defaultBranch` **必须显式给**
+    /// （见 `RepositoryDetail.init` 的说明）：给它们编默认值会让"忘了传"编译通过。
+    /// 这里给 0 是"骨架期的形状"，redacted 之下读不到这些数。
+    public static let placeholder = RepositoryDetail(
+        fullName: "placeholder/placeholder",
+        description: Placeholders.line,
+        defaultBranch: "main",
+        starCount: 0,
+        forkCount: 0,
+        watcherCount: 0,
+        pushedAt: Placeholders.date
+    )
+}
+
+extension BranchSummary {
+
+    /// 分支行（`BranchRow` / `SheetRow`）的占位。
+    ///
+    /// ⚠️ 名字**带序号**：`BranchSummary.id` 就是分支名，`ForEach(list.branches)`
+    /// 用的正是它 —— 几条占位同名会撞键（表现是"骨架只有一行"）。
+    public static func placeholder(index: Int = 0) -> BranchSummary {
+        BranchSummary(name: "placeholder-\(index)", commitSHA: "", isProtected: false)
+    }
+}
+
+extension BranchList {
+
+    /// 分支页与切换分支弹层的占位列表。
+    ///
+    /// 直接喂给真实的 `loaded(_:)` / `rows(_:)` ⇒ 骨架连"分组标题 + 两个按钮"都
+    /// 不是第二份写法，与真实布局**同源**。
+    public static func placeholder(count: Int = 5) -> BranchList {
+        BranchList(branches: (0..<count).map { BranchSummary.placeholder(index: $0) }, hasMore: false)
+    }
+}
+
+extension CommitSummary {
+
+    /// 提交行（`RepoCommitRow`）的占位。
+    public static let placeholder = CommitSummary(
+        sha: "0000000",
+        message: Placeholders.line,
+        authorLogin: "placeholder",
+        authoredAt: Placeholders.date
+    )
+}
+
+extension Label {
+
+    /// 标签行（`LabelPickerSheet` 的 `SheetRow`）的占位。
+    ///
+    /// ⚠️ 同 `BranchSummary`：`Label.id` 就是名字，几条占位同名会撞 `ForEach` 的键。
+    public static func placeholder(index: Int = 0) -> Label {
+        Label(name: "placeholder-\(index)", colorHex: "D0D7DE")
+    }
+}
+
 extension StarState {
 
     /// 「我的 Star」那一行的状态占位。
@@ -112,4 +198,119 @@ extension StarState {
     public static func placeholder(fullName: String = "placeholder/placeholder") -> StarState {
         StarState(fullName: fullName, isStarred: false, starCount: 0, baselineConfirmed: false)
     }
+}
+
+extension IssueDetail {
+
+    /// Issue 详情页整页骨架的占位（`IssueDetailView` 直接把真实的 `loaded(_:)` 喂给它）。
+    ///
+    /// ⚠️ `body` **必须有内容** —— `hasBody` 为假时正文气泡整块不渲染，
+    /// 占位区就会比真实内容少一截。
+    public static let placeholder = IssueDetail(
+        number: 0,
+        title: Placeholders.line,
+        isOpen: true,
+        body: Placeholders.document,
+        authorLogin: "placeholder",
+        createdAt: Placeholders.date
+    )
+}
+
+extension IssueComment {
+
+    /// 评语气泡（`CommentRow`）的占位。
+    public static func placeholder(index: Int = 0) -> IssueComment {
+        IssueComment(
+            id: index,
+            body: Placeholders.line,
+            authorLogin: "placeholder",
+            createdAt: Placeholders.date
+        )
+    }
+}
+
+extension PullDetail {
+
+    /// PR 详情页骨架的占位。
+    public static let placeholder = PullDetail(
+        number: 0,
+        title: Placeholders.line,
+        state: .open,
+        headRef: "placeholder",
+        baseRef: "placeholder",
+        authorLogin: "placeholder",
+        createdAt: Placeholders.date,
+        updatedAt: Placeholders.date,
+        body: Placeholders.document,
+        additions: 0,
+        deletions: 0,
+        changedFiles: 0
+    )
+}
+
+extension CommitDetail {
+
+    /// 提交详情页骨架的占位。
+    ///
+    /// ⚠️ `files` 给一条**占位改动**（不是空数组）：空数组会让 `files(_:)` 落到
+    /// 「这个提交没有文件改动」那一块，占位区与真实内容差出两张 diff 卡。
+    public static let placeholder = CommitDetail(
+        sha: "0000000",
+        message: Placeholders.line,
+        authorLogin: "placeholder",
+        authoredAt: Placeholders.date,
+        stats: Stats(additions: 0, deletions: 0, total: 1),
+        files: [FileChange.placeholder]
+    )
+}
+
+extension FileChange {
+
+    /// 一张 diff 卡的占位。
+    ///
+    /// ⚠️ `patch` 给一段**真的 unified diff**：`DiffCard` 是按行解析它来画的，
+    /// 给 `nil` 会落到"二进制 / 无 diff"那一档，占位区就只剩文件名一行。
+    public static let placeholder = FileChange(
+        filename: Placeholders.fileName,
+        additions: 0,
+        deletions: 0,
+        status: .modified,
+        patch: """
+            @@ -1,3 +1,3 @@
+             占位占位占位
+            -占位占位占位
+            +占位占位占位
+            """
+    )
+}
+
+extension FileContent {
+
+    /// 文件页与编辑器整页骨架的占位。
+    ///
+    /// ⚠️ `markdown: nil` ⇒ 占位画的是**代码块**（`CodeSurface`）那一档。
+    /// 真实内容若是 `.md`，到位时会换成文档卡 —— 骨架与内容在这一档上形状不同，
+    /// 是有意的取舍：占位只可能选一档，而"多数文件是代码"更常见。
+    public static let placeholder = FileContent(
+        path: RepoPath(path: Placeholders.fileName),
+        blobSHA: "",
+        size: 0,
+        body: .text(Array(repeating: Placeholders.line, count: 8).joined(separator: "\n")),
+        preview: .text,
+        markdown: nil
+    )
+}
+
+extension RepoInsights {
+
+    /// 他人仓库详情页（`ExploreRepoDetailView`）整页骨架的占位。
+    ///
+    /// ⚠️ 四个分区各给一条最少但**非空**的数据：语言构成、最新版本、贡献者
+    /// 在"空"时各会退化成一行灰字（`emptyLine`），占位区就少三张卡。
+    public static let placeholder = RepoInsights(
+        detail: .placeholder,
+        languages: [LanguageShare(language: "Placeholder", bytes: 1, percent: 100)],
+        release: LatestRelease(tagName: "placeholder", publishedAt: Placeholders.date),
+        contributors: ContributorRoster(contributors: [Contributor(login: "placeholder")])
+    )
 }

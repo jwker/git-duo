@@ -1,4 +1,5 @@
 import GitHubAPI
+import GitDuoCore
 import GitDuoDesign
 import GitDuoKit
 import SwiftUI
@@ -123,25 +124,31 @@ struct PullDetailView: View {
 
         case .content:
             if let detail = model.detail.value {
-                // 原型各块之间是 `margin-bottom:12px` ⇒ `Spacing.m`。
-                VStack(alignment: .leading, spacing: 0) {
-                    ConversationHeader(
-                        stateTitle: detail.state.pillTitle,
-                        stateTone: StateTone.tone(for: detail.state),
-                        note: detail.headNote(now: now),
-                        title: detail.title,
-                        meta: detail.metaLabel(now: now)
-                    )
-
-                    sectionTabs(detail)
-                        .padding(.top, Theme.Spacing.m)
-
-                    sectionBody(detail)
-                }
+                loaded(detail)
             }
 
         case let .failure(error):
             PageFailure(error: error) { Task { await model.refresh() } }
+        }
+    }
+
+    /// 有内容那一档 —— 抽成函数是为了让**骨架与内容走同一份布局**
+    /// （NATIVE-MIGRATION P1：骨架 = 这份布局 + 占位数据 + `.redacted`）。
+    private func loaded(_ detail: PullDetail) -> some View {
+        // 原型各块之间是 `margin-bottom:12px` ⇒ `Spacing.m`。
+        VStack(alignment: .leading, spacing: 0) {
+            ConversationHeader(
+                stateTitle: detail.state.pillTitle,
+                stateTone: StateTone.tone(for: detail.state),
+                note: detail.headNote(now: now),
+                title: detail.title,
+                meta: detail.metaLabel(now: now)
+            )
+
+            sectionTabs(detail)
+                .padding(.top, Theme.Spacing.m)
+
+            sectionBody(detail)
         }
     }
 
@@ -354,24 +361,22 @@ struct PullDetailView: View {
     private var commits: some View {
         switch model.commits {
         case .idle, .loading:
-            // 与真内容的形状对齐：一张卡 + 四行（每行一个头像 + 两行字 + 徽章）。
+            // ⚠️ 与 `RepoSectionListView.commitsSkeleton` 同款（NATIVE-MIGRATION P1）：
+            //    画**真实的提交行** + 占位 + `.redacted`，不再手抄"头像 28 + 两行字 + 徽章"。
             CardBox() {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        HStack(spacing: 10) {
-                            SkeletonBar(height: 28, width: 28, cornerRadius: 14)
-                            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                                SkeletonBar(height: 13, width: 200)
-                                SkeletonBar(height: 11, width: 130)
-                            }
-                            Spacer(minLength: 0)
-                            SkeletonBar(height: 18, width: 54)
-                        }
-                        .padding(.vertical, 11)
-                        .padding(.horizontal, Theme.Spacing.xs)
+                    ForEach(0..<4, id: \.self) { index in
+                        RepoCommitRow(
+                            commit: .placeholder,
+                            now: now,
+                            showsSeparator: index < 3,
+                            action: {}
+                        )
                     }
                 }
             }
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
             .accessibilityHidden(true)
 
         case .loaded:
@@ -465,70 +470,62 @@ struct PullDetailView: View {
     // MARK: - 骨架
 
     /// 整页骨架 —— 含分段条（见类型说明）。
+    ///
+    /// ## ⚠️ 2026-10-16 起不再手抄几何（NATIVE-MIGRATION P1）
+    ///
+    /// 头部与分段条都画**真件**（`ConversationHeader` / `sectionTabs`）+ 占位详情
+    /// + `.redacted` —— "三行与头部一一对应"、"三格等分 + 3pt 内边距"这些手抄的
+    /// 约定都不用再守着。
+    ///
+    /// ⚠️ 对话那两口气泡仍走 `bubbleSkeleton`（`model.conversation` 还在 loading，
+    /// 由 `conversationList` 自己画）。⚠️ `allowsHitTesting(false)`：
+    /// `.redacted` **不拦截点击**，被遮住的分段条与操作区按钮都还点得动。
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 头部卡：胶囊 + 说明那一行、标题、元信息行 —— 三行，与 `ConversationHeader`
-            // 的三行一一对应（骨架的用处就是让"东西来了之后"不发生跳动）。
-            CardBox() {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    SkeletonBar(height: 11, width: 140)
-                    SkeletonBar(height: 17, width: 260)
-                    SkeletonBar(height: 11, width: 200)
-                }
-            }
+            ConversationHeader(
+                stateTitle: PullRequestState.open.pillTitle,
+                stateTone: StateTone.tone(for: .open),
+                note: Placeholders.shortLine,
+                title: Placeholders.line,
+                meta: Placeholders.shortLine
+            )
 
-            // 分段条：三格等分 + 3pt 内边距 ⇒ 一条 34pt 高的圆角条。
-            SkeletonBar(height: 34, width: nil, cornerRadius: Theme.Radius.control)
+            sectionTabs(.placeholder)
                 .padding(.top, Theme.Spacing.m)
-                .padding(.bottom, Theme.Spacing.m)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 ForEach(0..<2, id: \.self) { _ in bubbleSkeleton }
-
-                // 输入区。
-                SkeletonBar(height: 58, width: nil)
             }
         }
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
     /// 一条评论 / 正文气泡的骨架（与 `IssueDetailView` 同形状）。
     ///
-    /// ⚠️ 它**不画头像** —— 骨架的作用是占位与定高，不是把成品预先画一遍。
+    /// ⚠️ 画的是**真实的 `CommentRow`** + 占位评论（NATIVE-MIGRATION P1）：
+    /// 圆角、内边距、头像那一列的位置都自动与真气泡一致。
     private var bubbleSkeleton: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            SkeletonBar(height: 11, width: 120)
-            SkeletonBar(height: 13, width: nil)
-            SkeletonBar(height: 13, width: 180)
-        }
-        .padding(Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // 方案 A：气泡是**白卡**（与 `CommentBubble` 一致：圆角 18、无边框）。
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                .fill(Theme.Palette.surface)
+        CommentRow(
+            login: "placeholder",
+            authorName: AuthorName.display("placeholder"),
+            timeText: RelativeTime.string(from: Placeholders.date, now: now),
+            blocks: MarkdownDocument(Placeholders.line).blocks
         )
+        .redacted(reason: .placeholder)
+        .allowsHitTesting(false)
     }
 
     /// 一张 diff 卡片的骨架（折叠态的样子：只有头部那一行）。
+    ///
+    /// ⚠️ 画的是**真实的 `DiffCard`** + 占位改动 + `.redacted`（NATIVE-MIGRATION P1），
+    /// 与下面 `fileRows` 那一支同款（`initiallyExpanded: false`）——
+    /// 折叠态那行"文件名 + `+a −d`"的几何从此不用手守。
     private var diffSkeleton: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: Theme.Spacing.s) {
-                SkeletonBar(height: 12, width: 200)
-                Spacer(minLength: 0)
-                SkeletonBar(height: 11, width: 40)
-                SkeletonBar(height: 11, width: 40)
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, Theme.Spacing.m)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // 方案 A：diff 卡是**白卡**（与 `DiffCard` 一致：圆角 18、无边框）。
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous))
+        DiffCard(file: .placeholder, initiallyExpanded: false)
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
     }
 }
 

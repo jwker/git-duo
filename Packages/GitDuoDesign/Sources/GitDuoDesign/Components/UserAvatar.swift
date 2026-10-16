@@ -167,7 +167,7 @@ public struct UserAvatar: View {
     /// `nonisolated`：它不碰任何 UI 状态，而 `View` 的成员默认继承主 actor 隔离 ——
     /// 不标的话，`AvatarStack.Member.initial`（非隔离的计算属性）调它就会得到一条
     /// actor 隔离告警。那条告警本身无害，但它会训练人忽略告警，
-    /// 而下一个真告警就不会被看见了（沿 `SkeletonBar.animates` 的先例）。
+    /// 而下一个真告警就不会被看见了。
     public nonisolated static func initial(for login: String?) -> String {
         guard let first = login?.trimmingCharacters(in: .whitespacesAndNewlines).first else {
             return "?"
