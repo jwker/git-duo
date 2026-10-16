@@ -8,6 +8,25 @@ import GitDuoKit
 /// 结构：大标题「首页」+ 右上角搜索 · 「置顶仓库」**行列表**（最多 6 条，
 /// ⚠️ 2026-10-15 走查第 75 条起不再是 2 列网格）·「最近访问」列表。
 ///
+/// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3）
+///
+/// 从前是 `ScrollView + VStack` + 每组分装一张 `CardBox` + 行自己画内嵌 hairline。
+/// 换成 `List` 之后白拿回来的东西：
+///
+/// | 白拿的 | 从前怎么来的 |
+/// |---|---|
+/// | 行间分隔线（**首行不画、末行不画**） | 靠调用方手数 index 传 `showsSeparator`（走查第 76/77 条那一族口径） |
+/// | 整行点击范围与按下高亮 | `Button` + `.plain`，没有高亮 |
+/// | 行内边距 / 卡片底 / 圆角 | 行自己 `padding(14)` + `CardBox` + 页面左右留白 |
+/// | 列表的可达性 / 动态类型 / 性能 | 自绘 |
+///
+/// ⇒ 那一整族"顶线还是底线、缩进 66/56/57"的问题**随自绘件一起消失**。
+/// 分隔线由系统画，它对"谁是首行"有确定的答案。
+///
+/// ⚠️ 两条**有意保留**的自定观感（属于 P5 令牌收尾，不在本期）：
+/// 页面底仍是 `Theme.Palette.background`（浅灰），行底仍是 `Theme.Palette.surface`
+/// —— 不让 `List` 自带的系统底色盖掉主题（`.scrollContentBackground(.hidden)`）。
+///
 /// ## ⚠️ 这一屏唯一容易写错的，是"点什么进哪里"
 ///
 /// 置顶卡与最近访问行都可能是**他人仓库**（原型 `PINNED` 里就混着 `rust-lang/rust`），
@@ -50,14 +69,13 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                pinnedSection
-                recentSection
-            }
-            .padding(.horizontal, Theme.Spacing.page)
-            .padding(.bottom, Theme.Spacing.xl)
+        List {
+            pinnedSection
+            recentSection
         }
+        .listStyle(.insetGrouped)
+        // 主题的页面底 / 行底不交给系统（P5 才动令牌）—— 只把 `List` 自带的底色让开。
+        .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         .navigationTitle(HomeCopy.title)
         .toolbar {
@@ -107,48 +125,55 @@ struct HomeView: View {
 
     @ViewBuilder
     private var pinnedSection: some View {
-        SectionHeader(
-            title: HomeCopy.pinnedSection,
-            actionTitle: HomeCopy.pinnedManage,
-            action: managePins
-        )
+        Section {
+            switch model.pinned.presentation {
+            case .skeleton:
+                PinRowsSkeleton()
 
-        switch model.pinned.presentation {
-        case .skeleton:
-            PinRowsSkeleton()
+            case .content:
+                pinnedRows
 
-        case .content:
-            pinnedGrid
-
-        case let .failure(error):
-            failureBox(error)
+            case let .failure(error):
+                SectionFailure(error: error) {
+                    Task { await model.refresh() }
+                }
+                // 空态 / 失败态**不是列表内容** ⇒ 不坐白卡、不画分隔线
+                //（官方件自带上下留白，坐白卡里会像"一条空记录"）。
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+        } header: {
+            // ⚠️ `margins: .none` —— 组间距现在由 `List` 的 section 机制给，
+            //    标题再自带 22 的上边距就叠了一层。
+            SectionHeader(
+                title: HomeCopy.pinnedSection,
+                actionTitle: HomeCopy.pinnedManage,
+                action: managePins,
+                margins: .none
+            )
         }
     }
 
     /// 内容态。**空数组是正常结果**（还没置顶任何仓库），不是错误（TECH_SPEC §9.1）。
     @ViewBuilder
-    private var pinnedGrid: some View {
+    private var pinnedRows: some View {
         let items = model.pinned.value ?? []
         if items.isEmpty {
             EmptyBox(title: HomeCopy.pinnedEmptyTitle, hint: HomeCopy.pinnedEmptyHint,
                     systemImage: "pin.slash")
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
         } else {
-            // ⚠️ 2026-10-15 走查第 75 条：置顶从 **2 列灰块网格**改成**单列平铺行**；
-            //    走查第 76 条（方案 A）又把这一组**装回一张白卡** —— 页面转回浅灰后，
-            //    一组行需要一张卡聚起来（原型 `.pin-grid` 现在就是那张卡）。
-            //    行间 hairline 由行自己画在顶上，首行不画（同 `RecentRow`）。
-            CardBox(vertical: 0, horizontal: 0) {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, summary in
-                        Button {
-                            openPinned(summary)
-                        } label: {
-                            PinRow(summary: summary, showsSeparator: index > 0)
-                        }
-                        .buttonStyle(.plain)
-                    }
+            ForEach(items) { summary in
+                // ⚠️ 用 `NavigationLink(value:)` 而不是 `Button` + `router.push`：
+                //    两者落点是同一条路径（本页的 `NavigationStack(path: $router.home)`
+                //    已注册 `.navigationDestination(for: Route.self)`），但前者让**整行**
+                //    可点、并给出系统的按下高亮与右侧箭头 —— 这是 `List` 行的既有语义。
+                NavigationLink(value: pinnedRoute(summary)) {
+                    PinRow(summary: summary)
                 }
             }
+            .listRowBackground(Theme.Palette.surface)
         }
     }
 
@@ -160,83 +185,41 @@ struct HomeView: View {
         // 没有记录还摆一个"清除"是个必然失败的动作 —— 而且它会让人以为"本来有东西"。
         let visits = model.visits
         let hasVisits = !visits.isEmpty
-        SectionHeader(
-            title: HomeCopy.recentSection,
-            actionTitle: hasVisits ? HomeCopy.recentClear : nil,
-            action: hasVisits ? { isConfirmingClear = true } : nil
-        )
-
-        if hasVisits {
-            // ⚠️ 不做本地去重 / 裁剪：上限 6 与"同一仓库只留一条"都在存储那一侧保证
-            //    （`RecentVisitStore`），这里重做一遍就等于有了两份规则。
-            // 方案 A：与置顶同构 —— 一组行 = 一张白卡（卡内行间内嵌 hairline）。
-            CardBox(vertical: 0, horizontal: 0) {
-                VStack(spacing: 0) {
-                    ForEach(visits.indices, id: \.self) { index in
-                        let visit = visits[index]
-                        Button {
-                            openVisit(visit)
-                        } label: {
-                            RecentRow(
-                                fullName: visit.fullName,
-                                // ⚠️ 描述与私有性**本机确实没有** —— `RecentVisit` 只存
-                                //    全名 / 时刻 / 当时是否可写（PRD §3.13）。传 `nil`
-                                //    是"陈述事实"，不是"忘了填"：`RecentRow` 的说明里写了
-                                //    这两格表达的就是"调用方手上有没有"。
-                                description: nil,
-                                isPrivate: nil,
-                                timeLabel: visit.timeLabel(now: .now),
-                                // 记录访问时落盘的 owner 头像地址（走查第 72 条）；
-                                // 旧记录没有这个字段 ⇒ `nil` ⇒ 行内首字母兜底圆。
-                                ownerAvatarURL: visit.ownerAvatarURL,
-                                // 分隔线是顶上那条内嵌 hairline —— 首行不画。
-                                showsSeparator: index > 0
-                            )
-                        }
-                        .buttonStyle(.plain)
+        Section {
+            if hasVisits {
+                // ⚠️ 不做本地去重 / 裁剪：上限 6 与"同一仓库只留一条"都在存储那一侧保证
+                //    （`RecentVisitStore`），这里重做一遍就等于有了两份规则。
+                ForEach(visits) { visit in
+                    NavigationLink(value: visitRoute(visit)) {
+                        RecentRow(
+                            fullName: visit.fullName,
+                            // ⚠️ 描述与私有性**本机确实没有** —— `RecentVisit` 只存
+                            //    全名 / 时刻 / 当时是否可写（PRD §3.13）。传 `nil`
+                            //    是"陈述事实"，不是"忘了填"：`RecentRow` 的说明里写了
+                            //    这两格表达的就是"调用方手上有没有"。
+                            description: nil,
+                            isPrivate: nil,
+                            timeLabel: visit.timeLabel(now: .now),
+                            // 记录访问时落盘的 owner 头像地址（走查第 72 条）；
+                            // 旧记录没有这个字段 ⇒ `nil` ⇒ 行内首字母兜底圆。
+                            ownerAvatarURL: visit.ownerAvatarURL
+                        )
                     }
                 }
+                .listRowBackground(Theme.Palette.surface)
+            } else {
+                EmptyBox(title: HomeCopy.recentEmptyTitle, hint: HomeCopy.recentEmptyHint,
+                        systemImage: "clock")
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-        } else {
-            EmptyBox(title: HomeCopy.recentEmptyTitle, hint: HomeCopy.recentEmptyHint,
-                    systemImage: "clock")
-        }
-    }
-
-    // MARK: - 失败态
-
-    /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4：任何失败都有出口）。
-    private func failureBox(_ error: GitHubError) -> some View {
-        VStack(spacing: Theme.Spacing.s) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 26))
-                .foregroundStyle(Theme.Palette.textTertiary)
-            Text("加载失败 · 点击重试")
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-            Button("重试") {
-                Task { await model.refresh() }
-            }
-            .font(Theme.Font.bodyStrong)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.l)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.container, style: .continuous)
-                .strokeBorder(Theme.Palette.border, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-        )
-        // 失败原因**只说确定的那一件事**：404 与无权限被 GitHub 混同，
-        // 不得替用户断定是"没有"还是"没权限"（与 `ReposView.failureHint` 同一口径）。
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(Self.failureHint(error))
-    }
-
-    private static func failureHint(_ error: GitHubError) -> String {
-        switch error {
-        case .transport: "网络不可用"
-        case .rateLimited: "请求过于频繁"
-        case .unauthorized: "登录状态已失效"
-        default: "服务暂时不可用"
+        } header: {
+            SectionHeader(
+                title: HomeCopy.recentSection,
+                actionTitle: hasVisits ? HomeCopy.recentClear : nil,
+                action: hasVisits ? { isConfirmingClear = true } : nil,
+                margins: .none
+            )
         }
     }
 
@@ -247,21 +230,17 @@ struct HomeView: View {
     // 所以这里只做一件事：把布尔值翻成路由。**不要**在这里再写一次权限判断。
 
     /// 置顶卡 → 自己的仓库详情（§4.4）或他人只读页（§4.13）。
-    private func openPinned(_ summary: RepoSummary) {
-        env.router.push(
-            summary.canOpenWritableDetail
-                ? .repoDetail(fullName: summary.fullName)
-                : .exploreRepoDetail(fullName: summary.fullName)
-        )
+    private func pinnedRoute(_ summary: RepoSummary) -> Route {
+        summary.canOpenWritableDetail
+            ? .repoDetail(fullName: summary.fullName)
+            : .exploreRepoDetail(fullName: summary.fullName)
     }
 
     /// 最近访问行 → 依据**写入时记下的归属**分流（PRD §3.13）。
-    private func openVisit(_ visit: RecentVisit) {
-        env.router.push(
-            visit.canWrite
-                ? .repoDetail(fullName: visit.fullName)
-                : .exploreRepoDetail(fullName: visit.fullName)
-        )
+    private func visitRoute(_ visit: RecentVisit) -> Route {
+        visit.canWrite
+            ? .repoDetail(fullName: visit.fullName)
+            : .exploreRepoDetail(fullName: visit.fullName)
     }
 
     /// 「管理」→ 打开网页端个人主页。

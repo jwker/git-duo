@@ -4,6 +4,12 @@ import GitDuoKit
 
 /// 首页「最近访问」的一行（PRD §4.1、原型 `scripts/04-search.js` 的 `.recent-row`）。
 ///
+/// ## ⚠️ 2026-10-16 起它是 **`List` 的一行**（NATIVE-MIGRATION P3）
+///
+/// 同 `PinRow`：自绘的内边距 14、卡内 hairline、外层 `CardBox` 全部删除 ——
+/// 行内边距 / 卡片底 / 分隔线 / 整行点击范围改由 `List` 给。
+/// `showsSeparator` 这个入参随之消失（系统知道首行与末行）。
+///
 /// ## ⚠️ 描述与私有标记是**可空**的，而且首页那条路径上它们就是 `nil`
 ///
 /// 「最近访问」在本机**只存仓库全名、访问时刻、以及当时是否可写**（`RecentVisit`，
@@ -46,10 +52,6 @@ struct RecentRow: View {
     /// 行内回退 owner 登录名的首字母兜底圆（走查第 72 条）。
     var ownerAvatarURL: URL? = nil
 
-    /// 首行不画分隔线（线画在**顶上**，原型 `.recent-row+.recent-row::before`
-    /// —— 相邻才画，第一条上面没有东西）。同 `MenuRow` 那条口径（走查第 77 条）。
-    var showsSeparator: Bool = true
-
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
             // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
@@ -78,21 +80,6 @@ struct RecentRow: View {
                 .lineLimit(1)
                 // 时间戳不该被说明文字挤走 —— 挤掉之后这一行就看不出"多久以前"了。
                 .layoutPriority(1)
-        }
-        // 方案 A（2026-10-15，走查第 76 条）：行回到**卡内** ⇒ 左右留白由行自己给 14
-        //（原型 `.recent-row{padding:14px}` / `.pin-card{padding:14px}`）。
-        .padding(14)
-        .contentShape(Rectangle())
-        .overlay(alignment: .topLeading) {
-            if showsSeparator {
-                Rectangle()
-                    .fill(Theme.Palette.borderSoft)
-                    .frame(height: 1)
-                    // 内嵌 hairline：从文字起点起，不再通栏。
-                    // 缩进 = **卡内边距 14** + 头像 30 + gap 12 = 56
-                    //（原型 `.recent-row+.recent-row::before{left:55px}`，App 的 gap 是 12 ⇒ 56）。
-                    .padding(.leading, 14 + RepoAvatar.row.diameter + Theme.Spacing.m)
-            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
@@ -155,15 +142,14 @@ struct RecentRow: View {
 }
 
 #Preview {
-    VStack(spacing: 0) {
+    // 它现在是 `List` 的一行 ⇒ 预览也按 `List` 摆。
+    List {
         RecentRow(
             fullName: "vercel/next.js",
             description: "The React Framework",
             isPrivate: false,
             timeLabel: "昨天",
-            ownerAvatarURL: URL(string: "https://avatars.githubusercontent.com/u/14985020?v=4"),
-            // ⚠️ 分隔线画在**顶上** ⇒ 第一行不画（同 `MenuRow`，走查第 77 条）。
-            showsSeparator: false
+            ownerAvatarURL: URL(string: "https://avatars.githubusercontent.com/u/14985020?v=4")
         )
         // 头像取不到（旧记录 / 地址失效）⇒ 首字母兜底圆 —— 也是一行合法的样子。
         RecentRow(
@@ -173,6 +159,4 @@ struct RecentRow: View {
             timeLabel: "2 天前"
         )
     }
-    .padding(.horizontal, Theme.Spacing.page)
-    .background(Theme.Palette.surface)
 }

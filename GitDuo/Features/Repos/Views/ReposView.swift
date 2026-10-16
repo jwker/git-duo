@@ -8,6 +8,25 @@ import GitDuoKit
 /// 结构：大标题「仓库」+ 右上角搜索图标 · 四个分段（全部 / 公开 / 私有 / Starred）· 卡片列表。
 /// 状态：骨架屏 →「继续加载」/ 内容 / 逐段空态 / 失败重试（§8.5 的三档统一）。
 ///
+/// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3）
+///
+/// 三处结构性改动：
+///
+/// 1. **内容主干** `ScrollView + LazyVStack` → `List`（行件只画内容，
+///    行底 / 分隔线 / 行内边距由系统给）。
+/// 2. **分段条从"吸顶的 section header"改成 `safeAreaInset(edge: .top)`**。
+///    从前那条吸顶效果是 `LazyVStack(pinnedViews: [.sectionHeaders])` 做出来的；
+///    `List` 里做同一件事要么换 `.plain` 风格（行会变成通栏、失去分组形状），
+///    要么在分区头里塞一个 `Picker`（不是它的用途）。
+///    `safeAreaInset` 是官方给"标题栏下面常驻一条工具条"的机制 ——
+///    **内容从它下面滚过去，而它自己永远不消失**，比吸顶还稳。
+/// 3. **空态 / 失败态换成官方件**（`EmptyBox` / `PageFailure`）——
+///    从前这两处是本文件里手摆的 `VStack`（第 8、9 份同形实现）。
+///
+/// ⚠️ 两条**有意保留**的自定观感（属 P5 令牌收尾）：页面底 `Theme.Palette.background`、
+///    行底 `Theme.Palette.surface` —— 用 `.scrollContentBackground(.hidden)` 把
+///    `List` 自带的底色让开。
+///
 /// ⚠️ **可写性判定唯一来源 = `Repository.permissions.push`**（TECH_SPEC §8.1、铁律 #7）。
 ///    本视图只读 `entry`，不自己判断"这是不是我的仓库" ——
 ///    原型里用 `fullName.hasPrefix("my-git/")` 是**无后端时的演示简化**，不得照搬。
@@ -24,30 +43,22 @@ struct ReposView: View {
     }
 
     var body: some View {
-        // ⚠️ 2026-10-11：这里改成了**两种骨架**，只为修一件事 ——
-        //    「首页」与「我的」两页是 `ScrollView` **直接当根**，上滑时大标题会收成
-        //    顶部一行小字；本页此前把 `ScrollView` 塞进 `VStack` 里（分段条在外），
-        //    导航栏就盯不住那个滚动视图了，大标题**不收**。用户报回「与首页不一样」。
-        //
-        //    修法就是按首页那样把滚动容器提到根上；分段条仍旧**吸顶**
-        //    （用 `pinnedViews` 的 section header，不是把它挪进滚动内容里 ——
-        //     那样它会跟着滚走，切分段的入口就没了）。
         Group {
             switch model.content {
             case .items, .skeleton:
-                scrollableBody
+                listBody
 
             case .needsMore, .empty, .failure:
-                // 这三档**本来就没有可滚的内容**，保持原样（分段条在外、内容居中）。
-                // ⚠️ 别顺手把它们也塞进 `ScrollView`：滚动视图给内容的建议高度是 `nil`，
-                //    那几颗用来居中的 `Spacer` 会塌成 0，空态 / 失败态会掉到顶上 ——
-                //    而它们挂着「重试」出口，位置一变就像换了个页面。
-                VStack(spacing: 0) {
-                    segmentBar
-                    mainArea
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // 这三档**本来就没有可滚的内容**，保持"分段条在外、内容居中"
+                //（`EmptyBox` / `PageFailure` 自带完整留白，不需要外层再撑）。
+                centeredBody
             }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            segmentBar
+                // ⚠️ 内容会从它**下面**滚过去 ⇒ 这一层必须不透明，否则卡片会从
+                //    分段条与导航栏之间的缝隙里透出来。
+                .background(Theme.Palette.background)
         }
         .background(Theme.Palette.background)
         .navigationTitle("仓库")
@@ -64,30 +75,12 @@ struct ReposView: View {
         .task { await model.loadIfNeeded() }
     }
 
-    /// 有内容时的骨架：滚动容器在根上，分段条是**吸顶的分区头**。
-    private var scrollableBody: some View {
-        ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    mainArea
-                } header: {
-                    segmentBar
-                        // ⚠️ 吸顶时它是**压在**滚过去的内容上的 ⇒ 这一层必须不透明，
-                        //    否则卡片会从分段之间的缝隙里透出来。
-                        .background(Theme.Palette.background)
-                }
-            }
-        }
-        .refreshable { await model.refresh() }
-    }
-
     // MARK: - 分段
     //
-    // ⚠️ 2026-10-06 改回原型：此前这里是自制的"绿色胶囊"（`accentStrong` + `Capsule`），
-    //    而原型 `styles/03-components.css` 的 `.seg` 是**深底白字、8pt 圆角**
-    //    （`.seg.on{background:var(--text);color:#fff}`）。形状与配色两处都不同。
-    //    用户拍板「两处都改回原型」⇒ 收缩进 `GitDuoDesign.SegmentedBar`，
-    //    与探索页的榜单分段共用同一份实现。
+    // ⚠️ 形状来自 2026-10-06 的裁定：原型 `styles/03-components.css` 的 `.seg` 是
+    //    **深底白字、8pt 圆角**（`.seg.on{background:var(--text);color:#fff}`），
+    //    此前这里是自制的"绿色胶囊" ⇒ 收进 `GitDuoDesign.SegmentedBar` 与探索页共用。
+    //    P2 起它的内胆是官方 `Picker(.segmented)`（见 `SegmentedBar` 的类型说明）。
 
     private var segmentBar: some View {
         SegmentedBar(
@@ -102,157 +95,125 @@ struct ReposView: View {
         .padding(.vertical, Theme.Spacing.s)
     }
 
-    // MARK: - 主区域
+    // MARK: - 有内容时的主干
 
-    /// ⚠️ **这里自己不再是滚动容器** —— 滚动与吸顶的分段条都在 `body` 那一层
-    /// （2026-10-11 起；此前 `.skeleton` / `.items` 各自带一个 `ScrollView`）。
-    @ViewBuilder
-    private var mainArea: some View {
-        switch model.content {
-        case .skeleton:
-            RepoCardSkeleton().padding(pageInsets)
+    private var listBody: some View {
+        List {
+            switch model.content {
+            case .skeleton:
+                RepoCardSkeleton()
+                    .listRowBackground(Theme.Palette.surface)
 
-        case .items:
-            list
+            case .items:
+                listRows
 
-        case .needsMore:
-            continueLoading
-
-        case .empty:
-            emptyState
-
-        case let .failure(error):
-            failureState(error)
+            default:
+                EmptyView()
+            }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .refreshable { await model.refresh() }
     }
 
-    private var list: some View {
+    @ViewBuilder
+    private var listRows: some View {
         // 过滤只算一次：每次渲染现算（§9.3 的本地过滤），但不要在一行里算 N 遍 ——
         // 尤其是 `onAppear` 里那句判断，逐行各过滤一次就是 O(n²)。
         let items = model.visibleItems
         let lastID = items.last?.id
 
-        return LazyVStack(spacing: 10) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, repository in
-                Button {
-                    open(repository)
-                } label: {
-                    // 方案 A：条目各自成卡，卡与卡之间是列表给的 10 间距、不画线。
-                    RepoCard(repository: repository)
-                }
-                .buttonStyle(.plain)
-                .onAppear {
-                    // 滚到底自动加载（§4.4：普通列表用自动加载，搜索才用手动按钮）。
-                    // 只对最后一行触发，否则每次出现一行都会打一次请求。
-                    if repository.id == lastID {
-                        Task { await model.loadMore() }
-                    }
+        ForEach(items) { repository in
+            // 整行可点 = `List` 行的既有语义（系统给按下高亮与右侧箭头），
+            // 落点与 `router.push` 完全同一条路径。
+            NavigationLink(value: route(for: repository)) {
+                RepoCard(repository: repository)
+            }
+            .onAppear {
+                // 滚到底自动加载（§4.4：普通列表用自动加载，搜索才用手动按钮）。
+                // 只对最后一行触发，否则每次出现一行都会打一次请求。
+                if repository.id == lastID {
+                    Task { await model.loadMore() }
                 }
             }
-
-            footer
         }
-        .padding(pageInsets)
+        .listRowBackground(Theme.Palette.surface)
+
+        footer
     }
 
     /// 列表底部：加载中 → 转圈；失败 → 重试行（**不遮挡已有内容**，§8.5）。
+    ///
+    /// ⚠️ 它不是"内容" ⇒ 不坐白卡、不画分隔线。
     @ViewBuilder
     private var footer: some View {
         if model.isLoading, !model.visibleItems.isEmpty {
-            ProgressView()
-                .padding(.vertical, Theme.Spacing.m)
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         } else if model.error != nil, !model.visibleItems.isEmpty {
             Button("加载失败 · 重试") {
                 Task { await model.loadMore() }
             }
-            .font(Theme.Font.footnote)
-            .padding(.vertical, Theme.Spacing.m)
+            .frame(maxWidth: .infinity)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
+    }
+
+    // MARK: - 没有可滚内容时的三档
+
+    @ViewBuilder
+    private var centeredBody: some View {
+        Group {
+            switch model.content {
+            case .needsMore:
+                continueLoading
+
+            case .empty:
+                EmptyBox(title: model.segment.emptyTitle, systemImage: "folder")
+
+            case let .failure(error):
+                // 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4：任何失败都有出口）。
+                PageFailure(error: error) {
+                    Task { await model.refresh() }
+                }
+
+            default:
+                EmptyView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// 空、但服务端还有下一页 —— 这时**不能说「还没有…」**。
     ///
     /// 为什么需要一个显式按钮：空列表没有可滚内容，`.onAppear` 的自动加载永远触发不到。
     /// 而这一页为空只是"这一页没有该段的条目"（三段共用一份数据本地过滤的必然产物）。
+    @ViewBuilder
     private var continueLoading: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Spacer(minLength: 0)
-            if model.isLoading {
-                ProgressView()
-            } else {
-                Button("继续加载") {
-                    Task { await model.loadMore() }
-                }
-                .font(Theme.Font.body)
+        if model.isLoading {
+            ProgressView()
+        } else {
+            Button("继续加载") {
+                Task { await model.loadMore() }
             }
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: Theme.Spacing.s) {
-            Spacer(minLength: 0)
-            Image(systemName: "folder")
-                .font(.system(size: 34))
-                .foregroundStyle(Theme.Palette.textTertiary)
-            Text(model.segment.emptyTitle)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4：任何失败都有出口）。
-    private func failureState(_ error: GitHubError) -> some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Spacer(minLength: 0)
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 30))
-                .foregroundStyle(Theme.Palette.textTertiary)
-            Text("加载失败 · 点击重试")
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-            Button("重试") {
-                Task { await model.refresh() }
-            }
-            .font(Theme.Font.bodyStrong)
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(failureHint(error))
-    }
-
-    /// 失败原因**只说确定的那一件事**：404 与无权限被 GitHub 混同（§4.3），不得替用户断定。
-    private func failureHint(_ error: GitHubError) -> String {
-        switch error {
-        case .transport: "网络不可用"
-        case .rateLimited: "请求过于频繁"
-        case .unauthorized: "登录状态已失效"
-        default: "服务暂时不可用"
         }
     }
 
-    // MARK: - 工具
+    // MARK: - 路由
 
-    private var pageInsets: EdgeInsets {
-        EdgeInsets(
-            top: Theme.Spacing.s,
-            leading: Theme.Spacing.page,
-            bottom: Theme.Spacing.xl,
-            trailing: Theme.Spacing.page
-        )
-    }
-
-    /// 路由选择：可写 ⇒ 可写详情页；只读 ⇒ 探索（只读）详情页。
-    private func open(_ repository: Repository) {
+    /// 可写 ⇒ 可写详情页；只读 ⇒ 探索（只读）详情页。
+    private func route(for repository: Repository) -> Route {
         switch repository.entry {
         case .writable:
-            env.router.push(.repoDetail(fullName: repository.fullName))
+            .repoDetail(fullName: repository.fullName)
         case .readOnly:
-            env.router.push(.exploreRepoDetail(fullName: repository.fullName))
+            .exploreRepoDetail(fullName: repository.fullName)
         }
     }
 }

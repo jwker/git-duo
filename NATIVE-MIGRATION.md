@@ -37,18 +37,18 @@
 |---|---|---|
 | `SkeletonBar`（+ 7 个 `*Skeleton`） | `.redacted(reason: .placeholder)` | 102 ✅ **P1 已完成**（组件已删） |
 | `UserAvatar` | `AsyncImage` + `.clipShape(.circle)` | 86 |
-| `CardBox` | `List` + `Section` / `.listRowBackground` | 69 |
+| `CardBox` | `List` + `Section` / `.listRowBackground` | 69 —— ⚠️ **P3 首批只清掉六个页面里的用法**（组件本身留着，仓库详情一族还在用） |
 | `ActionButton` | `Button` + `.buttonStyle(.borderedProminent/.bordered)` + `.tint()` | 50 ✅ **P2 已完成** |
 | `RepoAvatar`（已退役，只剩骨架常量） | `AsyncImage` / `Image(systemName:)` | 47 |
 | `StatInfo` | `Label` | 38 ✅ **P2 已完成**（官方 `Label`） |
 | `StatButton` | `Button` + `.buttonStyle(.bordered)` + `.capsule` | 37 ✅ **P2 已完成** |
-| `SectionHeader` | `Section("…")` 的 header | 36 |
+| `SectionHeader` | `Section` 的 header 位（`margins: .none`） | 36 ✅ **P3 已就位**（组件保留，只是搬进 header 位） |
 | `StateIcon` | `Image(systemName:)`（本就是 SF Symbols） | 33 |
 | `SegmentedBar` | `Picker` + `.pickerStyle(.segmented)` | 31 ✅ **P2 已完成**（动作格移到右侧按钮） |
 | `EmptyBox` | `ContentUnavailableView` | 24 |
-| `LinkRow` | `NavigationLink` | 21 |
+| `LinkRow` | `NavigationLink` | 21 —— ⏸ **P3 第二批**（仓库详情一族） |
 | `CodeTextArea` | `TextEditor` / `TextField(axis: .vertical)` | 16 |
-| `MenuCard`（+ `MenuRow`） | `List` + `Section` / `Form` | 15 |
+| `MenuCard`（+ `MenuRow`） | `List` + `Section` / `Form` | 15 —— ⏸ **P3 第二批**（「我的」根页） |
 | `PanelBox` | `Section` + `.background(_:in:)` | 13 |
 | `BranchRow` | `List` 行 + `.swipeActions(edge: .trailing)` | 11 |
 | `LabelDot` | `Circle` / 直接删（用 `Label` 的图标位） | 8 |
@@ -59,11 +59,11 @@
 | `RepoTreeSection` | `List` + `NavigationLink`（层级进栈） | 28 |
 | `IssueCard` | `List` 行 + `NavigationLink` + `Label` | 22 |
 | `PullCard` | 同上 | 20 |
-| `PinRow` | `List` 行 | 14 |
-| `StarRow` | `List` 行 + `LabeledContent` | 14 |
-| `RepoCard` | `List` 行 + `NavigationLink` | 13 |
-| `SearchRowView` / `SearchRowBox` | `List` + `Section`（分隔线由系统画） | 11 / 8 |
-| `RecentRow` | `List` 行 | 8 |
+| `PinRow` | `List` 行 | 14 ✅ **P3 已完成** |
+| `StarRow` | `List` 行 | 14 ✅ **P3 已完成**（`LabeledContent` 未用上：这一行是「全名 + 副标题」两行文本，不是 label/value 对） |
+| `RepoCard` | `List` 行 + `NavigationLink` | 13 ✅ **P3 已完成** |
+| `SearchRowView` / `SearchRowBox` | `List` + `Section`（分隔线由系统画） | 11 / 8 ✅ **P3 已完成**（`RowChevron` 已删） |
+| `RecentRow` | `List` 行 | 8 ✅ **P3 已完成** |
 | `RepoFileRow` / `RepoCommitRow` | `List` 行 + `NavigationLink` | 8 / 6 |
 | `RepoIssuesSection` | `List` + `Section` + `Picker(.segmented)` | 7 |
 | `ExploreFilterSheet` | `.sheet` + `List` / `Picker` | 6 |
@@ -91,7 +91,7 @@
 | `LabelPill` | `Text` + `.background(_:in: .capsule)` | 22 |
 | `RepoReadmeSection` | `Section` + `Text(AttributedString(markdown:))` + `Link` | 14 |
 | `RepoHeroCard` / `RepoDetailHero` | `Section` + `LabeledContent` + `Label` + `AsyncImage` | 12 / 10 |
-| `TrendCard` | `List` 行 + `NavigationLink` | 10 |
+| `TrendCard` | `List` 行 + `NavigationLink` | 10 ✅ **P3 已完成** |
 | `CommentComposer` | `TextField(axis: .vertical)` + `Button` + `.safeAreaBar` | 8 |
 | `SelectedLabelRow` | `LazyVGrid` + `Button` | 12 |
 | `FilterChip` | `Menu`（自带 label + indicator）或 `Picker` + `.menu` | 9 ✅ **P2 已完成**（实做否掉了 `Menu`，见 §3 P2 第 6 条） |
@@ -247,10 +247,68 @@
    （`allowsHitTesting(false)` / 去掉 `.isButton` / 补一句 `hint`）。`REVIEW-CHECKLIST §5` 那条待办结清。
 
 ### P3 · 列表主干（**最大的一期**）
-- 各页 `ScrollView + LazyVStack` → `List`（含 `.listStyle` 选型，iOS 26 下建议先用默认 / `.insetGrouped`）
-- 行件全部改成系统行：`RepoCard` `TrendCard` `IssueCard` `PullCard` `PinRow` `RecentRow` `StarRow` `MenuRow` `LinkRow` `BranchRow` `SearchRow*`
-- `SectionHeader`（36）→ `Section` 的 header；**自绘 hairline 全部删掉**（"顶线 vs 底线"、"缩进 66/56/57"这一整族问题随之消失）
-- `CardBox`（69）· `PanelBox`（13）· `MenuCard`（15）→ `Section` / `.listRowBackground`
+
+> **状态（2026-10-16）**：**第一批已做完** —— 六个页面/推入页（首页 · 仓库列表 · 探索 ·
+> 搜索 · 我的 Star · 我的会话）。⚠️ 本章的观感**还没有目视过一次**，请先在真机上看（`make device`）。
+> 第二批：**「我的」根页 + 仓库详情一族**（`RepoDetailView` / `ExploreRepoDetailView` /
+> `RepoSectionListView`（Issues / PRs / Commits 三段的行件）/ `RepoCodeView` / 各详情页）。
+
+1. ✅ **各页 `ScrollView + LazyVStack` → `List`**（`.listStyle(.insetGrouped)`
+   + `.scrollContentBackground(.hidden)` + `.background(Theme.Palette.background)`
+   + 行 `.listRowBackground(Theme.Palette.surface)`）。
+   - ⚠️ **为什么保留主题底色**：`Theme.Palette` 是 P5 的活；本期只换容器。
+     系统分组底色（浅 `#F2F2F7` / 深 `#000000`）与本 App 的
+     `background`（`#F6F8FA` / `#0D1117`）本来就很近，但没有理由现在顺手改掉。
+   - ⚠️ **"分段条吸顶"的替代是 `safeAreaInset(edge: .top)`**（仓库页 / 探索页 / 搜索页）：
+     原来那是 `LazyVStack(pinnedViews: [.sectionHeaders])`。`List` 里没有等价物
+     （`.plain` 风格有粘性表头，但行会变成通栏、失去分组形状；把 `Picker` 塞进分区头
+     不是它的用途）。`safeAreaInset` 是官方给"标题栏下面常驻一条工具条"的机制 ——
+     内容从它下面滚过去，**而它自己永远不消失**，比吸顶还稳。
+2. ✅ **行件全部改成系统行**（本批：`PinRow` / `RecentRow` / `RepoCard` / `TrendCard` /
+   `StarRow` / `SearchRowView` 四件 / 搜索历史行）。每件都只剩**内容**：
+   自绘的 `padding(14)` + 白面 + 圆角 18 + `showsSeparator` + 内嵌 hairline 全部删除。
+   - ⚠️ **跳转改用 `NavigationLink(value:)`**（原来是一律 `Button` + `router.push`）：
+     落点是**同一条路径**（`NavigationStack(path:)` 上已注册 `.navigationDestination(for: Route.self)`），
+     但系统由此白给"整行可点 + 按下高亮 + 右侧箭头"。
+   - ⚠️ `NavigationLink` **没有 action 回调**，而搜索页"点开要先记一笔关键词"是业务要求
+     ⇒ 用 `.simultaneousGesture(TapGesture().onEnded { … })` 补上（不吞掉跳转）。
+   - ⚠️ 开弹层的行（搜索的"用户"行、搜索历史行）**仍是 `Button`**，且**有意用默认样式**
+     （不带 `.buttonStyle(.plain)`）：在 `List` 行里默认样式给出的正是"整行可点 + 按压高亮"。
+     ⚠️ P2 那条"30 处 `.plain` 全部保留"的结论说的是**不在列表里**的自绘行件，
+     与这里不冲突 —— 判据还是「它坐在哪一层」。
+   - ⚠️ 自绘的 `RowChevron` **已删除**：系统箭头会**随"能不能推入"变化**，自绘的那一枚不会。
+3. ✅ **`SectionHeader`（36）→ `Section` 的 header 位**（`margins: .none`——
+   组间距现在由 `List` 的 section 机制给，标题再自带 22 的上边距就叠了一层）。
+   - ⚠️ 顺带给它补了 `.textCase(nil)`：`List` 的分组样式会给分区标题**加一层大写变换**，
+     而本件现在会被放进 header 位。在别处它是空操作。
+4. ⏸ **自绘 hairline 的那一族已随本批消失**（"顶线 vs 底线"、"缩进 66/56/57"、
+   "首行/末行传 false"）—— 分隔线由系统画，它对"谁是首行"有确定的答案。
+   ⚠️ 因此 `REVIEW-CHECKLIST` 第 76/77 条那两套口径**在已迁移的页面上作废**
+   （`MenuRow` / `LinkRow` / `RepoFileRow` / `RepoCommitRow` 还留在第二批的页面里，
+   它们的 `showsSeparator` 等到那一批再删）。
+5. ⏸ `CardBox`（69）· `PanelBox`（13）· `MenuCard`（15）→ `Section` / `.listRowBackground`：
+   **首批只吃掉了 `CardBox` 在六个页面里的用法**（组件本身留着 —— 仓库详情一族还在用）。
+   `MenuCard`（「我的」根页）与详情页里的面板留第二批。
+6. ✅ **空态 / 失败态 / 骨架**在迁移过的页面里全部换成"**行**"：
+   - `EmptyBox` / `PageFailure` / `SectionFailure` 坐**无底色行**（`.listRowBackground(Color.clear)`
+     + `.listRowSeparator(.hidden)`）：它们不是列表内容，坐白卡里会像"一条空记录"；
+   - 骨架（`PinRowsSkeleton` / `RepoCardSkeleton` / `ExploreBoardSkeleton` /
+     `StarRowSkeleton` / `SearchResultsSkeleton`）的 `body` 从 `VStack` 变成 **`ForEach`**
+     —— 一行就是一个 `List` 行，行间距与卡面由 `List` 给。
+
+> ## ⚠️ 两条宿主机实证（2026-10-16，`swiftc` + `NSHostingView` 探针）
+>
+> 写这一批之前先验了两件事，它们决定"骨架件还能不能是 `View`"：
+>
+> 1. **自定义 `View` 的 `body` 是 `ForEach` / `Section` 时，放进 `List` 会被摊成多行**
+>    —— 4 行 ⇒ 4 个 `ListTableRowView`，与"`ForEach` 直写在 `List` 里"**逐个一致**；
+>    `onAppear` 也触发 4 次。
+> 2. **在那种包装件上挂行修饰符（`.redacted` / `.listRowBackground`）不会破坏摊平**
+>    —— 三种形态（修饰符挂 `ForEach` / 挂包装件 / `.redacted` 挂包装件）行数都是 4。
+>
+> ⇒ 骨架件因此可以继续是"一个吐 N 行的件"，不必把 `ForEach` 抄到每个调用点。
+> ⚠️ 这是 macOS 变体上测的，但摊平发生在 SwiftUI 的 variadic-view 解析层，与平台无关。
+
 
 ### P4 · 弹层
 - `SheetPrimitives` 五件套 → `Form` + `Section` + `TextField` + `Button(.bordered)` + `Text(.caption)`

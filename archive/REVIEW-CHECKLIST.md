@@ -2670,7 +2670,83 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 > ⚠️ 第一次跑时设计包报了 **1 条失败**（`112 / 13` 里 1 issue），**单包重跑即全过**；
 > 与第 77 / 78 条记的是同一类**负载敏感偶发**（`ToastCenter` 的时长注入断言），**不是本次回归**。
 >
-> ⇒ 现在是**有效 77 条、含作废记录共 82 个编号**
+> ## 走查第 83 条：P3 第一批 —— 列表主干换 `List`（六个页面）（2026-10-16）
+>
+> 用户说「继续下一步」= 开 P3（`NATIVE-MIGRATION.md`，**最大的一期**）。
+> ⚠️ **这一期改的是"列表这个容器本身"**，观感变化比 P2 更大（行距、分隔线、箭头全部换主人）。
+>
+> ### 换了什么
+>
+> | 页面 | 从前 | 现在 |
+> |---|---|---|
+> | 首页 | `ScrollView + VStack` + 每组一张 `CardBox` + 行内嵌 hairline | `List`（`.insetGrouped`）+ 两个 `Section` |
+> | 仓库列表 | `ScrollView + LazyVStack(pinnedViews:)` + 吸顶 section header | `List` + 分段条挂 `safeAreaInset(edge: .top)` |
+> | 探索 | 同上 | 同上 |
+> | 搜索 | `ScrollView + LazyVStack`、结果行装 `CardBox` | `List` + `safeAreaInset` + `Section`（组标题走 header 位） |
+> | 我的 Star | `ScrollView + LazyVStack(spacing: 10)` | `List` |
+> | 我的 PR / Issue | `ScrollView + VStack` | `List` |
+>
+> 行件（`PinRow` / `RecentRow` / `RepoCard` / `TrendCard` / `StarRow` / `SearchRowView` 四件 /
+> 搜索历史行）一律只剩**内容**：自绘的 `padding(14)` + 白面 + 圆角 18 + `showsSeparator`
+> + 内嵌 hairline **全部删除**。
+>
+> ### 五条判读结论
+>
+> 1. **"分段条吸顶"的替代是 `safeAreaInset(edge: .top)`，不是分区头** ——
+>    原来的吸顶是 `LazyVStack(pinnedViews: [.sectionHeaders])`。`List` 里没有等价物：
+>    `.plain` 风格有粘性表头但行会变成通栏、失去分组形状；把 `Picker` 塞进分区头不是它的用途。
+>    `safeAreaInset` 是官方给"标题栏下面常驻一条工具条"的机制 ⇒ 内容从它下面滚过去，
+>    **而它自己永远不消失**，比吸顶还稳。（分段条那一层必须给不透明底色，否则内容会从缝里透出来。）
+> 2. **跳转改用 `NavigationLink(value:)`，落点与 `router.push` 是同一条路径** ——
+>    `NavigationStack(path:)` 上早就注册了 `.navigationDestination(for: Route.self)`，
+>    所以"整行可点 + 按下高亮 + 右侧箭头"是白拿的。
+>    ⚠️ 它**没有 action 回调**，而搜索页"点开要先记一笔关键词"是业务要求
+>    ⇒ 用 `.simultaneousGesture(TapGesture().onEnded { … })` 补上（不吞掉跳转）。
+> 3. **开弹层的行仍是 `Button`，而且有意用默认样式**（不加 `.buttonStyle(.plain)`）——
+>    `List` 行里默认样式给出的正是"整行可点 + 按压高亮"。
+>    ⚠️ 这与 P2 那条"30 处 `.plain` 全部保留"**不冲突**：P2 说的是**不在列表里**的自绘行件。
+>    判据仍然是「它坐在哪一层」，这一期正好是那句话的第二次兑现。
+> 4. **自绘的 `RowChevron` 删除**：系统箭头会**随"能不能推入"变化**（`Button` 行没有箭头、
+>    `NavigationLink` 行有），自绘的那一枚对所有行都一视同仁 —— 那反而在说错话。
+>    ⚠️ 连带一处**有意的行为变更**：`StarRow` 从前只有"全名 + 副标题"那一块可点（照原型的
+>     `onclick` 落点），现在**整行可点**（`List` 行的既有语义）。功能没变，命中面积变大。
+> 5. **`.listStyle(.insetGrouped)` + `.scrollContentBackground(.hidden)` + 主题底色** ——
+>    `Theme.Palette` 是 P5 的活，本期只换容器：页面底仍 `background`、行底仍 `surface`。
+>    ⚠️ `SectionHeader` 搬进 header 位时**要传 `margins: .none`**（组间距现在由 `List` 给，
+>    标题再自带 22 的上边距就叠了一层），并给标题补 `.textCase(nil)`
+>    （`List` 的分组样式会给分区标题加一层大写变换）。
+>
+> ### ⚠️ 两条宿主机实证（写代码之前先做的探针）
+>
+> 骨架件（`PinRowsSkeleton` 等）此前是"一个 `VStack` 里放 N 行"。要判断它们还需不需要改形状，
+> 先用 `swiftc` + `NSHostingView` 在宿主机上验了两件事（`/tmp/probe-list-wrapper/`）：
+>
+> 1. **自定义 `View` 的 `body` 是 `ForEach` / `Section` 时，放进 `List` 会被摊成多行** ——
+>    4 行 ⇒ 4 个 `ListTableRowView`，与"`ForEach` 直写在 `List` 里"**逐个一致**；`onAppear` 触发 4 次。
+> 2. **在那种包装件上挂行修饰符（`.redacted` / `.listRowBackground`）不会破坏摊平** —— 三种形态行数都是 4。
+>
+> ⇒ 骨架件因此可以继续是"一个吐 N 行的件"（`body` 从 `VStack` 改成 `ForEach`），
+> 不必把 `ForEach` 抄到每一个调用点。
+>
+> ### 这一期**没做完**的（第二批）
+>
+> 「我的」根页（`MenuCard` / `MenuRow` / 热力图）；仓库详情一族
+> （`RepoDetailView` / `ExploreRepoDetailView` / `RepoSectionListView` 的 Issues·PRs·Commits 三段 /
+> `LinkRow` / `BranchRow` / `RepoFileRow` / `RepoCommitRow` / 各类详情页）。
+> ⚠️ 因此 `showsSeparator` 与内嵌 hairline **在第二批的页面上仍然存在** —— 那不是漏改。
+>
+> ### 要真机看的
+>
+> - 首页两组的**行高与留白**是否合适（`.insetGrouped` 的默认行内边距比从前的 14 小）；
+> - 列表行的**系统分隔线**（从行首开始）与从前的"内嵌缩进 56"比，观感是否可接受；
+> - `NavigationLink` 的**右侧箭头**出现在带尾部信息（Star 数 / 时间）的行上是否显得挤；
+> - 三个 Tab 那条**常驻分段条**（`safeAreaInset`）在滚动时是否稳定、有没有挡住内容。
+>
+> **验证**：`make verify` `exit=0` · **0 条 Swift 编译警告** · `BUILD SUCCEEDED` ·
+> 五包 **1788 项 / 154 套件**（422/38 · 59/4 · 63/8 · 112/13 · 1132/91 —— 与第 82 条逐包一致，
+> 本期零测试增减：改的全是视图层，且 App target 本来就没有测试 target）。
+>
+> ⇒ 现在是**有效 78 条、含作废记录共 83 个编号**
 > （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
 
 > 第 22 条是 2026-10-07 目视陪跑时**补登**的（与 17–21 同批由 6.7 引出）。⚠️ 它只在**仓库真有受保护分支**时才看得见 ——

@@ -10,11 +10,16 @@ import GitDuoKit
 /// 这里只是把"哪一种行 → 哪一个视图"这一层薄分派写出来，
 /// 四种行的形状各自待在自己的小视图里。
 ///
+/// ## ⚠️ 2026-10-16 起它只产**内容**（NATIVE-MIGRATION P3）
+///
+/// 不再收 `showsSeparator` / `action`：行内边距、分隔线、点击与跳转都归 `List` 的行机制
+/// （`SearchView` 把每一行包进 `NavigationLink` 或 `Button`）。理由见 `SearchRowBox`。
+///
 /// ## 它是内容层（决策 #43 的落点）
 ///
 /// 四个小视图的入参都是领域模型（`RepositoryHit` / `UserHit` / `CodeHit` / `ConversationHit`）
 /// ⇒ 它们认识业务，留在 Feature。设计包里只有"与业务无关的视觉件"
-/// （本页用到的那三件 —— `UserAvatar`（owner 头像）/ `UserAvatar` / `StatusPill` / `CodePreviewLine`）。
+/// （本页用到的那三件 —— `UserAvatar`（owner 头像）/ `StatusPill` / `CodePreviewLine`）。
 struct SearchRowView: View {
 
     let row: SearchRow
@@ -24,20 +29,16 @@ struct SearchRowView: View {
     /// 于是相对时间变成渲染时机的一部分（沿 `IssueCard` 的同一条纪律）。
     let now: Date
 
-    let showsSeparator: Bool
-
-    let action: () -> Void
-
     var body: some View {
         switch row {
         case let .repository(hit):
-            RepositoryResultRow(hit: hit, showsSeparator: showsSeparator, action: action)
+            RepositoryResultRow(hit: hit)
         case let .user(hit):
-            UserResultRow(hit: hit, showsSeparator: showsSeparator, action: action)
+            UserResultRow(hit: hit)
         case let .code(hit):
-            CodeResultRow(hit: hit, showsSeparator: showsSeparator, action: action)
+            CodeResultRow(hit: hit)
         case let .conversation(hit):
-            ConversationResultRow(hit: hit, now: now, showsSeparator: showsSeparator, action: action)
+            ConversationResultRow(hit: hit, now: now)
         }
     }
 }
@@ -46,7 +47,7 @@ struct SearchRowView: View {
 
 /// 仓库结果行（原型 `repoResultRow`）。
 ///
-/// 形状：owner 头像（2026-10-15 起替代 `RepoAvatar.compact`，走查第 72 条）+「owner 弱化 / name 加粗」+ 简介 + 语言与 Star 两个 chip + 尖角。
+/// 形状：owner 头像（2026-10-15 起替代 `RepoAvatar.compact`，走查第 72 条）+「owner 弱化 / name 加粗」+ 简介 + 语言与 Star 两个 chip。
 ///
 /// ⚠️ 与原型的两处**有意偏差**：
 /// 1. **标题字号**：原型是 14px，这里用 `Font.rowTitle`（`.subheadline`，15pt）——
@@ -54,14 +55,16 @@ struct SearchRowView: View {
 /// 2. **Star 数**：原型写成 `2,341` 那样的字符串是**演示数据**手写的；
 ///    这里走 `RepositoryHit.starLabel`（千分位全量 `GroupedNumber`）——
 ///    搜索结果是用户要读准的地方，不用 `124k` 那种缩写（见该属性的说明）。
+///
+/// ⚠️ 2026-10-16（P3）：原先行内的尖角（`RowChevron`）与尾部箭头一起撤掉 ——
+/// 现在是 `List` 的 `NavigationLink` 行，系统自己画箭头（且箭头会随"能不能推入"变化，
+/// 而自绘的那一枚不会）。`RowChevron` 这个件随之删除。
 struct RepositoryResultRow: View {
 
     let hit: RepositoryHit
-    let showsSeparator: Bool
-    let action: () -> Void
 
     var body: some View {
-        SearchRowBox(showsSeparator: showsSeparator, action: action) {
+        SearchRowBox {
             // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
             //    文件夹图标块；尺寸仍是 32（`RepoAvatar.compact.diameter`）。
             UserAvatar(
@@ -91,8 +94,6 @@ struct RepositoryResultRow: View {
                     .padding(.top, 6)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            RowChevron()
         }
     }
 
@@ -141,7 +142,7 @@ struct RepositoryResultRow: View {
 
 /// 用户结果行（原型 `userResultRow`）。
 ///
-/// 形状：`UserAvatar`（34）+ 「昵称 + @登录名」+ 简介 + `N 个公开仓库 · M 关注者` + 尖角。
+/// 形状：`UserAvatar`（34）+ 「昵称 + @登录名」+ 简介 + `N 个公开仓库 · M 关注者`。
 ///
 /// ⚠️ 两处与仓库行**有意不同**（原型里就是这么分的，别顺手统一）：
 /// - 人数用 **k/m 缩写**（`210k`），与仓库 Star 的千分位不是一套；
@@ -149,11 +150,9 @@ struct RepositoryResultRow: View {
 struct UserResultRow: View {
 
     let hit: UserHit
-    let showsSeparator: Bool
-    let action: () -> Void
 
     var body: some View {
-        SearchRowBox(showsSeparator: showsSeparator, action: action) {
+        SearchRowBox {
             UserAvatar(login: hit.login)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -178,8 +177,6 @@ struct UserResultRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            RowChevron()
         }
     }
 
@@ -201,16 +198,16 @@ struct UserResultRow: View {
 ///
 /// ⚠️ **它没有尖角** —— 原型这一行就没画（`.sr-item` 的最后一个元素是内容，不是 `I.chev`）。
 /// 别的四种行都有，所以这一处很容易"顺手补上"，而补了就与原型不一致。
+/// （⚠️ 2026-10-16 起所有行都不再自绘尖角，这一条差别随之消失 —— 但这行仍然**不该**被
+/// 特殊对待：它现在是普通的 `NavigationLink` 行，系统给的箭头与其他三行一模一样。）
 ///
 /// ⚠️ 对齐是 `.top`（原型这一行单独加了 `align-items:flex-start`）。
 struct CodeResultRow: View {
 
     let hit: CodeHit
-    let showsSeparator: Bool
-    let action: () -> Void
 
     var body: some View {
-        SearchRowBox(alignment: .top, showsSeparator: showsSeparator, action: action) {
+        SearchRowBox(alignment: .top) {
             Image(systemName: "doc.text")
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.Palette.textTertiary)
@@ -271,11 +268,9 @@ struct ConversationResultRow: View {
 
     let hit: ConversationHit
     let now: Date
-    let showsSeparator: Bool
-    let action: () -> Void
 
     var body: some View {
-        SearchRowBox(showsSeparator: showsSeparator, action: action) {
+        SearchRowBox {
             Image(systemName: icon)
                 .font(.system(size: 17))
                 .foregroundStyle(tint)
@@ -303,7 +298,6 @@ struct ConversationResultRow: View {
         .accessibilityLabel(
             "\(hit.stateLabel) · \(hit.title)，\(hit.metaLabel(now: now))"
         )
-        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - 状态 → 图标 / 配色 / 胶囊族
@@ -334,99 +328,79 @@ struct ConversationResultRow: View {
     }
 }
 
-// MARK: - 共用
-
-/// `.sr-item>svg{stroke:var(--text3);stroke-width:2}` 那个尖角。
-///
-/// 收成一件而不是各处写 `Image(systemName:)`：它的字号 / 字重 / 颜色
-/// 是原型 `.sr-item` 规则的一部分，多处各写一遍就会有一处写成别的字号。
-/// 空闲态的「最近搜索」行也用同一件（同属 `.sr-item`）。
-struct RowChevron: View {
-    var body: some View {
-        Image(systemName: "chevron.right")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(Theme.Palette.textTertiary)
-            .accessibilityHidden(true)
-    }
-}
-
 #Preview {
     @Previewable @State var now = Date()
 
-    ScrollView {
-        LazyVStack(spacing: 0) {
-            SearchRowView(
-                row: .repository(RepositoryHit(
-                    fullName: "my-git/gitduo",
-                    description: "iOS 第三方 GitHub 客户端 · SwiftUI",
-                    language: "Swift",
-                    starCount: 2_341
-                )),
-                // ⚠️ 分隔线画在**顶上** ⇒ 第一条不画（同 `MenuRow`，走查第 77 条）。
-                now: now, showsSeparator: false
-            ) {}
+    // 它现在是 `List` 的行内容 ⇒ 预览也按 `List` 摆。
+    List {
+        SearchRowView(
+            row: .repository(RepositoryHit(
+                fullName: "my-git/gitduo",
+                description: "iOS 第三方 GitHub 客户端 · SwiftUI",
+                language: "Swift",
+                starCount: 2_341
+            )),
+            now: now
+        )
 
-            SearchRowView(
-                row: .repository(RepositoryHit(fullName: "nicedoc/mdx-engine", starCount: 5_102)),
-                now: now, showsSeparator: true
-            ) {}
+        SearchRowView(
+            row: .repository(RepositoryHit(fullName: "nicedoc/mdx-engine", starCount: 5_102)),
+            now: now
+        )
 
-            SearchRowView(
-                row: .user(UserHit(
-                    login: "dev-j", name: "jiangjiang", bio: "my-git · iOS / SwiftUI 开发",
-                    publicRepoCount: 3, followerCount: 21
-                )),
-                now: now, showsSeparator: true
-            ) {}
+        SearchRowView(
+            row: .user(UserHit(
+                login: "dev-j", name: "jiangjiang", bio: "my-git · iOS / SwiftUI 开发",
+                publicRepoCount: 3, followerCount: 21
+            )),
+            now: now
+        )
 
-            // 两个计数都查不到 ⇒ 副标题整段不渲染（不是显示 0）。
-            SearchRowView(
-                row: .user(UserHit(login: "torvalds", name: "Linus Torvalds")),
-                now: now, showsSeparator: true
-            ) {}
+        // 两个计数都查不到 ⇒ 副标题整段不渲染（不是显示 0）。
+        SearchRowView(
+            row: .user(UserHit(login: "torvalds", name: "Linus Torvalds")),
+            now: now
+        )
 
-            SearchRowView(
-                row: .code(CodeHit(
-                    path: "Packages/GitDuoKit/Sources/GitHubAPI/GitHubClient.swift",
-                    repoFullName: "my-git/gitduo",
-                    language: "Swift",
-                    snippet: "let client = GitHubClient(token: store.load())"
-                )),
-                now: now, showsSeparator: true
-            ) {}
+        SearchRowView(
+            row: .code(CodeHit(
+                path: "Packages/GitDuoKit/Sources/GitHubAPI/GitHubClient.swift",
+                repoFullName: "my-git/gitduo",
+                language: "Swift",
+                snippet: "let client = GitHubClient(token: store.load())"
+            )),
+            now: now
+        )
 
-            // 预览行缺失（请求没带 `text-match`）⇒ 不画空框。
-            SearchRowView(
-                row: .code(CodeHit(path: "README.md", repoFullName: "o/r", language: nil)),
-                now: now, showsSeparator: true
-            ) {}
+        // 预览行缺失（请求没带 `text-match`）⇒ 不画空框。
+        SearchRowView(
+            row: .code(CodeHit(path: "README.md", repoFullName: "o/r", language: nil)),
+            now: now
+        )
 
-            // 三族各一条 —— 注意两条 `.closed` 的**颜色不同**（Issue 紫 / PR 红）。
-            SearchRowView(
-                row: .conversation(ConversationHit(
-                    kind: .issue, number: 35, title: "Markdown 列表渲染缩进错误",
-                    repoFullName: "my-git/gitduo", state: .closed, updatedAt: now.addingTimeInterval(-259_200)
-                )),
-                now: now, showsSeparator: true
-            ) {}
+        // 三族各一条 —— 注意两条 `.closed` 的**颜色不同**（Issue 紫 / PR 红）。
+        SearchRowView(
+            row: .conversation(ConversationHit(
+                kind: .issue, number: 35, title: "Markdown 列表渲染缩进错误",
+                repoFullName: "my-git/gitduo", state: .closed, updatedAt: now.addingTimeInterval(-259_200)
+            )),
+            now: now
+        )
 
-            SearchRowView(
-                row: .conversation(ConversationHit(
-                    kind: .pullRequest, number: 57, title: "feat: 仓库详情四分区导航",
-                    repoFullName: "my-git/gitduo", state: .open, updatedAt: now.addingTimeInterval(-7_200)
-                )),
-                now: now, showsSeparator: true
-            ) {}
+        SearchRowView(
+            row: .conversation(ConversationHit(
+                kind: .pullRequest, number: 57, title: "feat: 仓库详情四分区导航",
+                repoFullName: "my-git/gitduo", state: .open, updatedAt: now.addingTimeInterval(-7_200)
+            )),
+            now: now
+        )
 
-            SearchRowView(
-                row: .conversation(ConversationHit(
-                    kind: .pullRequest, number: 51, title: "fix: OAuth 回调地址校验",
-                    repoFullName: "my-git/gitduo", state: .merged, updatedAt: now.addingTimeInterval(-259_200)
-                )),
-                now: now, showsSeparator: true
-            ) {}
-        }
-        .padding(.horizontal, Theme.Spacing.page)
+        SearchRowView(
+            row: .conversation(ConversationHit(
+                kind: .pullRequest, number: 51, title: "fix: OAuth 回调地址校验",
+                repoFullName: "my-git/gitduo", state: .merged, updatedAt: now.addingTimeInterval(-259_200)
+            )),
+            now: now
+        )
     }
-    .background(Theme.Palette.background)
 }

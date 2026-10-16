@@ -5,8 +5,7 @@ import SwiftUI
 
 /// 「我的 Star」列表的一行（PRD §4.18、原型 `12-me.js` 的 `SCR.stars`）。
 ///
-/// 形状（自上而下逐条对原型）：一张 `.card` 里一行 —— 仓库图标 ·
-/// 「全名（链接色）+ `★ {Star} · {语言}`」。
+/// 形状（自上而下逐条对原型）：仓库图标 ·「全名（链接色）+ `★ {Star} · {语言}`」。
 ///
 /// ```html
 /// <div class="card"><div class="row">
@@ -19,6 +18,17 @@ import SwiftUI
 /// </div></div>
 /// ```
 ///
+/// ## ⚠️ 2026-10-16 起它是 **`List` 的一行**（NATIVE-MIGRATION P3）
+///
+/// 两处变化：
+/// 1. `CardBox` 撤掉（行底 / 内边距 / 圆角由 `List` 给），本件只画内容；
+/// 2. **整行可点**（对外不再有 `onOpen`，由列表把它包进 `NavigationLink`）。
+///
+/// ⚠️ 第 2 条推翻了这里原先"只有「全名 + 副标题」那一块可点、图标不可点"的处置 ——
+/// 那条处置是为了逐字跟随原型的 `onclick` 落点。**功能没有变**（点这一行还是去这个仓库），
+/// 变的是命中面积：在 `List` 里"一行即一个目标"是平台的既有语义，
+/// 而"行内划出一块才能点"反而是自定列表才有的形状（`AGENTS.md §0`：按原型 = 功能按原型）。
+///
 /// ## ⚠️ 右侧那颗「已 Star」按钮**不画了**（2026-10-15 · 用户裁定）
 ///
 /// 原型每行右侧有一颗「取消 Star」的 ghost 按钮（上面 HTML 的最后那个 `<button>`）。
@@ -26,12 +36,6 @@ import SwiftUI
 /// Star / 取消 Star 的操作入口留在仓库详情页头部那颗统计上（`StatStar`，写得了才有形状）。
 /// ⚠️ ViewModel 侧的切换机制（`MyStarsViewModel.toggleStar` 那一套）**原样保留**，
 /// 回加按钮时即用；`ProfileCopy.unstarAction` 文案同理。
-///
-/// ## ⚠️ 只有「全名 + 副标题」那一块可点，图标不可点
-///
-/// 原型把 `onclick` 挂在 `.grow` 上（**不含**仓库图标）。
-/// 顺手把整张卡做成按钮看着更"好用"，但那会让"点图标"与"点名字"跳去同一个地方
-/// —— 区分"点到哪个"就变得很难说清。
 ///
 /// ## 它是内容层
 ///
@@ -43,45 +47,35 @@ struct StarRow: View {
     /// 这一行现在该显示什么 —— 由 ViewModel 给（星数从列表条目 / 本页改过的记录里来）。
     let state: StarState
 
-    /// 点「全名 / 副标题」那一块 → 去这个仓库。
-    let onOpen: () -> Void
-
-
     var body: some View {
-        // 方案 A（2026-10-15，走查第 76 条）：条目是一张**白卡** ⇒ `CardBox` 默认
-        //（padding 14 / 圆角 18 / 无边框）；卡与卡之间由列表给 10 的间距，不画线。
-        CardBox {
-            HStack(spacing: 10) {
-                // 原型 `.row{gap:10px}`（10 不在 4pt 阶里 ⇒ 写原值，同 `SheetRow`）。
-                // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
-                //    文件夹图标块；尺寸仍是 34（`RepoAvatar.standard.diameter`）。
-                UserAvatar(
-                    login: repository.owner,
-                    avatarURL: repository.ownerAvatarURL,
-                    diameter: RepoAvatar.standard.diameter
-                )
+        HStack(spacing: 10) {
+            // 原型 `.row{gap:10px}`（10 不在 4pt 阶里 ⇒ 写原值，同 `SheetRow`）。
+            // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
+            //    文件夹图标块；尺寸仍是 34（`RepoAvatar.standard.diameter`）。
+            UserAvatar(
+                login: repository.owner,
+                avatarURL: repository.ownerAvatarURL,
+                diameter: RepoAvatar.standard.diameter
+            )
 
-                Button(action: onOpen) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(repository.fullName)
-                            // 原型 `.t1{font-size:15px;font-weight:650}` ⇒ `rowTitle` + semibold。
-                            .font(Theme.Font.rowTitle.weight(.semibold))
-                            // …同行 `style="color:var(--link)"`。
-                            .foregroundStyle(Theme.Palette.accent)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(repository.fullName)
+                    // 原型 `.t1{font-size:15px;font-weight:650}` ⇒ `rowTitle` + semibold。
+                    .font(Theme.Font.rowTitle.weight(.semibold))
+                    // …同行 `style="color:var(--link)"`。
+                    .foregroundStyle(Theme.Palette.accent)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
 
-                        metaLabel
-                            // 原型 `style="margin-top:3px"`。
-                            .padding(.top, 3)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    // 点名前那一块要盖住整块（否则只有文字那几个字响应点击）。
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                metaLabel
+                    // 原型 `style="margin-top:3px"`。
+                    .padding(.top, 3)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // 读屏：整行合成一句（全名 + 星数 + 语言），而不是把三个碎片逐个念。
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     /// 副标题：`★ {Star} · {语言}`。
@@ -112,10 +106,18 @@ struct StarRow: View {
         .foregroundStyle(Theme.Palette.textTertiary)
         .lineLimit(1)
     }
+
+    private var accessibilityLabel: String {
+        var parts = [repository.fullName]
+        parts.append("\(state.starCount) 个 Star")
+        if let language = repository.language, !language.isEmpty { parts.append("主语言 \(language)") }
+        return parts.joined(separator: "，")
+    }
 }
 
 #Preview {
-    VStack(spacing: Theme.Spacing.s) {
+    // 它现在是 `List` 的一行 ⇒ 预览也按 `List` 摆。
+    List {
         StarRow(
             repository: Repository(
                 owner: "vercel", name: "next.js",
@@ -126,8 +128,7 @@ struct StarRow: View {
             state: StarState(
                 fullName: "vercel/next.js", isStarred: true,
                 starCount: 124_000, baselineConfirmed: true
-            ),
-            onOpen: {}
+            )
         )
 
         // 语言为 nil ⇒ 副标题只留星数（不补空格 / 破折号）。
@@ -141,10 +142,7 @@ struct StarRow: View {
             state: StarState(
                 fullName: "my-git/scripts", isStarred: true,
                 starCount: 41, baselineConfirmed: true
-            ),
-            onOpen: {}
+            )
         )
     }
-    .padding(Theme.Spacing.page)
-    .background(Theme.Palette.background)
 }

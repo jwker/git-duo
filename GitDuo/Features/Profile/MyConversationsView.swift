@@ -20,13 +20,16 @@ import SwiftUI
 /// （同一个 UI 两处定义必然分叉）」。所以这里直接用 `ConversationResultRow`
 /// + 领域模型 `ConversationHit`，本件一个字都不重画。
 ///
+/// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3）
+///
+/// 与搜索页同一处置（结果行本来就是同一件）：`ScrollView + VStack` → `List`；
+/// 结果行成为 `List` 的行（分隔线 / 内边距 / 箭头由系统给）；空态与失败态换成官方件。
+///
 /// ## 两屏同构，只有三处不同
 ///
 /// 标题 · 空态两行 · 查询口径 —— 三者都由 `kind` 决定，全部取自领域层
 /// （`MyConversationsCopy` / `MyConversationsQuery`）。本件不认识任何一个字。
 struct MyConversationsView: View {
-
-    @Environment(AppEnvironment.self) private var env
 
     @State private var model: MyConversationsViewModel
 
@@ -36,11 +39,11 @@ struct MyConversationsView: View {
     }
 
     var body: some View {
-        ScrollView {
+        List {
             content
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.bottom, Theme.Spacing.xl)
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         .navigationTitle(model.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -57,53 +60,65 @@ struct MyConversationsView: View {
             // 形状与结果行同族（都是 `.sr-item`）⇒ 直接用搜索页那一份骨架，
             // 不另写一版（同"结果行复用"的理由）。
             SearchResultsSkeleton()
+                .listRowBackground(Theme.Palette.surface)
 
         case .rows:
             results
 
         case .empty:
             EmptyBox(title: model.emptyTitle, hint: model.emptyHint)
-                .padding(.top, Theme.Spacing.s)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
         case let .failure(error):
             PageFailure(error: error) {
                 Task { await model.retry() }
             }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
+    @ViewBuilder
     private var results: some View {
+        // ⚠️ `incomplete_results` 的说明行**不是错误态**：已拿到的条目照常显示，
+        //    只是这一页少了些本该在里面的东西（与搜索页、探索页同一取向）。
+        if let notice = model.notice {
+            Text(notice)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+
+        if let title = model.listTitle {
+            Section {
+                resultRows
+            } header: {
+                SectionHeader(title: title, margins: .none)
+            }
+        } else {
+            resultRows
+        }
+
+        footer
+    }
+
+    @ViewBuilder
+    private var resultRows: some View {
         let rows = model.rows
 
-        return VStack(alignment: .leading, spacing: 0) {
-            if let title = model.listTitle {
-                SectionHeader(title: title)
-            }
-
-            // ⚠️ `incomplete_results` 的说明行**不是错误态**：已拿到的条目照常显示，
-            //    只是这一页少了些本该在里面的东西（与搜索页、探索页同一取向）。
-            if let notice = model.notice {
-                Text(notice)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    .padding(.bottom, Theme.Spacing.s)
-            }
-
-            ForEach(Array(rows.enumerated()), id: \.element.id) { index, hit in
+        ForEach(rows) { hit in
+            NavigationLink(value: route(for: hit)) {
                 ConversationResultRow(
                     hit: hit,
                     // ⚠️ 「现在」取的是**结果到达那一刻**（`model.loadedAt`），
                     //    不在 `body` 里取 `Date()`（见那个属性的说明）。
-                    now: model.loadedAt,
-                    // 方案 D：分隔线是顶上那条内嵌 hairline —— 首行不画。
-                    showsSeparator: index > 0
-                ) {
-                    open(hit)
-                }
+                    now: model.loadedAt
+                )
             }
-
-            footer
         }
+        .listRowBackground(Theme.Palette.surface)
     }
 
     /// 列表底部。四种样子互斥，顺序即优先级：
@@ -111,26 +126,31 @@ struct MyConversationsView: View {
     ///
     /// ⚠️ **不自动加载**（决策 #44）：Search 是独立且只有 30 次/分钟的桶，
     /// "滚到底"一次能连发好几发 —— 一旦 403，四个范围共用的整个搜索页都会瘫掉。
+    /// ⚠️ 它不是"内容" ⇒ 不坐白卡、不画分隔线。
     @ViewBuilder
     private var footer: some View {
         if model.isPaging {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.m)
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         } else if model.showsRetryRow {
             Button("加载失败 · 重试") {
                 Task { await model.retryFromFooter() }
             }
-            .font(Theme.Font.footnote)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, Theme.Spacing.m)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         } else if model.hasMore {
             Button(MyConversationsCopy.loadMoreAction) {
                 Task { await model.loadMore() }
             }
-            .font(Theme.Font.bodyStrong)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, Theme.Spacing.m)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -155,16 +175,12 @@ struct MyConversationsView: View {
     /// 保守假设**抵消掉**，于是这里几乎每一条**都能操作**（哪怕它落在别人的仓库里）。
     /// ⚠️ 这正是用户报回那条的修法：若照 PR 那样把 `readOnly` 理解成"整页只读"，
     /// 这一页就会**继续改不了状态**。
-    private func open(_ hit: ConversationHit) {
+    private func route(for hit: ConversationHit) -> Route {
         switch model.kind {
         case .issue:
-            env.router.push(.issueDetail(fullName: hit.repoFullName, number: hit.number, readOnly: true))
+            .issueDetail(fullName: hit.repoFullName, number: hit.number, readOnly: true)
         case .pullRequest:
-            env.router.push(.prDetail(
-                fullName: hit.repoFullName,
-                number: hit.number,
-                readOnly: true
-            ))
+            .prDetail(fullName: hit.repoFullName, number: hit.number, readOnly: true)
         }
     }
 }

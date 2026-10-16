@@ -31,6 +31,12 @@ enum ExploreSheet: Identifiable {
 /// 用户认为这两块字是重复的噪音。原型 `09-explore.js` 的 `.section-label#trendTitle`
 /// 与 `ExploreViewModel.listTitle` 一并删除。
 ///
+/// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3）
+///
+/// 与 `ReposView` 同一处置：`ScrollView + LazyVStack` → `List`；
+/// 榜单分段条从"吸顶的 section header"改成 `safeAreaInset(edge: .top)`；
+/// chip / 说明行 / 空态 / 失败态都是**行**（不坐白卡、不画分隔线 —— 它们不是列表内容）。
+///
 /// ## ⚠️ 这一屏最贵的是配额
 ///
 /// Search 是**独立且只有 30 次/分钟**的桶（§13.2）。所以"切榜 / 切筛选"这条路径上
@@ -49,24 +55,34 @@ struct ExploreView: View {
     }
 
     var body: some View {
-        // ⚠️ 2026-10-11：滚动容器**提到了根上**，分段条改成**吸顶的分区头** ——
-        //    与「首页」「我的」同一形状，大标题才会在上滑时收成顶部一行小字。
-        //    此前本页与 `ReposView` 一样把 `ScrollView` 塞在 `VStack` 里（分段条在外），
-        //    导航栏盯不住那个滚动视图 ⇒ **大标题不收**。用户报回「与首页不一样」。
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    mainArea
-                } header: {
-                    boardBar
-                        // ⚠️ 吸顶时它是**压在**滚过去的内容上的 ⇒ 这一层必须不透明，
-                        //    否则趋势卡会从分段之间的缝隙里透出来。
-                        .background(Theme.Palette.background)
-                }
+        List {
+            chips
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            // ⚠️ `incomplete_results` 的说明行**不是错误态**（PRD §4.12）：
+            //    已拿到的条目照常显示，只是这一页少了些本该在里面的仓库。
+            //    不静默忽略的理由见 `ExploreBoardNotice`。
+            if let notice = model.notice {
+                Text(notice)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
+
+            content
         }
-        .refreshable { await model.refresh() }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
+        .refreshable { await model.refresh() }
+        // ⚠️ 榜单分段条**不再进滚动内容**（理由同 `ReposView`）：
+        //    它挂在安全区上 ⇒ 内容从它下面滚过去，而它自己永远不消失。
+        .safeAreaInset(edge: .top, spacing: 0) {
+            boardBar
+                .background(Theme.Palette.background)
+        }
         .navigationTitle("探索")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -107,6 +123,8 @@ struct ExploreView: View {
         .padding(.vertical, Theme.Spacing.s)
     }
 
+    /// 两个筛选 chip。⚠️ 它现在是**一行** ⇒ 上下留白由 `List` 的行内边距给
+    /// （从前这里手写 `padding(.top, s).padding(.bottom, m)`）。
     private var chips: some View {
         HStack(spacing: Theme.Spacing.s) {
             FilterChip(
@@ -123,44 +141,16 @@ struct ExploreView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
     }
 
     // MARK: - 主区域
-
-    /// 滚动内容。⚠️ **这里自己不再是滚动容器** —— 它在 `body` 那一层那个
-    /// `ScrollView` 里（2026-10-11 起），左右页边距加在它身上，
-    /// 而吸顶的 `boardBar` 在它**外面**（`SegmentedBar` 自带页边距，
-    /// 再套一层会变成双份）。
-    private var mainArea: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            chips
-
-            // ⚠️ `incomplete_results` 的说明行**不是错误态**（PRD §4.12）：
-            //    已拿到的条目照常显示，只是这一页少了些本该在里面的仓库。
-            //    不静默忽略的理由见 `ExploreBoardNotice`。
-            if let notice = model.notice {
-                Text(notice)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    .padding(.bottom, Theme.Spacing.s)
-            }
-
-            content
-
-            footer
-        }
-        .padding(.horizontal, Theme.Spacing.page)
-        .padding(.bottom, Theme.Spacing.xl)
-    }
 
     @ViewBuilder
     private var content: some View {
         switch model.content {
         case .skeleton:
             ExploreBoardSkeleton()
-                .padding(.top, Theme.Spacing.xs)
+                .listRowBackground(Theme.Palette.surface)
 
         case .items:
             rows
@@ -171,34 +161,45 @@ struct ExploreView: View {
             // 两者都落进空态框 —— 但文案不同：结果不完整时**不能说"没有符合条件的仓库"**
             // （那正是 `LoadTrendingBoard.Result.emptyText` 存在的理由）。
             EmptyBox(title: model.emptyText, systemImage: "magnifyingglass")
-                .padding(.top, Theme.Spacing.s)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
         case let .failure(error):
-            failureState(error)
+            // 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。
+            PageFailure(error: error) {
+                Task { await model.refresh() }
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
+    @ViewBuilder
     private var rows: some View {
         // 过滤 / 计算只算一次：`onAppear` 里逐行判断"是不是最后一行"是 O(n²)。
         let items = model.rows
         let lastID = items.last?.id
 
-        return VStack(spacing: 10) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
-                Button {
-                    open(row)
-                } label: {
-                    TrendCard(summary: row.summary, badges: badges(row))
-                }
-                .buttonStyle(.plain)
-                .onAppear {
-                    // 只有最后一行触发，否则每出现一行就打一次请求（§4.4：普通列表滚到底自动加载）。
-                    if row.id == lastID {
-                        Task { await model.loadMore() }
-                    }
+        ForEach(items) { row in
+            // ⚠️ 搜索路径**给不出可写性**（`GET /search/repositories` 不返回 `permissions`），
+            //    所以这里**只有一条路**：进只读页。不要试图用"全名是不是以我的登录名开头"
+            //    补一个判断 —— 见 `RepoSummary.canWrite` 的说明（PRD §3.13 明确禁止）。
+            //
+            // ⚠️ 反过来说：**用户自己的公开仓库出现在榜单里时也会进只读页**。这是有意接受的
+            //    误差 —— 榜单是"发现"语境，进的是浏览页；真要看自己的仓库，走首页或仓库 Tab。
+            NavigationLink(value: Route.exploreRepoDetail(fullName: row.fullName)) {
+                TrendCard(summary: row.summary, badges: badges(row))
+            }
+            .onAppear {
+                // 只有最后一行触发，否则每出现一行就打一次请求（§4.4：普通列表滚到底自动加载）。
+                if row.id == lastID {
+                    Task { await model.loadMore() }
                 }
             }
         }
+        .listRowBackground(Theme.Palette.surface)
+
+        footer
     }
 
     /// 角标映射：领域层的 `Role` → 组件的 `BadgeTone`。
@@ -215,49 +216,24 @@ struct ExploreView: View {
     }
 
     /// 列表底部：加载中 → 转圈；失败 → 重试行（**不遮挡已有内容**，§8.5）。
+    /// ⚠️ 它不是"内容" ⇒ 不坐白卡、不画分隔线。
     @ViewBuilder
     private var footer: some View {
         if model.isLoading, !model.rows.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Spacing.m)
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         } else if model.error != nil, !model.rows.isEmpty {
             Button("加载失败 · 重试") {
                 Task { await model.loadMore() }
             }
-            .font(Theme.Font.footnote)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, Theme.Spacing.m)
-        }
-    }
-
-    /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。
-    private func failureState(_ error: GitHubError) -> some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 30))
-                .foregroundStyle(Theme.Palette.textTertiary)
-            Text("加载失败 · 点击重试")
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-            Button("重试") {
-                Task { await model.refresh() }
-            }
-            .font(Theme.Font.bodyStrong)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xxl)
-        .accessibilityElement(children: .combine)
-        // 失败原因**只说确定的那一件事**（与 `ReposView.failureHint` 同一口径）。
-        .accessibilityHint(Self.failureHint(error))
-    }
-
-    private static func failureHint(_ error: GitHubError) -> String {
-        switch error {
-        case .transport: "网络不可用"
-        case .rateLimited: "请求过于频繁"
-        case .unauthorized: "登录状态已失效"
-        default: "服务暂时不可用"
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -273,18 +249,6 @@ struct ExploreView: View {
             model.select(language: picked)
         }
         env.toast.show(change.toastText)
-    }
-
-    /// 趋势卡 → 他人仓库只读页（§4.13）。
-    ///
-    /// ⚠️ 搜索路径**给不出可写性**（`GET /search/repositories` 不返回 `permissions`），
-    /// 所以这里**只有一条路**：进只读页。不要试图用"全名是不是以我的登录名开头"补一个判断
-    /// —— 见 `RepoSummary.canWrite` 的说明（PRD §3.13 明确禁止）。
-    ///
-    /// ⚠️ 反过来说：**用户自己的公开仓库出现在榜单里时也会进只读页**。这是有意接受的误差 ——
-    /// 榜单是"发现"语境，进的是浏览页；真要看自己的仓库，走首页或仓库 Tab。
-    private func open(_ row: TrendingRow) {
-        env.router.push(.exploreRepoDetail(fullName: row.fullName))
     }
 }
 

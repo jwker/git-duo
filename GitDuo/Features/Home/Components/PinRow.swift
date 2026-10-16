@@ -5,22 +5,33 @@ import GitDuoKit
 
 /// 首页「置顶仓库」的**一行**（PRD §4.1、原型 `scripts/04-search.js` 的 `.pin-card`）。
 ///
-/// ## ⚠️ 2026-10-15 走查第 75 条：它**不再是卡片**（`PinCard` → `PinRow`）
+/// ## ⚠️ 2026-10-16 起它是 **`List` 的一行**（NATIVE-MIGRATION P3）
 ///
-/// 方案 D 把页面转成白底之后，全页只有这一组还留着「灰底 + 圆角 + 12 内边距」，
-/// 而且与同一页的「最近访问」长得不像一家人 —— 用户原话「首页的置顶仓库板块有点难看」。
-/// 处置：**改成与 `.recent-row` 同款的单列平铺行**（30pt owner 头像 + 全名 + 一行描述 + 右侧 Star）。
+/// 此前它自己画「内边距 14 + 顶上一条内嵌 hairline（首行不画）」，外面再套
+/// `CardBox` 与页面左右留白 —— 那三样加起来是"**用自绘件模拟系统列表行**"。
+/// 现在它只负责**内容**：内边距 / 卡片底 / 行间分隔线 / 整行点击范围
+/// 全部由 `List` 的行机制给出（`.listRowBackground` / 系统分隔线 / `NavigationLink`）。
+///
+/// ⇒ 两样东西随之删除：
+/// - `showsSeparator`：系统知道"谁是首行、谁是末行"，调用方不必再数 index
+///   （这正是走查第 76 / 77 条那两套"顶线 / 底线"口径要解决的问题 —— 现在问题本身不存在了）。
+/// - `.padding(14)`：行内边距交给 `.listRowInsets`（默认值即系统标准）。
+///
+/// ## 它长什么样（内容部分没变）
+///
+/// 30pt owner 头像 + 全名 + 一行描述 + 右侧 Star。
+///
+/// ## ⚠️ 2026-10-15 走查第 75 条：它**不再是卡片**（`PinCard` → `PinRow`）
 ///
 /// 网格时代的三个约束随之作废（都是"为了让两列卡片等高/塞得下"才有的）：
 ///
 /// | 约束 | 网格时代 | 行式 |
 /// |---|---|---|
 /// | 描述缺失 | 补 `—`（不然两卡不等高） | **整行不画**（行式不需要等高） |
-/// | 描述行数 | 固定两行（`height:32px`） | **一行截断**（半行宽里放两行 11.5pt 是拥挤的主因） |
-/// | 指标 | 语言点 + Star + Fork + 私有胶囊 | **只留 Star**（那三样挤在半个屏幕宽里会糊成一团） |
+/// | 描述行数 | 固定两行（`height:32px`） | **一行截断** |
+/// | 指标 | 语言点 + Star + Fork + 私有胶囊 | **只留 Star** |
 ///
 /// ⚠️ **私有标记保留** —— 它不是"指标"，是这一行的身份（与 `RecentRow` 同一处置）。
-/// 语言与 Fork 是真的不再显示，不是漏画；读屏标签里也一并去掉（念屏幕上看不到的东西更糟）。
 ///
 /// ## 为什么它在本 Feature 里
 ///
@@ -29,9 +40,6 @@ import GitDuoKit
 struct PinRow: View {
 
     let summary: RepoSummary
-
-    /// 首行不画分隔线（原型 `.pin-card+.pin-card::before` —— 相邻才画，第一条上面没有东西）。
-    var showsSeparator: Bool = true
 
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
@@ -61,20 +69,6 @@ struct PinRow: View {
                 .lineLimit(1)
                 // Star 数不该被仓库名挤走 —— 挤掉之后这一行就看不出"置顶的这个有多热"。
                 .layoutPriority(1)
-        }
-        // 方案 A（2026-10-15，走查第 76 条）：行回到**卡内** ⇒ 左右留白由行自己给 14
-        //（原型 `.recent-row{padding:14px}` / `.pin-card{padding:14px}`）。
-        .padding(14)
-        .contentShape(Rectangle())
-        .overlay(alignment: .topLeading) {
-            if showsSeparator {
-                Rectangle()
-                    .fill(Theme.Palette.borderSoft)
-                    .frame(height: 1)
-                    // 内嵌缩进：从文字起点起，缩进 = **卡内边距 14** + 头像 30 + gap 12 = 56
-                    //（原型 `.pin-card+.pin-card::before{left:55px}`，App 的 gap 是 12 ⇒ 56）。
-                    .padding(.leading, 14 + RepoAvatar.row.diameter + Theme.Spacing.m)
-            }
         }
         // 读屏：整行合成一句，而不是把四五个碎片逐个念出来。
         .accessibilityElement(children: .ignore)
@@ -124,15 +118,14 @@ struct PinRow: View {
 }
 
 #Preview {
-    VStack(spacing: 0) {
+    // 它现在是 `List` 的一行 ⇒ 预览也按 `List` 摆（否则看不到真实的行内边距与分隔线）。
+    List {
         PinRow(
             summary: RepoSummary(
                 fullName: "my-git/gitduo",
                 description: "GitHub 客户端 · SwiftUI · 零第三方依赖",
                 language: "Swift", starCount: 128, forkCount: 12, isPrivate: false
-            ),
-            // ⚠️ 分隔线画在**顶上** ⇒ 第一行不画（同 `MenuRow`，走查第 77 条）。
-            showsSeparator: false
+            )
         )
         PinRow(
             summary: RepoSummary(
@@ -142,6 +135,4 @@ struct PinRow: View {
             )
         )
     }
-    .padding(.horizontal, Theme.Spacing.page)
-    .background(Theme.Palette.background)
 }

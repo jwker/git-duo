@@ -85,6 +85,12 @@ public struct SectionHeader: View {
                 // 原型 `letter-spacing:-.3px`（大标题收一点字距，笔画不那么散）。
                 // 字号令牌管不到字距，这里写原值并注明出处。
                 .tracking(-0.3)
+                // ⚠️ **2026-10-16 起补这一句**（NATIVE-MIGRATION P3）：本件现在会被放进
+                //    `Section` 的 header 位，而 `List` 的分组样式会给分区标题**加一层大写变换**
+                //    （SwiftUI 在 `.grouped` / `.insetGrouped` 下默认如此）——
+                //    「README.MD」会变成「README.MD」还算好，而混排的英文词会被整句抬成大写。
+                //    在别处 `.textCase(nil)` 是空操作，所以这一句对非列表的调用点没有任何影响。
+                .textCase(nil)
 
             Spacer(minLength: 0)
 

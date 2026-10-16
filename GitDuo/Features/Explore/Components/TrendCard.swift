@@ -5,6 +5,11 @@ import GitDuoKit
 
 /// 探索榜的一行趋势卡片（PRD §4.12「趋势卡片内容」、原型 `scripts/09-explore.js` 的 `trendRows()`）。
 ///
+/// ## ⚠️ 2026-10-16 起它是 **`List` 的一行**（NATIVE-MIGRATION P3）
+///
+/// 同 `PinRow` / `RepoCard`：自绘的 `padding(14)` + 白面 + 圆角 18 + 卡间 10 全部删除，
+/// 只留内容 —— 行内边距 / 行底 / 分隔线由 `List` 给。
+///
 /// ## 卡片内容（三处并列，缺一不可）
 ///
 /// 仓库图标 · **全名（链接色）** · 描述 · 主语言 + Star 总数 + **榜单指标**。
@@ -48,8 +53,6 @@ struct TrendCard: View {
     let summary: RepoSummary
     let badges: [Badge]
 
-    /// 顶上一条内嵌 hairline（方案 D 的 `.card+.card{border-top:…}`）——
-
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             // ⚠️ 2026-10-15 起是 **owner 头像**（圆形，走查第 72 条），不再是原型的
@@ -74,15 +77,7 @@ struct TrendCard: View {
 
             Spacer(minLength: 0)
         }
-        // 方案 A（2026-10-15，走查第 76 条）：条目又是**一张白卡** ——
-        // 白面 + 圆角 18 + 内边距 14，不画边框（原型 `.card{background:var(--card);
-        // border:none;border-radius:18px;padding:14px}`）。卡与卡之间是 10 的间距，不画线。
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -139,7 +134,8 @@ struct TrendCard: View {
 }
 
 #Preview {
-    VStack(spacing: Theme.Spacing.s) {
+    // 它现在是 `List` 的一行 ⇒ 预览也按 `List` 摆。
+    List {
         TrendCard(
             summary: RepoSummary(
                 fullName: "misoge/paneltkit",
@@ -157,6 +153,4 @@ struct TrendCard: View {
             badges: [.init("⚡ 1 小时前推送", tone: .metric)]
         )
     }
-    .padding(Theme.Spacing.page)
-    .background(Theme.Palette.background)
 }

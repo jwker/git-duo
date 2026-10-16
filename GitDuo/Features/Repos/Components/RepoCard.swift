@@ -5,6 +5,12 @@ import GitDuoKit
 
 /// 仓库卡片 —— 仓库列表的一行（PRD §4.3「卡片内容」）。
 ///
+/// ## ⚠️ 2026-10-16 起它是 **`List` 的一行**（NATIVE-MIGRATION P3）
+///
+/// 同 `PinRow`：自绘的 `padding(14)` + 白面 + 圆角 18 + 卡间 10 的间距全部删除 ——
+/// 行内边距 / 行底 / 圆角 / 分隔线改由 `List` 给（`.listRowBackground` 等）。
+/// 本件只负责**内容**。
+///
 /// ## 为什么它在本 Feature 里，而不是进 `GitDuoDesign`
 ///
 /// 因为它**认识领域模型**（`Repository`）。设计包里放的是"与业务无关的视觉件"
@@ -17,8 +23,6 @@ import GitDuoKit
 struct RepoCard: View {
 
     let repository: Repository
-
-    /// 顶上一条内嵌 hairline（方案 D 的 `.card+.card{border-top:…}`）——
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
@@ -36,15 +40,7 @@ struct RepoCard: View {
             }
             Spacer(minLength: 0)
         }
-        // 方案 A（2026-10-15，走查第 76 条）：条目又是**一张白卡** ——
-        // 白面 + 圆角 18 + 内边距 14，不画边框（原型 `.card{background:var(--card);
-        // border:none;border-radius:18px;padding:14px}`）。卡与卡之间是 10 的间距，不画线。
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.cardLarge, style: .continuous)
-                .fill(Theme.Palette.surface)
-        )
         // 无障碍：读屏读的是"这是什么、有什么"，而不是把六个碎片逐个念一遍
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
@@ -129,7 +125,8 @@ struct RepoCard: View {
 }
 
 #Preview {
-    VStack(spacing: Theme.Spacing.s) {
+    // 它现在是 `List` 的一行 ⇒ 预览也按 `List` 摆。
+    List {
         RepoCard(repository: Repository(
             owner: "my-git", name: "gitduo",
             description: "GitHub 客户端 · SwiftUI · 零第三方依赖",
@@ -145,6 +142,4 @@ struct RepoCard: View {
             permissions: .none
         ))
     }
-    .padding(Theme.Spacing.page)
-    .background(Theme.Palette.background)
 }

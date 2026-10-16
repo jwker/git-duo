@@ -11,6 +11,15 @@ import GitDuoKit
 /// 这里说的是"还没开始搜"，而它给出的东西是**行动入口**（点一条历史直接复用关键词）。
 /// 两者混用会让"我刚进页面就被告诉没结果"。
 ///
+/// ## ⚠️ 2026-10-16 起它是**两个 `Section`**（NATIVE-MIGRATION P3）
+///
+/// 从前的形状是"一个 `VStack`：`SectionHeader` + `CardBox` 包一组历史行 + `SectionHeader`
+/// + `FlowLayout` 一排热词"。主干换 `List` 之后，标题归 `Section` 的 header、
+/// 历史行归 `Section` 的行（分隔线由系统画）、热词那一排是一行不坐白卡的"工具行"。
+///
+/// ⚠️ 一个自定义 `View` 的 `body` 是 `Section`，放进 `List` 会被**正常摊开**
+/// （2026-10-16 宿主机探针实证：3 行 + 表头 ⇒ 4 个 `ListTableRowView`）。
+///
 /// ## ⚠️ 「清除」不弹确认层（PRD §4.2 明写）
 ///
 /// 与「最近访问」的「清除全部记录」**有意不同**：那是浏览足迹（用户没打算留），
@@ -30,10 +39,8 @@ struct SearchIdleSection: View {
     let onClear: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            historySection
-            hotSection
-        }
+        historySection
+        hotSection
     }
 
     // MARK: - 最近搜索
@@ -42,52 +49,54 @@ struct SearchIdleSection: View {
     private var historySection: some View {
         // ⚠️ 「清除」按钮**只在有记录时给**（原型就是如此：无记录那一支没有 `linkbtn`）。
         //    空列表上挂一个"清除"是给用户一件没有作用的东西点。
-        SectionHeader(
-            title: SearchCopy.recentSectionTitle,
-            actionTitle: history.isEmpty ? nil : SearchCopy.clearHistoryAction,
-            action: history.isEmpty ? nil : onClear
-        )
-
-        if history.isEmpty {
-            EmptyBox(title: SearchCopy.emptyHistory, systemImage: "clock")
-        } else {
-            // 方案 A：历史行装进**一张白卡**（与搜索结果、首页两组同构）。
-            CardBox(vertical: 0, horizontal: 0) {
-                ForEach(Array(history.enumerated()), id: \.element) { index, term in
-                    // 分隔线是顶上那条内嵌 hairline —— 首行不画。
-                    // ⚠️ 缩进 45：这一行是 **16pt 线稿图标**（不是头像），
-                    //    从文字起点算 = 卡内边距 14 + 图标槽 20 + gap 11（原型给 41，
-                    //    它的图标是 16 不带槽 ⇒ 14+16+11）。
-                    SearchRowBox(showsSeparator: index > 0, separatorInset: 45) {
+        Section {
+            if history.isEmpty {
+                EmptyBox(title: SearchCopy.emptyHistory, systemImage: "clock")
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(history, id: \.self) { term in
+                    // ⚠️ 这里**有意用默认按钮样式**（不带 `.buttonStyle(.plain)`）：
+                    //    它在 `List` 行里 ⇒ 整行可点 + 按下高亮是系统给的，
+                    //    而 `plain` 会把那份反馈一起删掉（P2 那条"plain 是正确选择"说的是
+                    //    **不在列表里**的自绘行件）。
+                    Button {
                         onUse(term)
-                    } content: {
-                        Image(systemName: "clock")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Theme.Palette.textTertiary)
-                            .frame(width: 20)
-                            .accessibilityHidden(true)
+                    } label: {
+                        SearchRowBox {
+                            Image(systemName: "clock")
+                                .font(.system(size: 16))
+                                .foregroundStyle(Theme.Palette.textTertiary)
+                                .frame(width: 20)
+                                .accessibilityHidden(true)
 
-                        // 原型 `.t1` 在这里被覆写成 `font-size:14px;font-weight:500`
-                        // ⇒ 取本仓最近的一档（`rowTitle` = `.subheadline`）再压一档字重。
-                        Text(term)
-                            .font(Theme.Font.rowTitle.weight(.medium))
-                            .foregroundStyle(Theme.Palette.textPrimary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        RowChevron()
+                            // 原型 `.t1` 在这里被覆写成 `font-size:14px;font-weight:500`
+                            // ⇒ 取本仓最近的一档（`rowTitle` = `.subheadline`）再压一档字重。
+                            Text(term)
+                                .font(Theme.Font.rowTitle.weight(.medium))
+                                .foregroundStyle(Theme.Palette.textPrimary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
+                .listRowBackground(Theme.Palette.surface)
             }
+        } header: {
+            SectionHeader(
+                title: SearchCopy.recentSectionTitle,
+                actionTitle: history.isEmpty ? nil : SearchCopy.clearHistoryAction,
+                action: history.isEmpty ? nil : onClear,
+                margins: .none
+            )
         }
     }
 
     // MARK: - 热门关键词
 
+    @ViewBuilder
     private var hotSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: SearchCopy.hotSectionTitle)
-
+        Section {
             // 原型 `display:flex;flex-wrap:wrap;gap:8px` ⇒ `FlowLayout`。
             // chip 复用 `FilterChip`（原型这里用的就是 `.fchip` 那个类），
             // 但**不给尖角**（热词点了直接填，不打开任何弹层）也不高亮。
@@ -99,20 +108,24 @@ struct SearchIdleSection: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // 一排 chip 不是"列表内容" ⇒ 不坐白卡、不画分隔线（同 `ExploreView` 的 chips 行）。
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        } header: {
+            SectionHeader(title: SearchCopy.hotSectionTitle, margins: .none)
         }
     }
 }
 
 #Preview {
-    ScrollView {
-        VStack(alignment: .leading, spacing: 0) {
+    NavigationStack {
+        List {
             SearchIdleSection(
                 history: ["swiftui", "next.js", "头像降采样", "Issues 标签"],
                 hotKeywords: SearchHotKeywords.all,
                 onUse: { _ in },
                 onClear: {}
             )
-            Divider().padding(.top, Theme.Spacing.xl)
             SearchIdleSection(
                 history: [],
                 hotKeywords: SearchHotKeywords.all,
@@ -120,8 +133,5 @@ struct SearchIdleSection: View {
                 onClear: {}
             )
         }
-        .padding(.horizontal, Theme.Spacing.page)
-        .padding(.bottom, Theme.Spacing.xl)
     }
-    .background(Theme.Palette.background)
 }
