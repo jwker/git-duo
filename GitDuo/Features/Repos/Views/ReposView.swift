@@ -14,14 +14,12 @@ import GitDuoKit
 ///
 /// 1. **内容主干** `ScrollView + LazyVStack` → `List`（行件只画内容，
 ///    行底 / 分隔线 / 行内边距由系统给）。
-/// 2. **分段条从"吸顶的 section header"改成 `safeAreaInset(edge: .top)`**。
-///    从前那条吸顶效果是 `LazyVStack(pinnedViews: [.sectionHeaders])` 做出来的；
-///    `List` 里做同一件事要么换 `.plain` 风格（行会变成通栏、失去分组形状），
-///    要么在分区头里塞一个 `Picker`（不是它的用途）。
-///    `safeAreaInset` 是官方给"标题栏下面常驻一条工具条"的机制 ——
-///    **内容从它下面滚过去，而它自己永远不消失**，比吸顶还稳。
-/// 3. **空态 / 失败态换成官方件**（`EmptyBox` / `PageFailure`）——
-///    从前这两处是本文件里手摆的 `VStack`（第 8、9 份同形实现）。
+/// 2. **分段条回到 `List` 内部** —— 作为 `Section` 的 header。
+///    P3 首批曾用 `.safeAreaInset(edge: .top)` 让它吸顶，但那会让导航栏**大标题消失**，
+///    属于回归。在 SwiftUI 当前 API 下，「大标题 + 分组形状 + 吸顶」三者不可兼得：
+///    `.plain` 风格能吸顶但行变通栏；`.safeAreaInset` 能吸顶但吞大标题。
+///    这里选择保留大标题 + 分组形状，让分段条随内容滚动。
+/// 3. **空态 / 失败态换成官方件**（`EmptyBox` / `PageFailure`）。
 ///
 /// ⚠️ 两条**有意保留**的自定观感（属 P5 令牌收尾）：页面底 `Theme.Palette.background`、
 ///    行底 `Theme.Palette.surface` —— 用 `.scrollContentBackground(.hidden)` 把
@@ -53,12 +51,6 @@ struct ReposView: View {
                 //（`EmptyBox` / `PageFailure` 自带完整留白，不需要外层再撑）。
                 centeredBody
             }
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            segmentBar
-                // ⚠️ 内容会从它**下面**滚过去 ⇒ 这一层必须不透明，否则卡片会从
-                //    分段条与导航栏之间的缝隙里透出来。
-                .background(Theme.Palette.background)
         }
         .background(Theme.Palette.background)
         .navigationTitle("仓库")
@@ -99,16 +91,20 @@ struct ReposView: View {
 
     private var listBody: some View {
         List {
-            switch model.content {
-            case .skeleton:
-                RepoCardSkeleton()
-                    .listRowBackground(Theme.Palette.surface)
+            Section {
+                switch model.content {
+                case .skeleton:
+                    RepoCardSkeleton()
+                        .listRowBackground(Theme.Palette.surface)
 
-            case .items:
-                listRows
+                case .items:
+                    listRows
 
-            default:
-                EmptyView()
+                default:
+                    EmptyView()
+                }
+            } header: {
+                segmentBar
             }
         }
         .listStyle(.insetGrouped)
@@ -124,11 +120,16 @@ struct ReposView: View {
         let lastID = items.last?.id
 
         ForEach(items) { repository in
-            // 整行可点 = `List` 行的既有语义（系统给按下高亮与右侧箭头），
-            // 落点与 `router.push` 完全同一条路径。
-            NavigationLink(value: route(for: repository)) {
+            // ⚠️ 不用 `NavigationLink(value:)`：它在 `.insetGrouped` 里的分隔线
+            //    会被系统默认缩短到 disclosure indicator 左侧。
+            //    `Button` + `.buttonStyle(.plain)` 同样整行可点 + 有按下高亮，
+            //    并保留全宽分隔线。
+            Button {
+                env.router.push(route(for: repository))
+            } label: {
                 RepoCard(repository: repository)
             }
+            .buttonStyle(.plain)
             .onAppear {
                 // 滚到底自动加载（§4.4：普通列表用自动加载，搜索才用手动按钮）。
                 // 只对最后一行触发，否则每次出现一行都会打一次请求。
@@ -169,25 +170,29 @@ struct ReposView: View {
 
     @ViewBuilder
     private var centeredBody: some View {
-        Group {
-            switch model.content {
-            case .needsMore:
-                continueLoading
+        VStack(spacing: 0) {
+            segmentBar
 
-            case .empty:
-                EmptyBox(title: model.segment.emptyTitle, systemImage: "folder")
+            Group {
+                switch model.content {
+                case .needsMore:
+                    continueLoading
 
-            case let .failure(error):
-                // 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4：任何失败都有出口）。
-                PageFailure(error: error) {
-                    Task { await model.refresh() }
+                case .empty:
+                    EmptyBox(title: model.segment.emptyTitle, systemImage: "folder")
+
+                case let .failure(error):
+                    // 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4：任何失败都有出口）。
+                    PageFailure(error: error) {
+                        Task { await model.refresh() }
+                    }
+
+                default:
+                    EmptyView()
                 }
-
-            default:
-                EmptyView()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// 空、但服务端还有下一页 —— 这时**不能说「还没有…」**。

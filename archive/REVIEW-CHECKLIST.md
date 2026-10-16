@@ -2749,6 +2749,53 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 > ⇒ 现在是**有效 78 条、含作废记录共 83 个编号**
 > （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
 
+> ## 走查第 84 条：修复 P3 首批两处回归（2026-10-16）
+>
+> 用户报：
+> 1. 首页置顶仓库「每项分割线不对，只在右侧小箭头下方显示一点点」；
+> 2. 仓库页 / 探索页「大标题（仓库 / 探索）没有了」。
+>
+> ### 根因（用 iOS 模拟器探针复现）
+>
+> | 现象 | 根因 | 环境 |
+> |---|---|---|
+> | 分割线缩短 | `.insetGrouped` `List` 的 `NavigationLink` 行会把分隔线默认缩短到 disclosure indicator 左侧 | iPhone 17 Pro / iOS 26.5 |
+> | 大标题消失 | `.safeAreaInset(edge: .top)` 会吞掉导航栏 large title | iPhone 17 Pro / iOS 26.5 |
+>
+> 两条都是 P3 首批引入的：首批为了"白拿右侧箭头"把行跳转改成 `NavigationLink(value:)`；
+> 为了"吸顶"把分段条挂到 `.safeAreaInset(edge: .top)`。
+> 模拟器探针确认：`.listRowInsets` 改不了 `NavigationLink` 的分隔线；
+> `.navigationBarTitleDisplayMode(.large)` 改不了 `safeAreaInset` 吞标题。
+>
+> ### 修法
+>
+> - 首页 `PinRow` / `RecentRow`、仓库列表 `RepoCard`、探索页 `TrendCard` 的跳转
+>   从 `NavigationLink(value:)` 改回 `Button { env.router.push(...) }` + `.buttonStyle(.plain)`。
+>   与 P3 前旧版一致，同样整行可点 + 按下高亮，分隔线恢复全宽。
+> - 仓库页 / 探索页的分段条从 `.safeAreaInset(edge: .top)` 改回 `List` 的 `Section` header。
+>   导航栏大标题恢复；代价是分段条**不再吸顶**，会随列表滚动。
+>
+> ### 取舍说明
+>
+> 在 SwiftUI 当前 API 下，「大标题 + 分组形状（`.insetGrouped`）+ 吸顶」三者不可兼得：
+> `.plain` 风格支持粘性 section header，但行会变通栏、失去分组形状；
+> `.safeAreaInset` 能常驻但会吞大标题。这里选择保留大标题 + 分组形状，放弃吸顶。
+> 旧版（P3 前）用 `ScrollView + LazyVStack(pinnedViews: [.sectionHeaders])` 实现了三者，
+> 但 P3 的目标是把容器换成 `List`，因此不能再退回 `ScrollView`。
+>
+> ### 改动文件
+>
+> `GitDuo/Features/Home/HomeView.swift` ·
+> `GitDuo/Features/Repos/Views/ReposView.swift` ·
+> `GitDuo/Features/Explore/ExploreView.swift` ·
+> `NATIVE-MIGRATION.md`。
+>
+> **验证**：`make verify` `exit=0` · **0 条 Swift 编译警告** · `BUILD SUCCEEDED` ·
+> 五包 **1788 项 / 154 套件**（与第 83 条逐包一致）。
+>
+> ⇒ 现在是**有效 79 条、含作废记录共 84 个编号**
+> （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
+
 > 第 22 条是 2026-10-07 目视陪跑时**补登**的（与 17–21 同批由 6.7 引出）。⚠️ 它只在**仓库真有受保护分支**时才看得见 ——
 > 多数个人仓库只有默认分支受保护（默认分支本来就不给删），所以这条经常"看不见"，不要因此以为它没实现。
 >

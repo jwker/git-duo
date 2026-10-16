@@ -34,7 +34,11 @@ enum ExploreSheet: Identifiable {
 /// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3）
 ///
 /// 与 `ReposView` 同一处置：`ScrollView + LazyVStack` → `List`；
-/// 榜单分段条从"吸顶的 section header"改成 `safeAreaInset(edge: .top)`；
+/// 榜单分段条从吸顶的 `.safeAreaInset(edge: .top)` 改回 `List` 的 `Section` header。
+/// P3 首批用 `.safeAreaInset` 实现了吸顶，但它会**吞掉导航栏大标题**，属于回归；
+/// 在 SwiftUI 当前 API 下「大标题 + 分组形状 + 吸顶」三者不可兼得，
+/// 这里保留大标题 + 分组形状，让榜单条随内容滚动。
+///
 /// chip / 说明行 / 空态 / 失败态都是**行**（不坐白卡、不画分隔线 —— 它们不是列表内容）。
 ///
 /// ## ⚠️ 这一屏最贵的是配额
@@ -56,33 +60,33 @@ struct ExploreView: View {
 
     var body: some View {
         List {
-            chips
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-
-            // ⚠️ `incomplete_results` 的说明行**不是错误态**（PRD §4.12）：
-            //    已拿到的条目照常显示，只是这一页少了些本该在里面的仓库。
-            //    不静默忽略的理由见 `ExploreBoardNotice`。
-            if let notice = model.notice {
-                Text(notice)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.textSecondary)
+            Section {
+                chips
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-            }
 
-            content
+                // ⚠️ `incomplete_results` 的说明行**不是错误态**（PRD §4.12）：
+                //    已拿到的条目照常显示，只是这一页少了些本该在里面的仓库。
+                //    不静默忽略的理由见 `ExploreBoardNotice`。
+                if let notice = model.notice {
+                    Text(notice)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+
+                content
+            } header: {
+                // ⚠️ 榜单分段条作为 Section header 回到 `List` 内部。
+                //    它不再吸顶（理由见文件头说明）。
+                boardBar
+            }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         .refreshable { await model.refresh() }
-        // ⚠️ 榜单分段条**不再进滚动内容**（理由同 `ReposView`）：
-        //    它挂在安全区上 ⇒ 内容从它下面滚过去，而它自己永远不消失。
-        .safeAreaInset(edge: .top, spacing: 0) {
-            boardBar
-                .background(Theme.Palette.background)
-        }
         .navigationTitle("探索")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -181,15 +185,17 @@ struct ExploreView: View {
         let lastID = items.last?.id
 
         ForEach(items) { row in
-            // ⚠️ 搜索路径**给不出可写性**（`GET /search/repositories` 不返回 `permissions`），
-            //    所以这里**只有一条路**：进只读页。不要试图用"全名是不是以我的登录名开头"
-            //    补一个判断 —— 见 `RepoSummary.canWrite` 的说明（PRD §3.13 明确禁止）。
-            //
-            // ⚠️ 反过来说：**用户自己的公开仓库出现在榜单里时也会进只读页**。这是有意接受的
-            //    误差 —— 榜单是"发现"语境，进的是浏览页；真要看自己的仓库，走首页或仓库 Tab。
-            NavigationLink(value: Route.exploreRepoDetail(fullName: row.fullName)) {
+            // ⚠️ 同 `ReposView`：不用 `NavigationLink(value:)`，
+            //    避免 `.insetGrouped` 里分隔线被缩短到 disclosure indicator 左侧。
+            //    榜单行**只有一条路**：进只读页（`GET /search/repositories` 不返回
+            //    `permissions`）。不要试图用"全名是不是以我的登录名开头"补判断 ——
+            //    见 `RepoSummary.canWrite` 的说明（PRD §3.13 明确禁止）。
+            Button {
+                env.router.push(.exploreRepoDetail(fullName: row.fullName))
+            } label: {
                 TrendCard(summary: row.summary, badges: badges(row))
             }
+            .buttonStyle(.plain)
             .onAppear {
                 // 只有最后一行触发，否则每出现一行就打一次请求（§4.4：普通列表滚到底自动加载）。
                 if row.id == lastID {

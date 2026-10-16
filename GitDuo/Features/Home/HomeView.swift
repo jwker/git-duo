@@ -164,16 +164,21 @@ struct HomeView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
         } else {
-            ForEach(items) { summary in
-                // ⚠️ 用 `NavigationLink(value:)` 而不是 `Button` + `router.push`：
-                //    两者落点是同一条路径（本页的 `NavigationStack(path: $router.home)`
-                //    已注册 `.navigationDestination(for: Route.self)`），但前者让**整行**
-                //    可点、并给出系统的按下高亮与右侧箭头 —— 这是 `List` 行的既有语义。
-                NavigationLink(value: pinnedRoute(summary)) {
-                    PinRow(summary: summary)
+                ForEach(items) { summary in
+                    // ⚠️ 用 `Button` + `router.push` 而不是 `NavigationLink(value:)`：
+                    //    `NavigationLink` 行在 `.insetGrouped` 里的分隔线会被系统默认
+                    //    缩短到 disclosure indicator 左侧（"只在右侧小箭头下方一点点"），
+                    //    这是 iOS 的默认行为，`.listRowInsets` 改不了。
+                    //    `Button` + `.buttonStyle(.plain)` 同样整行可点、有按下高亮，
+                    //    且分隔线保持全宽（与 P3 前旧版一致）。
+                    Button {
+                        env.router.push(pinnedRoute(summary))
+                    } label: {
+                        PinRow(summary: summary)
+                    }
+                    .buttonStyle(.plain)
                 }
-            }
-            .listRowBackground(Theme.Palette.surface)
+                .listRowBackground(Theme.Palette.surface)
         }
     }
 
@@ -190,7 +195,10 @@ struct HomeView: View {
                 // ⚠️ 不做本地去重 / 裁剪：上限 6 与"同一仓库只留一条"都在存储那一侧保证
                 //    （`RecentVisitStore`），这里重做一遍就等于有了两份规则。
                 ForEach(visits) { visit in
-                    NavigationLink(value: visitRoute(visit)) {
+                    // ⚠️ 同置顶行：用 `Button` + `router.push` 保持分隔线全宽。
+                    Button {
+                        env.router.push(visitRoute(visit))
+                    } label: {
                         RecentRow(
                             fullName: visit.fullName,
                             // ⚠️ 描述与私有性**本机确实没有** —— `RecentVisit` 只存
@@ -205,6 +213,7 @@ struct HomeView: View {
                             ownerAvatarURL: visit.ownerAvatarURL
                         )
                     }
+                    .buttonStyle(.plain)
                 }
                 .listRowBackground(Theme.Palette.surface)
             } else {

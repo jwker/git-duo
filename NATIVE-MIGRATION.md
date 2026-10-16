@@ -61,7 +61,7 @@
 | `PullCard` | 同上 | 20 |
 | `PinRow` | `List` 行 | 14 ✅ **P3 已完成** |
 | `StarRow` | `List` 行 | 14 ✅ **P3 已完成**（`LabeledContent` 未用上：这一行是「全名 + 副标题」两行文本，不是 label/value 对） |
-| `RepoCard` | `List` 行 + `NavigationLink` | 13 ✅ **P3 已完成** |
+| `RepoCard` | `List` 行 + `Button` + `.buttonStyle(.plain)` | 13 ✅ **P3 已完成**（去掉了首批失败的 `NavigationLink(value:)` 尝试，避免 `.insetGrouped` 分隔线缩短） |
 | `SearchRowView` / `SearchRowBox` | `List` + `Section`（分隔线由系统画） | 11 / 8 ✅ **P3 已完成**（`RowChevron` 已删） |
 | `RecentRow` | `List` 行 | 8 ✅ **P3 已完成** |
 | `RepoFileRow` / `RepoCommitRow` | `List` 行 + `NavigationLink` | 8 / 6 |
@@ -91,7 +91,7 @@
 | `LabelPill` | `Text` + `.background(_:in: .capsule)` | 22 |
 | `RepoReadmeSection` | `Section` + `Text(AttributedString(markdown:))` + `Link` | 14 |
 | `RepoHeroCard` / `RepoDetailHero` | `Section` + `LabeledContent` + `Label` + `AsyncImage` | 12 / 10 |
-| `TrendCard` | `List` 行 + `NavigationLink` | 10 ✅ **P3 已完成** |
+| `TrendCard` | `List` 行 + `Button` + `.buttonStyle(.plain)` | 10 ✅ **P3 已完成**（原因同 `RepoCard`） |
 | `CommentComposer` | `TextField(axis: .vertical)` + `Button` + `.safeAreaBar` | 8 |
 | `SelectedLabelRow` | `LazyVGrid` + `Button` | 12 |
 | `FilterChip` | `Menu`（自带 label + indicator）或 `Picker` + `.menu` | 9 ✅ **P2 已完成**（实做否掉了 `Menu`，见 §3 P2 第 6 条） |
@@ -248,10 +248,16 @@
 
 ### P3 · 列表主干（**最大的一期**）
 
-> **状态（2026-10-16）**：**第一批已做完** —— 六个页面/推入页（首页 · 仓库列表 · 探索 ·
-> 搜索 · 我的 Star · 我的会话）。⚠️ 本章的观感**还没有目视过一次**，请先在真机上看（`make device`）。
-> 第二批：**「我的」根页 + 仓库详情一族**（`RepoDetailView` / `ExploreRepoDetailView` /
-> `RepoSectionListView`（Issues / PRs / Commits 三段的行件）/ `RepoCodeView` / 各详情页）。
+> **状态（2026-10-16）**：**第一批已做完，并已修复两处回归**（见第 84 条）：
+> 首页置顶 / 最近访问行、仓库列表页、探索页把 `NavigationLink` 改回 `Button` + `.buttonStyle(.plain)`，
+> 恢复全宽分隔线；仓库 / 探索的分段条从吸顶的 `.safeAreaInset(edge: .top)` 改回 `List` 的
+> `Section` header，恢复导航栏大标题。第二批：**「我的」根页 + 仓库详情一族**
+> （`RepoDetailView` / `ExploreRepoDetailView` / `RepoSectionListView`（Issues / PRs / Commits 三段的行件）/
+> `RepoCodeView` / 各详情页）。
+>
+> ⚠️ 已用 iOS 模拟器探针目视：大标题 + 分组形状 + 全宽分隔线三者可以同时实现；
+> 代价是**分段条不再吸顶**（会随列表滚动）。SwiftUI 当前 API 下「大标题 + 分组形状 + 吸顶」
+> 不可兼得：`.plain` 能吸顶但行变通栏；`.safeAreaInset` 能吸顶但会吞大标题。
 
 1. ✅ **各页 `ScrollView + LazyVStack` → `List`**（`.listStyle(.insetGrouped)`
    + `.scrollContentBackground(.hidden)` + `.background(Theme.Palette.background)`
@@ -259,24 +265,24 @@
    - ⚠️ **为什么保留主题底色**：`Theme.Palette` 是 P5 的活；本期只换容器。
      系统分组底色（浅 `#F2F2F7` / 深 `#000000`）与本 App 的
      `background`（`#F6F8FA` / `#0D1117`）本来就很近，但没有理由现在顺手改掉。
-   - ⚠️ **"分段条吸顶"的替代是 `safeAreaInset(edge: .top)`**（仓库页 / 探索页 / 搜索页）：
-     原来那是 `LazyVStack(pinnedViews: [.sectionHeaders])`。`List` 里没有等价物
-     （`.plain` 风格有粘性表头，但行会变成通栏、失去分组形状；把 `Picker` 塞进分区头
-     不是它的用途）。`safeAreaInset` 是官方给"标题栏下面常驻一条工具条"的机制 ——
-     内容从它下面滚过去，**而它自己永远不消失**，比吸顶还稳。
+   - ⚠️ **"分段条吸顶"作废**：P3 首批曾用 `.safeAreaInset(edge: .top)` 让分段条常驻，
+     但实机探针发现它**会吞掉导航栏大标题**（属于回归）。在 SwiftUI 当前 API 下
+     「大标题 + 分组形状 + 吸顶」三者不可兼得：`.plain` 风格能吸顶但行变通栏、
+     把 `Picker` 塞进分区头不是它的用途、`.safeAreaInset` 能吸顶但吞大标题。
+     这里选择保留大标题 + 分组形状，让分段条随 `List` 内容滚动。
 2. ✅ **行件全部改成系统行**（本批：`PinRow` / `RecentRow` / `RepoCard` / `TrendCard` /
    `StarRow` / `SearchRowView` 四件 / 搜索历史行）。每件都只剩**内容**：
    自绘的 `padding(14)` + 白面 + 圆角 18 + `showsSeparator` + 内嵌 hairline 全部删除。
-   - ⚠️ **跳转改用 `NavigationLink(value:)`**（原来是一律 `Button` + `router.push`）：
-     落点是**同一条路径**（`NavigationStack(path:)` 上已注册 `.navigationDestination(for: Route.self)`），
-     但系统由此白给"整行可点 + 按下高亮 + 右侧箭头"。
-   - ⚠️ `NavigationLink` **没有 action 回调**，而搜索页"点开要先记一笔关键词"是业务要求
-     ⇒ 用 `.simultaneousGesture(TapGesture().onEnded { … })` 补上（不吞掉跳转）。
+   - ⚠️ **跳转用 `Button` + `router.push` + `.buttonStyle(.plain)`**：与 P3 前旧版一致，
+     同样整行可点 + 按下高亮。P3 首批曾改 `NavigationLink(value:)` 想白拿右侧箭头，
+     但 iOS 上 `.insetGrouped` 的 `NavigationLink` 行会把分隔线缩短到 disclosure indicator
+     左侧（用户报"只在右侧小箭头下方显示一点点"），`.listRowInsets` 改不了；遂改回。
    - ⚠️ 开弹层的行（搜索的"用户"行、搜索历史行）**仍是 `Button`**，且**有意用默认样式**
      （不带 `.buttonStyle(.plain)`）：在 `List` 行里默认样式给出的正是"整行可点 + 按压高亮"。
      ⚠️ P2 那条"30 处 `.plain` 全部保留"的结论说的是**不在列表里**的自绘行件，
      与这里不冲突 —— 判据还是「它坐在哪一层」。
    - ⚠️ 自绘的 `RowChevron` **已删除**：系统箭头会**随"能不能推入"变化**，自绘的那一枚不会。
+     改回 `Button` + plain 后，这一批页面不再显示系统 disclosure 箭头。
 3. ✅ **`SectionHeader`（36）→ `Section` 的 header 位**（`margins: .none`——
    组间距现在由 `List` 的 section 机制给，标题再自带 22 的上边距就叠了一层）。
    - ⚠️ 顺带给它补了 `.textCase(nil)`：`List` 的分组样式会给分区标题**加一层大写变换**，
