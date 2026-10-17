@@ -93,6 +93,22 @@ targets:
               - gitduo
         ITSAppUsesNonExemptEncryption: false
 
+  # App 层单测（T1 —— 计划见 .opencode/T1-app-layer-test-target-plan.md）。
+  #
+  # ⚠️ 目录**必须在仓库根**：App target 的 sources 是 `path: GitDuo`，
+  #    测试若放进 GitDuo/ 里会被**编进 App 本体**。
+  # ⚠️ 它挂宿主 App（TEST_HOST）⇒ 每次跑测试都会在模拟器里**真的启动 GitDuo 本体**。
+  GitDuoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: GitDuoTests
+    dependencies:
+      - target: GitDuo        # xcodegen 据此自动设 TEST_HOST / BUNDLE_LOADER
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   GitDuo:
     build:
@@ -103,3 +119,5 @@ schemes:
     test:
       config: Debug
       gatherCoverageData: false
+      targets:
+        - GitDuoTests
