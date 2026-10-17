@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>GitDuo 主色 —— 橙色（第二版：调亮）</title>
+<style>
+  :root{
+    --bg:#F6F8FA; --surface:#FFFFFF; --text:#1F2328; --text2:#656D76; --border:#D0D7DE;
+    --d-bg:#0D1117; --d-surface:#161B22; --d-text:#E6EDF3; --d-text2:#8D96A0; --d-border:#30363D;
+    --danger:#CF222E; --gold:#EAC54F; --open:#1A7F37; --merge:#8250DF;
+  }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,"Helvetica Neue",sans-serif;margin:0;padding:28px 32px 64px;background:#fff;color:var(--text);line-height:1.6}
+  h1{font-size:20px;margin:0 0 4px}
+  h2{font-size:15px;margin:36px 0 10px;padding-top:18px;border-top:1px solid #E8ECEF}
+  .lede{color:var(--text2);font-size:13px;margin:0 0 8px}
+  .rule{font-size:13px;background:#FFF8E5;border:1px solid #E9D9A8;border-radius:8px;padding:12px 16px;margin:16px 0}
+  .rule b{color:#8A6D1F}
+  code{background:#F0F2F5;padding:1px 5px;border-radius:4px;font-size:12px}
+
+  /* 亮度标尺 */
+  .ruler{display:flex;gap:0;align-items:stretch;margin:14px 0 6px;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+  .ruler .sw{flex:1;padding:16px 8px 12px;color:#fff;font-size:11px;text-align:center;line-height:1.45}
+  .ruler .sw b{display:block;font-size:13px;margin-bottom:2px}
+  .ruler .sw .cc{opacity:.92;font-variant-numeric:tabular-nums}
+  .ruler .sw .ok{display:block;font-weight:700;margin-top:5px;font-size:11px}
+  .ruler .sw .no{display:block;margin-top:5px;font-size:11px;opacity:.85}
+  .ruler-note{font-size:12px;color:var(--text2)}
+
+  /* 方案卡 */
+  .wrap{display:flex;gap:18px;flex-wrap:wrap}
+  .card{width:330px;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .card h3{font-size:13px;margin:0;padding:9px 14px;background:var(--bg);border-bottom:1px solid var(--border)}
+  .card h3 b{font-size:12px;color:#8A6D1F}
+  .pane{padding:14px}
+  .pane.light{background:var(--bg)}
+  .pane.dark{background:var(--d-bg);color:var(--d-text)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+  .label{font-size:11px;color:var(--text2);width:70px;flex:none}
+  .dark .label{color:var(--d-text2)}
+  a.link{text-decoration:none;font-weight:600}
+  .btn{display:inline-block;padding:7px 16px;border-radius:8px;color:#fff;font-weight:700;font-size:14px}
+  .chip{display:inline-block;padding:5px 13px;border-radius:999px;color:#fff;font-size:13px;font-weight:600}
+  .chip-off{display:inline-block;padding:5px 13px;border-radius:999px;font-size:13px;border:1px solid var(--border);color:var(--text2)}
+  .dark .chip-off{border-color:var(--d-border);color:var(--d-text2)}
+  .sel{display:inline-block;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
+  .note{font-size:12px;color:var(--text2);margin-top:4px}
+  .dark .note{color:var(--d-text2)}
+  .sem{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px}
+  .sem span{padding:5px 12px;border-radius:999px;color:#fff;font-weight:600}
+</style>
+
+<h1>橙色 —— 第二版（调亮）</h1>
+<p class="lede">上一版三个候选都偏暗，根因是我硬要求「链接文字」和「按钮底」用 <b>一模一样的一个值</b>。这一版把这条放开。</p>
+
+<div class="rule">
+  <b>关键认知：「统一主色」= 一个色相，不是一个数值。</b><br>
+  现在难看的原因，是蓝和绿属于<b>两个不同色相</b>。同一色相的深浅两档，看起来仍然是同一个主色。<br><br>
+  <b>而且：「亮」这件事只卡在链接文字上。</b>白底上的橙，要 ≥4.5:1 的亮度上限就在 <code>#C2410C</code> 附近——这是橙色特有的物理限制（蓝色能亮，是因为蓝通道本身暗）。<br>
+  但<b>按钮和色块不受这条限制，可以明显更亮</b>；而且越亮的橙，离「危险红」反而越远（见最后一节）。
+</div>
+
+<h2>亮度标尺 —— 哪个橙能干什么</h2>
+<div class="ruler">
+  <div class="sw" style="background:#9A3412"><b>#9A3412</b><span class="cc">白底 7.31</span><span class="ok">链接 ✅ 按钮 ✅</span></div>
+  <div class="sw" style="background:#B34700"><b>#B34700</b><span class="cc">白底 5.50</span><span class="ok">链接 ✅ 按钮 ✅</span></div>
+  <div class="sw" style="background:#C2410C"><b>#C2410C</b><span class="cc">白底 5.18</span><span class="ok">链接 ✅ 按钮 ✅</span></div>
+  <div class="sw" style="background:#D9480F"><b>#D9480F</b><span class="cc">白底 4.30</span><span class="no">链接 ✗ 差 0.20</span></div>
+  <div class="sw" style="background:#EA580C"><b>#EA580C</b><span class="cc">白底 3.56</span><span class="no">链接 ✗ ｜ 按钮 ✓</span></div>
+  <div class="sw" style="background:#F97316"><b>#F97316</b><span class="cc">白底 2.80</span><span class="no">仅做色块 / 大字号</span></div>
+  <div class="sw" style="background:#FB923C"><b>#FB923C</b><span class="cc">白底 2.26</span><span class="no">仅做色块</span></div>
+</div>
+<p class="ruler-note">左边越深越"看得清"，右边越亮越"像橙"。<b>链接文字只能落在左边三格</b>；按钮从第 5 格起明显变亮。</p>
+
+<h2>三个方案（浅色 + 深色）</h2>
+<div class="wrap">
+
+  <!-- 方案 1 -->
+  <div class="card">
+    <h3>方案 1 ·「稳」<span>　链接与按钮同色</span></h3>
+    <div class="pane light" style="--a:#C2410C;--tint:#FFEDE4">
+      <div class="row"><span class="label">链接</span><a class="link" href="#" style="color:var(--a)">查看全部 32 个 Issue</a></div>
+      <div class="row"><span class="label">主按钮</span><span class="btn" style="background:var(--a)">保存</span><span class="btn" style="background:var(--a)">合并</span></div>
+      <div class="row"><span class="label">已选筛选</span><span class="chip" style="background:var(--a)">已选</span><span class="chip-off">未选</span></div>
+      <div class="row"><span class="label">淡底强调</span><span class="sel" style="background:var(--tint);color:var(--a)">语言 · Swift</span></div>
+      <div class="note">链接 <code>#C2410C</code> 5.18 ／ 按钮 <code>#C2410C</code></div>
+    </div>
+    <div class="pane dark" style="--a:#FFA657;--tint:rgba(255,166,87,.15)">
+      <div class="row"><span class="label">链接</span><a class="link" href="#" style="color:var(--a)">查看全部 32 个 Issue</a></div>
+      <div class="row"><span class="label">主按钮</span><span class="btn" style="background:#FFA657;color:#0D1117">保存</span><span class="btn" style="background:#FFA657;color:#0D1117">合并</span></div>
+      <div class="row"><span class="label">已选筛选</span><span class="chip" style="background:var(--a);color:#0D1117">已选</span><span class="chip-off">未选</span></div>
+      <div class="row"><span class="label">淡底强调</span><span class="sel" style="background:var(--tint);color:var(--a)">语言 · Swift</span></div>
+      <div class="note">深色 <code>#FFA657</code> 9.77 —— 深色模式本来就能很亮</div>
+    </div>
+  </div>
+
+  <!-- 方案 2 -->
+  <div class="card" style="border-color:#E9D9A8">
+    <h3 style="background:#FFF8E5">方案 2 ·「按钮更亮」<b>（推荐）</b><span>　链接深、按钮亮</span></h3>
+    <div class="pane light" style="--a:#C2410C;--btn:#EA580C;--tint:#FFEDE4">
+      <div class="row"><span class="label">链接</span><a class="link" href="#" style="color:var(--a)">查看全部 32 个 Issue</a></div>
+      <div class="row"><span class="label">主按钮</span><span class="btn" style="background:var(--btn)">保存</span><span class="btn" style="background:var(--btn)">合并</span></div>
+      <div class="row"><span class="label">已选筛选</span><span class="chip" style="background:var(--btn)">已选</span><span class="chip-off">未选</span></div>
+      <div class="row"><span class="label">淡底强调</span><span class="sel" style="background:var(--tint);color:var(--a)">语言 · Swift</span></div>
+      <div class="row"><span class="label">入口色块</span>
+        <span style="display:inline-block;width:26px;height:26px;border-radius:7px;background:#F97316"></span>
+        <span style="display:inline-block;width:26px;height:26px;border-radius:7px;background:#F97316"></span>
+        <span style="display:inline-block;width:26px;height:26px;border-radius:7px;background:#F97316"></span>
+      </div>
+      <div class="note">链接 <code>#C2410C</code> 5.18 ／ 按钮 <code>#EA580C</code> 3.56 ／ 色块 <code>#F97316</code><br>按钮明显更亮更橙，链接保持看得清。</div>
+    </div>
+    <div class="pane dark" style="--a:#FFA657;--tint:rgba(255,166,87,.15)">
+      <div class="row"><span class="label">链接</span><a class="link" href="#" style="color:var(--a)">查看全部 32 个 Issue</a></div>
+      <div class="row"><span class="label">主按钮</span><span class="btn" style="background:#EA580C">保存</span><span class="btn" style="background:#EA580C">合并</span></div>
+      <div class="row"><span class="label">已选筛选</span><span class="chip" style="background:#EA580C">已选</span><span class="chip-off">未选</span></div>
+      <div class="row"><span class="label">淡底强调</span><span class="sel" style="background:var(--tint);color:var(--a)">语言 · Swift</span></div>
+      <div class="note">深色：链接 <code>#FFA657</code> ／ 按钮 <code>#EA580C</code></div>
+    </div>
+  </div>
+
+  <!-- 方案 3 -->
+  <div class="card">
+    <h3>方案 3 ·「最亮」<span>　链接也放宽</span></h3>
+    <div class="pane light" style="--a:#D9480F;--btn:#EA580C;--tint:#FFEEE5">
+      <div class="row"><span class="label">链接</span><a class="link" href="#" style="color:var(--a)">查看全部 32 个 Issue</a></div>
+      <div class="row"><span class="label">主按钮</span><span class="btn" style="background:var(--btn)">保存</span><span class="btn" style="background:var(--btn)">合并</span></div>
+      <div class="row"><span class="label">已选筛选</span><span class="chip" style="background:var(--btn)">已选</span><span class="chip-off">未选</span></div>
+      <div class="row"><span class="label">淡底强调</span><span class="sel" style="background:var(--tint);color:var(--a)">语言 · Swift</span></div>
+      <div class="note">链接 <code>#D9480F</code> <b>4.30（差 0.20）</b> ／ 按钮 <code>#EA580C</code><br>整体更橙，代价是链接文字略低于标准，浅底上会有一点点飘。</div>
+    </div>
+    <div class="pane dark" style="--a:#FFA657;--tint:rgba(255,166,87,.15)">
+      <div class="row"><span class="label">链接</span><a class="link" href="#" style="color:var(--a)">查看全部 32 个 Issue</a></div>
+      <div class="row"><span class="label">主按钮</span><span class="btn" style="background:#EA580C">保存</span><span class="btn" style="background:#EA580C">合并</span></div>
+      <div class="row"><span class="label">已选筛选</span><span class="chip" style="background:#EA580C">已选</span><span class="chip-off">未选</span></div>
+      <div class="row"><span class="label">淡底强调</span><span class="sel" style="background:var(--tint);color:var(--a)">语言 · Swift</span></div>
+      <div class="note">深色档同方案 2</div>
+    </div>
+  </div>
+
+</div>
+
+<h2>顺带解决的一件事：越亮，离「危险红」越远</h2>
+<p class="lede">上一版我担心橙色和危险红太像。算完发现：<b>暗橙才是离红最近的那个</b>。所以调亮不但好看，还更安全。</p>
+<div class="sem" style="background:var(--bg);padding:14px 16px;border-radius:10px;border:1px solid var(--border)">
+  <span style="background:var(--danger)">危险红 #CF222E</span>
+  <span style="background:#C2410C">暗橙 #C2410C ｜ 离红 48 ⚠️</span>
+  <span style="background:#EA580C">亮橙 #EA580C ｜ 离红 69 ✓</span>
+  <span style="background:#F97316">更亮 #F97316 ｜ 离红 94 ✓</span>
+  <span style="background:var(--gold);color:#1F2328">星标金 #EAC54F</span>
+</div>
+<p class="note">但越亮也越靠近「星标金」（#F97316 离金只有 101，#FB923C 只有 57）。<b>#EA580C 是两边都还分得开的那个点。</b></p>
+</body>
+</html>
