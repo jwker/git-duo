@@ -60,10 +60,37 @@ struct RepoReadmeSection: View {
     /// 它只影响**从这里点出去**的那两页（文件页 / 代码页）拿到哪一组界面。
     let readOnly: Bool
 
+    /// 内部小节标题「README.md」的外边距档。
+    ///
+    /// - `ScrollView` 页（§4.4 仓库首页）：默认 `.section`（标题自带 22pt 顶距）。
+    /// - `List` 页（§4.13 他人仓库详情）：传 `.none` —— 组间距由 `List` 的
+    ///   section 机制给，标题再自带 22pt 会与系统 section 间距叠成一个大空档。
+    /// （默认值在显式 init 上，见下。）
+    let headerMargins: SectionHeader.Margins
+
     /// 那一块失败后的重试出口（`LoadState` 里没有"重试"这个概念，它是视图的事）。
     let onRetry: () -> Void
 
     @Environment(AppEnvironment.self) private var env
+
+    /// ⚠️ 显式 init：`headerMargins` 这个带默认值的参数夹在闭包参数 `onRetry` 之前，
+    /// 编译器合成的 memberwise init 在此布局下不接受 trailing closure 写法，
+    /// 而两个调用方都用 trailing closure 传重试闭包 ⇒ 手写一份。
+    init(
+        state: LoadState<MarkdownDocument?>,
+        fullName: String,
+        ref: String,
+        readOnly: Bool,
+        headerMargins: SectionHeader.Margins = .section,
+        onRetry: @escaping () -> Void
+    ) {
+        self.state = state
+        self.fullName = fullName
+        self.ref = ref
+        self.readOnly = readOnly
+        self.headerMargins = headerMargins
+        self.onRetry = onRetry
+    }
 
     var body: some View {
         switch state.presentation {
@@ -99,7 +126,7 @@ struct RepoReadmeSection: View {
     /// 那套手抄的形状不再需要守着）。
     private func documentBody(_ document: MarkdownDocument) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: RepoCopy.readmeSectionTitle)
+            SectionHeader(title: RepoCopy.readmeSectionTitle, margins: headerMargins)
 
             MarkdownBody(
                 blocks: document.blocks,

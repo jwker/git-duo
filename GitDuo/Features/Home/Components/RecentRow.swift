@@ -81,6 +81,8 @@ struct RecentRow: View {
                 // 时间戳不该被说明文字挤走 —— 挤掉之后这一行就看不出"多久以前"了。
                 .layoutPriority(1)
         }
+        // ⚠️ 同 `PinRow`：让整行矩形（含 `Spacer` 空白）成为命中区。
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }

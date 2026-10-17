@@ -218,14 +218,14 @@ struct Slice9ComponentTests {
         #expect(MenuRow(title: "x").titleTone == .normal)
     }
 
-    @Test("默认的附件是 `.none`、默认画分隔线 —— 与 `LinkRow` 同一条处置")
-    func menuRowAccessoryAndSeparatorDefaults() {
+    @Test("默认的附件是 `.none`，两种附件是**穷尽**的")
+    func menuRowAccessoryDefaults() {
+        // ⚠️ 2026-10-16 起**不再有 `showsSeparator`**（NATIVE-MIGRATION P3 第二批）：
+        //    分隔线归 `List` 画，行上那个开关既没有能力关掉系统线、
+        //    又会让调用方以为自己在控制线 ⇒ 连同"第一行传 false"那套口径一起删。
+        //    这里只钉住"附件"这一组默认值（`value` 是独立参数，可与尖角同时出现）。
         let row = MenuRow(title: "主题", value: "浅色")
         #expect(row.accessory == .none)
-        // 分隔线由**行**决定（卡片不知道自己装了几行）⇒ 默认画，最后一行传 `false`。
-        #expect(row.showsSeparator)
-
-        // 两种附件是**穷尽**的：`value` 是独立的参数（可与尖角同时出现）。
         #expect(MenuRow(title: "x", accessory: .chevron).accessory == .chevron)
         #expect(MenuRow(title: "x", accessory: .chevron).accessory != .none)
     }

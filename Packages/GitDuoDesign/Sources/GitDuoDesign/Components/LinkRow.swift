@@ -17,11 +17,17 @@ import SwiftUI
 /// **探索详情的「参与协作」两行**（本切片）。两处的视觉完全一致，所以是同一个组件；
 /// 区别只在图标与去向上，而那是调用方的事。
 ///
-/// ## 分隔线为什么由调用方决定
+/// ## 它**既坐 `List` 也坐 `CardBox`**，谁给内边距 / 分隔线看场景
 ///
-/// 原型的规则是"除最后一个之外都画"。组件不知道自己在不在末位
-/// （`ForEach` 里判断"是不是最后一个"要么靠下标、要么靠 `count` 比较，
-/// 两者都会在数据变化时出错），所以由调用方传 —— 那正是它已经知道的事。
+/// | 场景 | 谁给内边距 | 谁给分隔线 |
+/// |---|---|---|
+/// | `List`（例如早先的探索仓库详情） | `List` 行 | 系统 |
+/// | `CardBox`（2026-10-16 起探索仓库详情回到 `ScrollView`） | 本件自己（`11px 4px`） | 本件自己（`showsSeparator`） |
+///
+/// ⚠️ 2026-10-16 一度为了 `List` 把这两条删了，让系统全包；但探索仓库详情同日报
+/// 回 `ScrollView`（与 §4.4 仓库首页同构，根因是 `List` 行把"自带白面圆角的块"压窄、
+/// 且富内容块把段距撑爆——见 `ExploreRepoDetailView` 的类型说明）。坐回 `CardBox` 后
+/// 这两条又加回来，与 `RepoFileRow`（`05-repo.js` 同族 `.file-row`）同构。
 ///
 /// ## 它是内容层
 ///
@@ -39,9 +45,13 @@ public struct LinkRow: View {
     /// 副标题（原型 `.fmsg`）；`nil` = 不渲染。
     public let subtitle: String?
 
-    public let showsSeparator: Bool
-
     public let action: () -> Void
+
+    /// 画不画底部分隔线；末行传 `false`（原型 `.file-row:last-child{border-bottom:none}`）。
+    ///
+    /// - 坐 `List` 行：传 `false`（系统给分隔线，本件再画就是双线）。
+    /// - 坐 `CardBox(vertical:0, horizontal:0)`：按"首行不画"传 `index > 0`。
+    public let showsSeparator: Bool
 
     public init(
         systemImage: String,
@@ -88,12 +98,19 @@ public struct LinkRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.Palette.textTertiary)
             }
-            // 11 / 4 是原型原值（`padding:11px 4px`）。
+            // ⚠️ 坐 `CardBox` 时由本件自己给原型原值 `11px 4px`（坐 `List` 时这层被
+            //   系统行内边距覆盖，多一层只是无害的同向留白）⇒ 分隔线右缘贴卡边、左缘对齐文字。
             .padding(.vertical, 11)
             .padding(.horizontal, Theme.Spacing.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // 读屏把整行念成一句，而不是"图像、Issues、浏览与参与讨论…、图像"。
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(subtitle.map { "\(title)，\($0)" } ?? title)
+        .accessibilityAddTraits(.isButton)
+        // 底部 hairline（坐 `CardBox` 时由本件画；坐 `List` 传 `false` 交系统）。
         .overlay(alignment: .bottom) {
             if showsSeparator {
                 Rectangle()
@@ -101,27 +118,28 @@ public struct LinkRow: View {
                     .frame(height: 1)
             }
         }
-        // 读屏把整行念成一句，而不是"图像、Issues、浏览与参与讨论…、图像"。
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(subtitle.map { "\(title)，\($0)" } ?? title)
-        .accessibilityAddTraits(.isButton)
     }
 }
 
 #Preview {
-    CardBox() {
-        LinkRow(
-            systemImage: "smallcircle.filled.circle",
-            title: "Issues",
-            subtitle: "浏览与参与讨论 · 无关闭权限"
-        ) {}
-        LinkRow(
-            systemImage: "arrow.triangle.pull",
-            title: "Pull Requests",
-            subtitle: "查看他人贡献 · 可评论不可合并",
-            showsSeparator: false
-        ) {}
+    // ⚠️ **`CardBox` 里看**（本件在 `ScrollView` 页里坐 `CardBox(vertical:0, horizontal:0)`，
+    //    自己画 `11px 4px` 内边距与底部分隔线）。`showsSeparator` 按"首行不画"传。
+    ScrollView {
+        CardBox(vertical: 0, horizontal: 0) {
+            LinkRow(
+                systemImage: "smallcircle.filled.circle",
+                title: "Issues",
+                subtitle: "浏览与参与讨论 · 无关闭权限",
+                showsSeparator: true
+            ) {}
+            LinkRow(
+                systemImage: "arrow.triangle.pull",
+                title: "Pull Requests",
+                subtitle: "查看他人贡献 · 可评论不可合并",
+                showsSeparator: false
+            ) {}
+        }
+        .padding(Theme.Spacing.page)
     }
-    .padding(Theme.Spacing.page)
     .background(Theme.Palette.background)
 }

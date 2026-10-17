@@ -5,10 +5,17 @@ import SwiftUI
 
 /// 设置页（PRD §4.20、TECH_SPEC §9.15）。
 ///
-/// 结构（原型 `SCR.settings.render` 逐条 + 偏差第 46 条）：三个分区，**外加末尾一张独立卡片** ——
+/// 结构（原型 `SCR.settings.render` 逐条 + 偏差第 46 条）：三个分区，**外加末尾一个独立分区** ——
 /// 外观（`主题` = `浅色`）· 账户（`GitHub App · {登录名}` = `已授权`；`前往 GitHub 手动撤销授权`）·
 /// 关于（`清除缓存` = `{大小}`；`版本` = `2.0 (1)`）· **最底部**：`退出登录`
-/// （单独一张卡片、**不带分区标题** —— 见 `signOutSection`）。
+/// （单独一个 `Section`、**不带分区标题** —— 见 `signOutSection`）。
+///
+/// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3 第二批）
+///
+/// 从前是 `ScrollView + VStack` + 四张 `MenuCard`（行自己画内边距与内嵌 hairline）。
+/// 现在四个分区各是一个 `Section`：分隔线、行内边距、卡面与圆角由系统给，
+/// `MenuRow` 只画内容。⚠️ 分区标题仍是 `SectionHeader`（`margins: .none`），
+/// 它自己带着 `.textCase(nil)` —— `List` 的分组样式默认会**把分区标题抬成大写**。
 ///
 /// ## ⚠️ 六行的**可点性**是不一样的，而且差别全在"给不给 action"
 ///
@@ -79,16 +86,15 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                appearanceSection
-                accountSection
-                aboutSection
-                signOutSection
-            }
-            .padding(.horizontal, Theme.Spacing.page)
-            .padding(.bottom, Theme.Spacing.xl)
+        List {
+            appearanceSection
+            accountSection
+            aboutSection
+            signOutSection
         }
+        .listStyle(.insetGrouped)
+        // 主题的页面底 / 行底不交给系统（P5 才动令牌）—— 只把 `List` 自带的底色让开。
+        .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         .navigationTitle(ProfileCopy.settingsTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -133,24 +139,25 @@ struct SettingsView: View {
 
     // MARK: - 三个分区 + 末尾那张独立卡片
 
+    /// ⚠️ 2026-10-16 起分区就是 `List` 的 `Section`（NATIVE-MIGRATION P3 第二批）：
+    ///    分区标题走 `Section("外观")`，行就是 `List` 的行 —— 分隔线与行内边距由系统给。
+    ///    ⚠️ 标题补 `.textCase(nil)` 是 `SectionHeader` 那一件在做的事（见它的说明）。
     private var appearanceSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: ProfileCopy.sectionAppearance)
-            MenuCard {
-                // ⚠️ 2026-10-15 起是切换器（走查第 69 条）：整行一个 `Menu`，
-                //    弹三档 `Picker`。行本身还是 `MenuRow` 的样子（值 + 尖角），
-                //    `Menu` 负责点击 —— 尖角是"这行能点开"的信号（形状即信号，走查第 66 条）。
-                //    ⚠️ 它是本卡片**唯一的一行** ⇒ 分隔线关掉。
-                Menu {
-                    Picker(ProfileCopy.themeRow, selection: appearanceBinding) {
-                        ForEach(AppAppearance.allCases) { option in
-                            Text(option.label).tag(option)
-                        }
+        Section {
+            // ⚠️ 2026-10-15 起是切换器（走查第 69 条）：整行一个 `Menu`，
+            //    弹三档 `Picker`。行本身还是 `MenuRow` 的样子（值 + 尖角），
+            //    `Menu` 负责点击 —— 尖角是"这行能点开"的信号（形状即信号，走查第 66 条）。
+            Menu {
+                Picker(ProfileCopy.themeRow, selection: appearanceBinding) {
+                    ForEach(AppAppearance.allCases) { option in
+                        Text(option.label).tag(option)
                     }
-                } label: {
-                    themeRow
                 }
+            } label: {
+                themeRow
             }
+        } header: {
+            SectionHeader(title: ProfileCopy.sectionAppearance, margins: .none)
         }
     }
 
@@ -159,7 +166,7 @@ struct SettingsView: View {
     private var themeRow: some View {
         let appearance = AppAppearance.stored(appearanceRaw)
         let isDark = colorScheme == .dark
-        return MenuRow(
+        return         MenuRow(
             title: ProfileCopy.themeRow,
             value: ProfileCopy.appearanceValue(isFollowingSystem: appearance == .system, isDark: isDark),
             accessory: .chevron,
@@ -180,49 +187,44 @@ struct SettingsView: View {
 
     /// 「账户」分区 —— ⚠️ **「退出登录」已经不在这一张卡片里**（搬去了 `signOutSection`）。
     private var accountSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: ProfileCopy.sectionAccount)
-            MenuCard {
-                // 登录名取自 `authState`，**不再打一次 `/user`**（§9.15）。
-                // ⚠️ 分隔线画在**顶上** ⇒ 本组第一行把线关掉（原型 `.menu-item+.menu-item`）。
-                MenuRow(
-                    title: ProfileCopy.appRow(login: model.login),
-                    value: ProfileCopy.authorizationValue,
-                    showsSeparator: false
-                )
+        Section {
+            // 登录名取自 `authState`，**不再打一次 `/user`**（§9.15）。
+            MenuRow(
+                title: ProfileCopy.appRow(login: model.login),
+                value: ProfileCopy.authorizationValue,
+                showsSeparator: false
+            )
 
-                // 撤销失败的兜底入口（见类型说明）。⚠️ 它**常驻**，不是"失败后才出现"。
-                // ⚠️ 它**不跟着「退出登录」搬走**（决策 #78）：两者语义虽相连，但这个是**兜底**
-                //    （只有撤销失败的人才用），与"登出"这个主动作分开摆更接近它本来的位置。
-                // ⚠️ 它**照旧画顶线** —— 上面那行是「GitHub App · {账号}」，
-                //    与"谁在最后"无关（2026-10-15 走查第 77 条）。
-                MenuRow(title: ProfileCopy.manualRevokeAction) {
-                    openManualRevoke()
-                }
+            // 撤销失败的兜底入口（见类型说明）。⚠️ 它**常驻**，不是"失败后才出现"。
+            // ⚠️ 它**不跟着「退出登录」搬走**（决策 #78）：两者语义虽相连，但这个是**兜底**
+            //    （只有撤销失败的人才用），与"登出"这个主动作分开摆更接近它本来的位置。
+            MenuRow(title: ProfileCopy.manualRevokeAction, showsSeparator: false) {
+                openManualRevoke()
             }
+        } header: {
+            SectionHeader(title: ProfileCopy.sectionAccount, margins: .none)
         }
     }
 
     private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: ProfileCopy.sectionAbout)
-            MenuCard {
-                MenuRow(
-                    title: ProfileCopy.clearCacheRow,
-                    // ⚠️ 还没量过时**不画值**（`nil` ⇒ 右侧什么都没有），
-                    //    不是画一个 `0.0 MB` —— "还没量"与"确实是零"是两件事。
-                    value: model.cacheBytes.map { ProfileCopy.cacheSize(bytes: $0) },
-                    // 本组第一行 ⇒ 顶上的线不画（同上，走查第 77 条）。
-                    showsSeparator: false
-                ) {
-                    Task { await model.clearCache() }
-                }
-
-                MenuRow(
-                    title: ProfileCopy.versionRow,
-                    value: model.versionText
-                )
+        Section {
+            MenuRow(
+                title: ProfileCopy.clearCacheRow,
+                // ⚠️ 还没量过时**不画值**（`nil` ⇒ 右侧什么都没有），
+                //    不是画一个 `0.0 MB` —— "还没量"与"确实是零"是两件事。
+                value: model.cacheBytes.map { ProfileCopy.cacheSize(bytes: $0) },
+                showsSeparator: false
+            ) {
+                Task { await model.clearCache() }
             }
+
+            MenuRow(
+                title: ProfileCopy.versionRow,
+                value: model.versionText,
+                showsSeparator: false
+            )
+        } header: {
+            SectionHeader(title: ProfileCopy.sectionAbout, margins: .none)
         }
     }
 
@@ -238,12 +240,13 @@ struct SettingsView: View {
     /// 「账户」已经归上面那张卡片，而"登出"不是一个分类、是一个动作。
     /// ⚠️ 代价如实登记：PRD 那句"三个分区"由此变成"三分区 + 一张无标题卡片"（偏差第 46 条）。
     ///
-    /// ⚠️ **上边距要自己补**：分区之间那 22pt 是 `SectionHeader` 的上边距给的
-    /// （原型 `.section-label` 方案 D 后 `margin:22px 2px 6px`，2026-10-15 走查第 73 条，此前是 16px），
-    /// 而本张卡片没有标题 ⇒ 不补的话它会**贴着「关于」那张卡片**，看起来像"关于"分区里的一行 ——
-    /// 正好把这处改动想表达的"隔开"抹掉（**屏幕上看着仍然很正常**，所以这类漏补只有对着原型才发现）。
+/// ⚠️ **"与上面隔开"现在由 `List` 给**：从前那 22pt 是 `SectionHeader` 的上边距
+/// （原型 `.section-label` 方案 D 后 `margin:22px 2px 6px`，2026-10-15 走查第 73 条，此前是 16px），
+/// 而本分区没有标题 ⇒ 从前要自己补，否则它会**贴着「关于」那张卡片**，看起来像"关于"里的
+/// 一行 —— 正好把这处改动想表达的"隔开"抹掉（**屏幕上看着仍然很正常**，所以这类漏补只有
+/// 对着原型才发现）。现在分区间距是 `List` 的 `Section` 机制给的 ⇒ 那句 `.padding(.top)` 已删。
     private var signOutSection: some View {
-        MenuCard {
+        Section {
             // ⚠️ 在途**不给 `action`**（而不是 `.disabled`）：`MenuRow` 在 `action == nil` 时
             //    **根本不画成 `Button`**（决策 #51）⇒ 既不可点、也不会变灰；
             //    变灰会看起来像"这个功能坏了"，而此刻它只是"正在做"。
@@ -256,14 +259,10 @@ struct SettingsView: View {
                 //    ⇒ 零新形态、页面结构一点不动。
                 value: isSigningOut ? ProfileCopy.signingOutValue : nil,
                 titleTone: .destructive,
-                // ⚠️ 它是本卡片**唯一的一行** ⇒ 顶上那条线不画（原型
-                //    `.menu-item+.menu-item`：线属于"我上面还有一行"这件事）；
-                //    不关的话卡片顶边下方会多出一条线，看着像"上面还有内容"。
                 showsSeparator: false,
                 action: open
             )
         }
-        .padding(.top, Theme.Spacing.l)
     }
 
     // MARK: - 动作

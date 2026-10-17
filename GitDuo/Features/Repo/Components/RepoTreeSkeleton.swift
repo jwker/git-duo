@@ -32,20 +32,29 @@ import SwiftUI
 ///
 /// ⚠️ 面包屑那一条（`BreadcrumbBar`，自绘件、C 组）**也换成了真件 + 占位路径**
 /// —— 它只是一行纯展示（两个可选回调都不给），不需要"整套假的分支 / 路径上下文"。
+///
+/// ## ⚠️ 2026-10-16 起：回到 "面包屑 + `CardBox`" 一整块（本轮修复）
+///
+/// 代码页主干从 `List` 回到 `ScrollView` 后，本件也恢复为一块普通视图：
+/// 面包屑直接放在 `VStack` 里，文件行装在 `CardBox` 中。
 struct RepoTreeSkeleton: View {
 
     /// 画几行。取 6 是因为一屏能见到的行数大约就是这些。
     var rows: Int = 6
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+        VStack(alignment: .leading, spacing: 0) {
             // 面包屑：真件 + 占位分支名 / 路径段（两个回调都不给 ⇒ 整条不可点）。
             BreadcrumbBar(
                 branch: Placeholders.shortLine,
                 path: [Placeholders.line, Placeholders.shortLine]
             )
+            // 骨架期不能把「占位占位占位」真画出来 ⇒ 用系统红化遮成灰块。
+            .redacted(reason: .placeholder)
+            // 原型 `.crumb{margin-bottom:8px}`。
+            .padding(.bottom, Theme.Spacing.s)
 
-            CardBox {
+            CardBox() {
                 ForEach(0..<rows, id: \.self) { index in
                     RepoFileRow(
                         entry: .placeholder,
@@ -53,17 +62,21 @@ struct RepoTreeSkeleton: View {
                         showsSeparator: index < rows - 1,
                         action: {}
                     )
+                    .redacted(reason: .placeholder)
+                    // ⚠️ `.redacted` **不拦截点击** ⇒ 遮住的行必须关命中，
+                    //    否则骨架期点一行会推进一个 `README.md` 的占位目录。
+                    .allowsHitTesting(false)
                 }
             }
         }
-        .redacted(reason: .placeholder)
-        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }
 
 #Preview {
-    RepoTreeSkeleton()
-        .padding(.horizontal, Theme.Spacing.page)
-        .background(Theme.Palette.background)
+    ScrollView {
+        RepoTreeSkeleton()
+            .padding(Theme.Spacing.page)
+    }
+    .background(Theme.Palette.background)
 }

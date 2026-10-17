@@ -16,7 +16,8 @@ import GitDuoDesign
 /// 搜索页主干换成 `List` 之后，这三样**都是列表行的既有机制** ⇒ 全部撤掉：
 /// - 内边距 / 行底 → `List` 的行内边距与 `.listRowBackground`
 /// - 分隔线（含 45 / 57 两档内嵌缩进）→ 系统分隔线
-/// - 点击与跳转 → `List` 行上的 `NavigationLink`（系统给按下高亮与右侧箭头）
+/// - 点击与跳转 → `List` 行上的 `Button` + `.buttonStyle(.plain)`（整行可点、按下高亮；
+///   系统箭头不再画，与首页 / 仓库 / 探索三页列表行的观感统一，见 `SearchView.resultRow`）
 ///
 /// ⇒ 本件只剩一件事：**把这一行的内容按 `.sr-item` 的间距摆开**。
 /// 五种行（最近搜索 + 四种结果）共用它，间距只有一处定义。
@@ -54,5 +55,8 @@ struct SearchRowBox<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // ⚠️ 让整行矩形（含 `Spacer`/图标与文字之间的空白）都成为命中区，
+        //    否则 `Button` 只认子视图几何并集，行内空白点不动。
+        .contentShape(Rectangle())
     }
 }

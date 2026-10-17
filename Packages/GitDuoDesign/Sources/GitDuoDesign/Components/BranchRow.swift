@@ -30,6 +30,18 @@ import SwiftUI
 /// 于是外层 `onTapGesture` + 内层 `Button`：**手势的判定范围是"没被 Button 吃掉的部分"**，
 /// 正是原型 `event.stopPropagation()` 想要的效果。
 ///
+/// ## ⚠️ 2026-10-16 起**只画内容**（NATIVE-MIGRATION P3 第二批）
+///
+/// 它现在坐在 `List` 的行里 ⇒ **内边距与分隔线由系统给**（同 `MenuRow` 那一批）：
+///
+/// | 从前自己画 | 现在谁给 |
+/// |---|---|
+/// | `.padding(.vertical, 13)` / `.padding(.horizontal, 14)` | `List` 行内边距 |
+/// | 底部 hairline（`showsSeparator`，末行传 `false`） | `List` 的分隔线（它对"谁是末行"有确定答案） |
+///
+/// ⇒ `showsSeparator` 入参**已删除**：它没有"关掉系统分隔线"的能力，留着只会让调用方
+/// 以为自己在控制线。
+///
 /// ## 它是内容层
 ///
 /// **实色，不加 Liquid Glass**（§10.2）。
@@ -46,10 +58,6 @@ public struct BranchRow: View {
     /// 删除按钮的文字。
     public let deleteTitle: String
 
-    /// 画不画底部分隔线。原型的规则是"除最后一条之外都画"，
-    /// 组件不知道自己在不在末位，所以由调用方传（同 `SearchRowBox`）。
-    public let showsSeparator: Bool
-
     public let onSelect: () -> Void
 
     public let onDelete: () -> Void
@@ -59,7 +67,6 @@ public struct BranchRow: View {
         badgeTitle: String?,
         canDelete: Bool,
         deleteTitle: String,
-        showsSeparator: Bool = true,
         onSelect: @escaping () -> Void,
         onDelete: @escaping () -> Void
     ) {
@@ -67,7 +74,6 @@ public struct BranchRow: View {
         self.badgeTitle = badgeTitle
         self.canDelete = canDelete
         self.deleteTitle = deleteTitle
-        self.showsSeparator = showsSeparator
         self.onSelect = onSelect
         self.onDelete = onDelete
     }
@@ -97,18 +103,11 @@ public struct BranchRow: View {
                 deleteButton
             }
         }
-        // 13 / 14：原型原值（`padding:13px 14px`）—— 4pt 阶里没有这两档，写原值并注明出处。
-        .padding(.vertical, 13)
-        .padding(.horizontal, 14)
+        // ⚠️ 内边距交给 `List`（本件只画内容）—— 从前那两句 `13 / 14` 的原型原值已删。
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // 整行可点（否则只有图标与文字那两小块响应点击）。
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
-        .overlay(alignment: .bottom) {
-            if showsSeparator {
-                Rectangle()
-                    .fill(Theme.Palette.borderSoft)
-                    .frame(height: 1)
-            }
-        }
         .accessibilityElement(children: .contain)
     }
 
@@ -133,23 +132,26 @@ public struct BranchRow: View {
 }
 
 #Preview {
-    VStack(spacing: 0) {
-        BranchRow(
-            name: "main", badgeTitle: "当前", canDelete: false, deleteTitle: "删除",
-            onSelect: {}, onDelete: {}
-        )
-        BranchRow(
-            name: "feature/repo-detail", badgeTitle: nil, canDelete: true, deleteTitle: "删除",
-            onSelect: {}, onDelete: {}
-        )
-        // 受保护分支：判据在领域层，这里只拿到一个 false ⇒ 不画按钮。
-        BranchRow(
-            name: "release/1.0", badgeTitle: nil, canDelete: false, deleteTitle: "删除",
-            showsSeparator: false, onSelect: {}, onDelete: {}
-        )
+    // ⚠️ **`List` 里看**（本件现在只画内容，行内边距与分隔线由系统给）。
+    //    **不写 `.listStyle(.insetGrouped)`** —— 它是 iOS-only，而 `swift test`
+    //    编译的是本包的 **macOS 变体**（同 `MenuRow` 那条告诫）。
+    List {
+        Section {
+            BranchRow(
+                name: "main", badgeTitle: "当前", canDelete: false, deleteTitle: "删除",
+                onSelect: {}, onDelete: {}
+            )
+            BranchRow(
+                name: "feature/repo-detail", badgeTitle: nil, canDelete: true, deleteTitle: "删除",
+                onSelect: {}, onDelete: {}
+            )
+            // 受保护分支：判据在领域层，这里只拿到一个 false ⇒ 不画按钮。
+            BranchRow(
+                name: "release/1.0", badgeTitle: nil, canDelete: false, deleteTitle: "删除",
+                onSelect: {}, onDelete: {}
+            )
+        }
     }
-    .background(Theme.Palette.surface)
-    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sheet, style: .continuous))
-    .padding(Theme.Spacing.page)
+    .scrollContentBackground(.hidden)
     .background(Theme.Palette.background)
 }

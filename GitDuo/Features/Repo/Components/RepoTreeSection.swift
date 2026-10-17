@@ -34,6 +34,13 @@ import SwiftUI
 /// ⚠️ 若哪天又要把它当**通用分区**用（比如在仓库首页内嵌一段目录浏览），
 /// 那时再加回需要的参数 —— 而不是现在留两个没人传的开口。
 ///
+/// ## ⚠️ 2026-10-16 起回到 `ScrollView`（本轮修复）
+///
+/// P3 第二批曾把文件行装进 `List`；实测回归：面包屑宽度变窄、与文件行不对齐。
+/// 原因是面包屑与文件行**自带几何**（内边距 / 底色），坐在 `List` 行里会被系统
+/// 行内边距再缩一次。⇒ 本件恢复为 `VStack` + `CardBox` 装文件行；面包屑直接
+/// 放在 `VStack` 里，宽度与文件行一致。
+///
 /// ## 判据 #43：它留 Feature（不进设计包）
 ///
 /// 它收 `RepoTreeSession`（领域模型 + 取数状态）⇒ 不进 `GitDuoDesign`。
@@ -85,7 +92,13 @@ struct RepoTreeSection: View {
 
         case .content:
             if let page = session.page.value {
-                content(page)
+                VStack(alignment: .leading, spacing: 0) {
+                    breadcrumb(page)
+                        // 原型 `.crumb{margin-bottom:8px}`。
+                        .padding(.bottom, Theme.Spacing.s)
+
+                    content(page)
+                }
             }
 
         case let .failure(error):
@@ -96,29 +109,24 @@ struct RepoTreeSection: View {
     // MARK: - 主体
 
     private func content(_ page: RepoTreePage) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            breadcrumb(page)
-                // 原型 `.crumb{margin-bottom:8px}`。
-                .padding(.bottom, Theme.Spacing.s)
-
-            CardBox() {
-                if page.entries.isEmpty {
-                    // 原型：`<div class="t3" style="padding:16px 8px;text-align:center">空目录</div>`
-                    // ——**它也在卡片里面**（不是卡片外的一句提示）。
-                    Text(RepoCopy.emptyDirectory)
-                        .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.Palette.textTertiary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Theme.Spacing.l)
-                        .padding(.horizontal, Theme.Spacing.s)
-                } else {
-                    ForEach(Array(page.entries.enumerated()), id: \.element.id) { index, entry in
-                        RepoFileRow(
-                            entry: entry,
-                            showsSeparator: index < page.entries.count - 1
-                        ) {
-                            open(entry)
-                        }
+        CardBox() {
+            if page.entries.isEmpty {
+                // 原型：`<div class="t3" style="padding:16px 8px;text-align:center">空目录</div>`
+                // ——**它也在卡片里面**（不是卡片外的一句提示）。
+                Text(RepoCopy.emptyDirectory)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.Spacing.l)
+                    .padding(.horizontal, Theme.Spacing.s)
+            } else {
+                ForEach(Array(page.entries.enumerated()), id: \.element.id) { index, entry in
+                    RepoFileRow(
+                        entry: entry,
+                        // 原型的规则是"除最后一条之外都画"（底线件）。
+                        showsSeparator: index < page.entries.count - 1
+                    ) {
+                        open(entry)
                     }
                 }
             }

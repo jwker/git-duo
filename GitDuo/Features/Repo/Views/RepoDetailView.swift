@@ -44,6 +44,20 @@ import GitDuoKit
 /// ⚠️ 这一页**不再取**目录 / 提交 / Issues / PR：四行入口的落点各页自己去取自己的数据。
 /// 本页只取两件：头部（连带 Star 基准）与 README。
 ///
+/// ## ⚠️ 2026-10-16 起：四行入口**回到 `CardBox`**（本轮修复）
+///
+/// P3 第二批曾把整页换成 `List`：头部大卡 / README / 四行入口各一个 `Section`。
+/// 实测发现两个回归：
+///
+/// 1. **头部大卡与 README 宽度变窄** —— 它们自带白面圆角，坐在 `List` 行里会被
+///    行内边距再缩一次；且头部里的 `FlowLayout`（Star / Watch / Fork）在 `List` 行
+///    的 ideal-size 测量下会"塌缩"到一行 ideal 宽度，导致 star 数字/文字被吞掉。
+/// 2. **上下间距过大** —— `List` 行默认 insets + Section 间距，把三块之间的距离
+///    拉得比原设计大。
+///
+/// ⇒ 本页恢复为 `ScrollView + VStack`：头部大卡与 README 自绘白卡、宽度由页面
+/// padding 决定；四行入口回到 `CardBox` + `MenuRow`（`MenuRow` 自画分隔线）。
+///
 /// ## ⚠️ 本页是「自己的仓库」，写入口的有无由**路由**决定
 ///
 /// `ReposView.open()` / 首页置顶 / 最近访问按可写性二选一推入本页或 §4.13。
@@ -125,7 +139,7 @@ struct RepoDetailView: View {
 
         case .content:
             if let snapshot = model.snapshot.value {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     RepoDetailHero(
                         detail: snapshot.detail,
                         star: snapshot.star,
@@ -139,7 +153,6 @@ struct RepoDetailView: View {
                     }
 
                     entries
-                        .padding(.top, Theme.Spacing.m)
 
                     // ⚠️ README 在**四行入口之下**（用户裁定）—— 理由见类型说明：
                     //    上面那四行是这一页作为枢纽的主要出口，一段长 README
@@ -180,19 +193,17 @@ struct RepoDetailView: View {
     /// —— 后两个与 §4.13「参与协作」那两行**同一个字形、同一个颜色**，
     /// 于是"同一个东西在两个页面上长得一样"这条继续成立。
     private var entries: some View {
-        let rows = entryRows
-
-        // 方案 D（2026-10-15，走查第 73 条）：四行入口是 `.menu-item` —— 图标升级
-        // 40pt 实底色块 + 白字形，行间 hairline 内嵌缩进 54（都由 `MenuRow` 画）。
-        // 容器不带内边距（同 `MenuCard`：留白由行自己出）。
-        return CardBox(vertical: 0, horizontal: 0) {
-            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+        // 容器不带内边距（同旧 `MenuCard`：留白由行自己出）⇒ 行传 `contentPadding: 14`。
+        CardBox(vertical: 0, horizontal: 0) {
+            ForEach(Array(entryRows.enumerated()), id: \.element.id) { index, row in
                 MenuRow(
                     systemImage: row.icon,
                     iconTone: row.tone,
                     title: row.title,
                     accessory: .chevron,
-                    showsSeparator: index > 0
+                    // 卡内第一行不画线（原型 `.menu-item+.menu-item`：线属于"上面还有一行"）。
+                    showsSeparator: index > 0,
+                    contentPadding: 14
                 ) {
                     env.router.push(row.route)
                 }
@@ -275,7 +286,7 @@ struct RepoDetailView: View {
     /// ⚠️ `allowsHitTesting(false)`：`.redacted` **不拦截点击**，四行入口被点到会推一页
     /// 带上 `placeholder/placeholder` 的列表（那一页必然失败一次）。
     private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             RepoDetailHero(
                 detail: .placeholder,
                 // ⚠️ 占位也走"能写"那一档（`canStar: true`）：不确定就不拦（决策 #80），
@@ -286,7 +297,6 @@ struct RepoDetailView: View {
             ) {}
 
             entries
-                .padding(.top, Theme.Spacing.m)
         }
         .redacted(reason: .placeholder)
         .allowsHitTesting(false)

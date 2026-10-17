@@ -6,8 +6,17 @@ import SwiftUI
 ///
 /// 结构（自上而下，顺序即原型 `12-me.js` 的 `SCR.me`）：
 /// 大标题「我的」· 个人资料头部（大头像 / 昵称 / `@登录名` / 简介 / 三个统计项）·
-/// 贡献热力图卡片 · 菜单卡片一（我的 Star / 我的 PR / 我的 Issue）·
-/// 菜单卡片二（设置）。（首条原型逐字「Star 管理」，2026-10-15 起改名，走查第 71 条。）
+/// 贡献热力图卡片 · 三个入口行（我的 Star / 我的 PR / 我的 Issue）· 设置行。
+/// （首条原型逐字「Star 管理」，2026-10-15 起改名，走查第 71 条。）
+///
+/// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3 第二批）
+///
+/// 从前是 `ScrollView + VStack` + 两张 `MenuCard`（行自己画内边距与内嵌 hairline）。
+/// 现在四组各是一个 `Section`：分隔线、行内边距、卡面与圆角全部由系统给，
+/// `MenuRow` 只画内容（`showsSeparator` 随之删除）。
+///
+/// ⚠️ 两条**有意保留**的自定观感（属 P5 令牌收尾）：页面底 `Theme.Palette.background`、
+///    行底 `Theme.Palette.surface`（`.scrollContentBackground(.hidden)` 让开系统底色）。
 ///
 /// ## ⚠️ 切片 1 的那条例外到此结束
 ///
@@ -51,17 +60,33 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+        List {
+            // ⚠️ 头部那两块（大头像 / 昵称 / 简介 与 三个统计项）**是同一组内容**
+            //    ⇒ 坐同一个 `Section` 的**一行**：它们之间不该有一条分隔线
+            //    （那条线会把它切成"两条记录"）。
+            Section {
                 identityBlock
-                heatmapBlock
-                    // 原型 `.heatmap{margin:12px 0}`。
-                    .padding(.vertical, Theme.Spacing.m)
-                menuCards
             }
-            .padding(.horizontal, Theme.Spacing.page)
-            .padding(.bottom, Theme.Spacing.xl)
+
+            // 热力图：它自己就是那张面板（`ContributionHeatmap` 自带底与圆角）
+            // ⇒ 行底透明、不画分隔线，免得出现"卡里套卡"。
+            Section {
+                heatmapBlock
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+
+            Section {
+                menuRows
+            }
+
+            Section {
+                settingsRow
+            }
         }
+        .listStyle(.insetGrouped)
+        // 主题的页面底 / 行底不交给系统（P5 才动令牌）—— 只把 `List` 自带的底色让开。
+        .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         .navigationTitle(ProfileCopy.pageTitle)
         .refreshable { await model.refresh() }
@@ -70,26 +95,30 @@ struct ProfileView: View {
 
     // MARK: - 资料头部（头像 / 昵称 / 简介 / 三个统计项）
 
-    @ViewBuilder
+    /// ⚠️ 三块必须坐**同一行**：`List` 的 `Section` 里每多一个子视图就多一行，
+    ///    而"头像 / 昵称 / 简介"与"三个统计项"中间**不该有一条分隔线**
+    ///    （那条线会把一个人切成两条记录）⇒ 用一个 `VStack` 合成一行。
     private var identityBlock: some View {
-        // ⚠️ `name` / `bio` 传的是 `ProfileOverview` 里那一份（拿不到就是 `nil`）
-        //    —— `ProfileHeader` 对 `nil` 与空串的处置都是"整行不渲染"，见它的说明。
-        // ⚠️ `avatarURL` 同理：`/user` 那一路失败时它是 `nil` ⇒ 头像回落成首字母块。
-        //    **两种情形都不需要额外分支**（把 `nil` 一路传下去就行），
-        //    所以这里没有 `if let` —— 一写就变成"两条渲染路径"，而它们该长得一样。
-        ProfileHeader(
-            login: login,
-            name: model.overview?.profile?.name,
-            bio: model.overview?.profile?.bio,
-            avatarURL: model.overview?.profile?.avatarURL
-        )
+        VStack(alignment: .leading, spacing: 0) {
+            // ⚠️ `name` / `bio` 传的是 `ProfileOverview` 里那一份（拿不到就是 `nil`）
+            //    —— `ProfileHeader` 对 `nil` 与空串的处置都是"整行不渲染"，见它的说明。
+            // ⚠️ `avatarURL` 同理：`/user` 那一路失败时它是 `nil` ⇒ 头像回落成首字母块。
+            //    **两种情形都不需要额外分支**（把 `nil` 一路传下去就行），
+            //    所以这里没有 `if let` —— 一写就变成"两条渲染路径"，而它们该长得一样。
+            ProfileHeader(
+                login: login,
+                name: model.overview?.profile?.name,
+                bio: model.overview?.profile?.bio,
+                avatarURL: model.overview?.profile?.avatarURL
+            )
 
-        ProfileStatBar(stats: statItems)
+            ProfileStatBar(stats: statItems)
 
-        // `/user` 那一路失败 ⇒ 在头部块内给一行灰字 + 重试（TECH_SPEC §9.14「两处降级」）。
-        // 位置贴着失败的那一块，而不是塞进热力图卡片里 —— 那张卡说的是贡献数据。
-        if let error = model.overview?.identity.error {
-            SectionFailure(error: error) { Task { await model.refresh() } }
+            // `/user` 那一路失败 ⇒ 在头部块内给一行灰字 + 重试（TECH_SPEC §9.14「两处降级」）。
+            // 位置贴着失败的那一块，而不是塞进热力图卡片里 —— 那张卡说的是贡献数据。
+            if let error = model.overview?.identity.error {
+                SectionFailure(error: error) { Task { await model.refresh() } }
+            }
         }
     }
 
@@ -227,59 +256,63 @@ struct ProfileView: View {
         .accessibilityHidden(true)
     }
 
-    // MARK: - 两张菜单卡片
+    // MARK: - 入口行（从前是两张菜单卡片）
 
+    /// 三个入口行（我的 Star / 我的 PR / 我的 Issue）。
+    ///
+    /// ⚠️ 两行会话的去向是 `.myConversations(kind:)`（TECH_SPEC §8.2）——
+    ///    与「我的 Star」不同：那一页是**一个**列表，这两项**各是一页**（决策 #73）。
+    ///
+    /// ⚠️ 2026-10-16 起它们就是 `List` 的行（NATIVE-MIGRATION P3 第二批）：
+    ///    分隔线**由系统画**，"首行关掉线"那一条（`showsSeparator`）随 `MenuRow`
+    ///    的瘦身一并作废 —— 系统对"谁是首行"有确定的答案。
     @ViewBuilder
-    private var menuCards: some View {
-        // ⚠️ 两行会话的去向是 `.myConversations(kind:)`（TECH_SPEC §8.2）——
-        //    与「我的 Star」不同：那一页是**一个**列表，这两项**各是一页**（决策 #73）。
-        MenuCard {
-            // 图标色档照原型 `12-me.js` 的 `--ic`（方案 D，走查第 73 条）：
-            // Star 金 / PR 与收藏链接蓝 / Issue 绿 / 设置缺省灰。
-            MenuRow(
-                systemImage: GitHubIcon.star,
-                iconTone: .gold,
-                title: ProfileCopy.menuStars,
-                accessory: .chevron,
-                // ⚠️ 分隔线画在**顶上**（原型 `.menu-item+.menu-item`）⇒ 要关掉的是
-                //    **第一行**，不是最后一行（2026-10-15 走查第 77 条修的正是这里：
-                //    照"最后一行关"写 ⇒ 首行顶上多一条、末行上面反而缺一条）。
-                showsSeparator: false
-            ) {
-                env.router.push(.stars)
-            }
-            // 图标取 `StateIcon` 那两个常量（原型 `I.pr` / `I.issueO` 的出处），
-            // 不在 `GitHubIcon` 里再抄一份 —— 见那个文件的尾巴。
-            MenuRow(
-                systemImage: StateIcon.pullRequestOpen,
-                iconTone: .blue,
-                title: ProfileCopy.menuPullRequests,
-                accessory: .chevron
-            ) {
-                env.router.push(.myConversations(kind: .pullRequest))
-            }
-            // 末行**照旧画线** —— 它顶上坐着「我的 Pull Request」那一行。
-            MenuRow(
-                systemImage: StateIcon.issueOpen,
-                iconTone: .green,
-                title: ProfileCopy.menuIssues,
-                accessory: .chevron
-            ) {
-                env.router.push(.myConversations(kind: .issue))
-            }
+    private var menuRows: some View {
+        // 图标色档照原型 `12-me.js` 的 `--ic`（方案 D，走查第 73 条）：
+        // Star 金 / PR 与收藏链接蓝 / Issue 绿 / 设置缺省灰。
+        MenuRow(
+            systemImage: GitHubIcon.star,
+            iconTone: .gold,
+            title: ProfileCopy.menuStars,
+            accessory: .chevron,
+            showsSeparator: false
+        ) {
+            env.router.push(.stars)
         }
-        // 原型 `.menu-card{margin:0 0 10px}`（方案 D：组与组之间只剩这一段空隙）。
-        .padding(.bottom, Theme.Spacing.m)
 
-        MenuCard {
-            MenuRow(
-                systemImage: GitHubIcon.settings,
-                title: ProfileCopy.menuSettings,
-                accessory: .chevron,
-                showsSeparator: false
-            ) {
-                env.router.push(.settings)
-            }
+        // 图标取 `StateIcon` 那两个常量（原型 `I.pr` / `I.issueO` 的出处），
+        // 不在 `GitHubIcon` 里再抄一份 —— 见那个文件的尾巴。
+        MenuRow(
+            systemImage: StateIcon.pullRequestOpen,
+            iconTone: .blue,
+            title: ProfileCopy.menuPullRequests,
+            accessory: .chevron,
+            showsSeparator: false
+        ) {
+            env.router.push(.myConversations(kind: .pullRequest))
+        }
+
+        MenuRow(
+            systemImage: StateIcon.issueOpen,
+            iconTone: .green,
+            title: ProfileCopy.menuIssues,
+            accessory: .chevron,
+            showsSeparator: false
+        ) {
+            env.router.push(.myConversations(kind: .issue))
+        }
+    }
+
+    /// 「设置」那一行 —— 它**单独一个 `Section`**（从前是"末尾一张独立卡片"）：
+    /// 与三个入口隔开，是"设置不是这一组里的第四项"的意思。
+    private var settingsRow: some View {
+        MenuRow(
+            systemImage: GitHubIcon.settings,
+            title: ProfileCopy.menuSettings,
+            accessory: .chevron,
+            showsSeparator: false
+        ) {
+            env.router.push(.settings)
         }
     }
 }

@@ -2859,6 +2859,194 @@ App 侧用 `make device` 装到真机，或直接跑模拟器。**两边进同�
 >
 > ⇒ 现在是**有效 80 条、含作废记录共 85 个编号**
 > （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
+>
+> ## 走查第 86 条：标题改 inline、头像去玻璃背景、搜索进页不自动聚焦（2026-10-16）
+>
+> 用户三条要求：
+> 1. **页面标题要在顶栏、与头像同一行、居左、放大** —— 最终形态见 `TopBarTitleItem`
+>    （新增 `GitDuo/Navigation/TopBarTitleItem.swift`，四页共用）。
+>    中间经过两次试错，两次都被用户否掉，三条口径记在这里免得再绕一圈：
+>    - `.inline`：标题进顶栏了，但**字号小（17pt）且居中**（没有 leading 项时系统就这么放）；
+>    - `.large`：大字靠左了，但它在**内容区**、与头像不是一级（用户："这又改回去了"）。
+>    ⇒ 结论：**"顶栏 + 放大 + 居左"系统给不出**，只能自绘一颗放 `topBarLeading`。
+>    ⚠️ 两条实测前提（iOS 27.0 探针 `/tmp/probe-titlebar/`）：
+>    ① `.fixedSize(horizontal: true, vertical: false)` **不能省**，否则被工具栏压到几乎看不见；
+>    ② 必须用 1×1 透明的 `principal` 把系统 inline 标题顶掉，否则屏幕上出现两遍标题；
+>    `.navigationTitle` **照旧保留**（返回按钮文案 / 无障碍标题的来源）。
+> 2. **首页头像按钮要做成正圆** —— 去掉 iOS 26+ 工具栏给自定义视图加的玻璃胶囊背景：`ToolbarItem` 加 `.sharedBackgroundVisibility(.hidden)`。
+> 3. **搜索页进入后不自动聚焦** —— 移除 `.searchable(text:isPresented:)` 与 `isSearchPresented` 状态，`.task` 里不再展开搜索框。
+> 4. **搜索页也加上同样的顶栏大字标题**（同日追加）—— 与首页 / 仓库 / 探索同档，`.searchable` 画在顶栏**下面**，不占额外高度。
+> 5. **首页右上角头像放大到 36pt**（同日追加）—— 用户判 30pt 太小；36 是顶栏高度预算的合理上限，首字母兜底单独用 14pt bold。
+>
+> ### 落地（5 个文件）
+>
+> | 处 | 改动 |
+> |---|---|
+> | `TopBarTitleItem`（新增） | 顶栏 26pt 居左大字标题 + 透明 `principal` 占位 |
+> | `HomeView` | inline + `TopBarTitleItem` + 头像 `ToolbarItem.sharedBackgroundVisibility(.hidden)` + `UserAvatar.navigationInitialFont` |
+> | `ReposView` / `ExploreView` | inline + `TopBarTitleItem`（页面标题收成 `Self.pageTitle` 一处） |
+> | `SearchView` | inline + `TopBarTitleItem`；去掉 `isSearchPresented`；`.searchable` 用无 `isPresented` 重载；`.task` 只 `loadHistory()` |
+> | `UserAvatar`（设计包） | `.navigationDiameter` 30 → 36；新增 `.navigationInitialFont` |
+>
+> ### 两条判读
+>
+> 1. **头像「椭圆」是工具栏玻璃背景**：iOS 27.0 模拟器探针（`/tmp/probe-avatar/`）实锤，无修饰时头像外包白色椭圆/圆角背景；加 `.sharedBackgroundVisibility(.hidden)` 后只剩头像本身的正圆。
+> 2. **搜索不自动展开**对应 P1 那条「进页自动聚焦」的撤销 —— 它作为**底部 Tab 根页**比作为**推入页**更吵，用户明确嫌吵。
+>
+> **验证**：iOS 27.0 模拟器探针目视；`make verify` `exit=0` · **0 条 Swift 编译警告** · `BUILD SUCCEEDED` · 五包 **1790 项 / 154 套件**。未提交。
+>
+> ## 走查第 87 条：P3 第二批第一小批 —— `MenuCard` / `MenuRow` 那一族进 `List`（2026-10-16）
+>
+> **三页一起换**（`ScrollView + VStack + MenuCard` → `List` + `Section`）：「我的」根页 · 设置页 · 仓库首页。
+> ⚠️ **必须同一批动**：这三处是 `MenuRow` 的全部生产调用方，而 `MenuRow` 一旦瘦身成"只画内容"
+> （没有内边距、没有自绘 hairline），任何还留在 `MenuCard` 里的一页都会变成"没有内边距、
+> 没有分隔线的一列字" ⇒ 分批做必然留下一个坏页面。
+>
+> | 处 | 改动 |
+> |---|---|
+> | `MenuRow`（设计包，从 `MenuCard.swift` 里拆出成独立文件） | 删 `showsSeparator`（它没有能力关系统分隔线）；删 `padding(14)` 与顶部 hairline；`accessory: .chevron` **保留** |
+> | `MenuCard`（设计包） | **已无生产调用方**，留着只为"这一组是一组"这个语义可读；注释写明不要再给它加开关 |
+> | `ProfileView` | 四组各一个 `Section`（资料头部 / 热力图 / 三个入口行 / 设置行）；头部三块用 `VStack` 合成**一行**（分隔线不该把一个人切成两条记录） |
+> | `SettingsView` | 四组各一个 `Section`；分区标题仍是 `SectionHeader`（`margins: .none`，自带 `.textCase(nil)`）；「退出登录」那 22pt 上边距改由 `List` 给 ⇒ 删掉 |
+> | `RepoDetailView` | 三段各一个 `Section`（头部大卡 / 四行入口 / README）；前两者与 README **自带底** ⇒ 坐无底色行（免得"卡里套卡"）；`entries` 里那个 `index > 0` 判定随之删掉 |
+>
+> ### 两条判读
+>
+> 1. **`Section` 里每多一个子视图就多一行** —— 「我的」页头部（头像 / 昵称 / 三个统计项）
+>    从前是 `VStack` 里三块，进 `List` 若照原样摊开就会变成三行、中间还插两条分隔线
+>    ⇒ 用一个 `VStack` 显式合成一行。判据："**这两块之间该不该有一条线**"。
+> 2. **自带底与圆角的内容块要坐"无底色行"**（`.listRowBackground(Color.clear)` +
+>    `.listRowSeparator(.hidden)`）—— 否则是"卡里套卡"。这与 P3 首批把
+>    `EmptyBox` / `PageFailure` 放进无底色行是同一条判据（判据仍是「它坐在哪一层」）。
+>
+> ### ⚠️ 一处**已知的跨页不一致**（如实登记，待收口）
+>
+> 本批保留/新加的 `.chevron` 尖角，与 **P3 首批六个页面**（首页 / 仓库 / 探索 / 搜索 /
+> 我的 Star / 我的会话）**没有尖角**不一致 —— 首批那次为了恢复全宽分隔线把跳转改回
+> `Button + .plain`，`RowChevron` 随之删除。要不要给首批也补回尖角，等真机目视再定。
+>
+> ### ⚠️ 踩到的一条老坑（macOS 变体）
+>
+> 设计包的 `#Preview` 里写 `.listStyle(.insetGrouped)` ⇒ **`swift test` 编译本包的 macOS 变体时
+> 整个包编不过**（`insetGrouped` 是 iOS-only）。设计包的预览**不要**写 iOS-only 的列表样式。
+>
+> **验证**：`make verify`（touch 全量重编）`exit=0` · **0 条 Swift 编译警告** · `BUILD SUCCEEDED` ·
+> 五包 **1790 项 / 154 套件**（422/38 · 59/4 · 63/8 · 112/13 · 1134/91）。**未目视、未提交。**
+>
+> ## 走查第 88 条：P3 第二批第二小批 —— `BranchRow` / `RepoFileRow` / `LinkRow` 三族进 `List`（2026-10-16）
+>
+> **三页一起换**：分支管理页 · 代码页 · 探索仓库详情页。
+> ⚠️ 分批判据与第 87 条**同一条**：**行件的全部生产调用方必须同一批动**。
+>
+> | 行件 | 全部生产调用方 | 改动 |
+> |---|---|---|
+> | `BranchRow` | 只有 `BranchesView` | 删 `showsSeparator`；删 `padding(13/14)`；预览改 `List` |
+> | `RepoFileRow` | 只有 `RepoTreeSection` / `RepoTreeSkeleton`（都在代码页） | 删 `showsSeparator`；删 `padding(11/4)`；预览拆成两个（目录行进 `List`） |
+> | `LinkRow` | 只有 `ExploreRepoDetailView` | 删 `showsSeparator`；删 `padding(11/4)`；预览改 `List` |
+>
+> | 页 | 结构 |
+> |---|---|
+> | `BranchesView` | 两个 `Section`（分支行 / 两个动作按钮 + 页脚说明）；骨架走**同一个** `loaded(_:isPlaceholder:)` 喂占位列表 |
+> | `RepoCodeView` | `List` 提到 `body` 的 `list` 一件上；`RepoTreeSection` 吐两个 `Section`（面包屑 / 文件行）；`RepoTreeSkeleton` 同样吐两个 `Section` |
+> | `ExploreRepoDetailView` | 七块各一个 `Section`；头部大卡与 README 坐无底色行；骨架由 `masked(_:content:)` **逐块**遮 |
+>
+> ### 三条判读
+>
+> 1. ⚠️ **`List` 套 `List` 不会摊平** —— `RepoTreeSection` 一度改成"自带 `List`"，
+>    而它要被放进 `RepoCodeView` 的 `List` ⇒ 会得到一个"行里装着一张表"的嵌套滚动区。
+>    **被嵌的那一件必须吐 `Section`（内容），容器只能有一层。**
+>    （`ForEach` / `Section` 会被摊平，那是另一回事 —— `List` 不会被摊。） —— 已改回内容件。
+> 2. ⚠️ **`.redacted` / `.allowsHitTesting` 要**逐块**加，不能加在整张 `List` 上** ——
+>    挂在 `List` 上会把手势一起关掉 ⇒ **骨架期滚不动**。挂在块（行）上时触摸落到 `List`
+>    自己的手势上，滚动照旧、只是这一块不再接收点击。
+>    （`ExploreRepoDetailView` 因此多了一个 `masked(_:content:)` 小件。）
+> 3. ⚠️ **分区头里放可点控件要谨慎** —— 代码页的面包屑（分支胶囊 + 路径段都能点）
+>    因此**没有**放进 `Section` 的 header，而是自己一个 `Section` + `.listRowBackground(.clear)`。
+>    分段条（`Picker`）当 header 是首批就在用的写法（`ReposView`），两者不冲突：
+>    前者是"多个小控件横排"，后者是"一整条控件"。
+>
+> ### ⚠️ 一处如实登记的行为差别
+>
+> `RepoCodeView` 把 `.refreshable` / `.task(id:)` / `.id()` 从"只挂 `tree(_:)`"改成挂在整张 `List` 上
+> ⇒ 骨架 / 失败那两支现在也挂着它们：骨架期下拉会打一次 `session.reload()`（那一层本来就要取）；
+> `defaultBranch` 还是 `nil` 时 `.task` 会跑一次、被 `model.load` 第一条守卫挡掉
+> ⇒ **与从前的净效果相同**。
+>
+> **验证**：`make verify`（touch 全量重编）`exit=0` · **0 条 Swift 编译警告** · `BUILD SUCCEEDED` ·
+> 五包 **1790 项 / 154 套件**（422/38 · 59/4 · 63/8 · 112/13 · 1134/91）。**未目视、未提交。**
+>
+> ## 走查第 89 条：修复 P3 第二批引入的宽度/间距回归（2026-10-16）
+>
+> 用户实测报回四个问题：
+>
+> 1. 仓库详情页**头部大卡与 README 模块偏窄**，与四行入口卡片不一致。
+> 2. 头部 **Star / Watch / Fork 只剩图标**，数字与 Star 文案消失。
+> 3. 代码页**面包屑偏窄**，与下方文件行不同宽。
+> 4. 这些偏窄的模块**上下外边距过大**。
+>
+> ### 根因
+>
+> P3 第二批把仓库详情页（`RepoDetailView`）和代码页（`RepoCodeView`）换成了 `List`，
+> 但**头部大卡 / README / 面包屑都是自带白面圆角或内边距的块**，坐在 `List` 行里会被
+> 系统行内边距再缩一次；更严重的是头部用了 `FlowLayout` 排 Star / Watch / Fork，
+> 它在 `List` 行的 ideal-size 测量下会**塌缩**到一行理想宽度 ⇒ 统计文字被吞掉。
+>
+> ### 修复
+>
+> | 页 | 改动 |
+> |---|---|
+> | `RepoDetailView` | **回到 `ScrollView + VStack`**；头部大卡与 README 自绘白卡；四行入口回到 `CardBox` + `MenuRow`（自画分隔线） |
+> | `RepoCodeView` | **回到 `ScrollView`**；`RepoTreeSection` 恢复为 `VStack { 面包屑 + CardBox { 文件行 } }` |
+> | `MenuRow`（设计包） | 恢复 `showsSeparator: Bool = true`，底部自画 hairline |
+> | `RepoFileRow`（Feature） | 恢复 `showsSeparator: Bool = true`，恢复 `padding(11/4)` |
+> | `RepoTreeSkeleton` | 恢复为 `VStack + 面包屑 + CardBox` |
+> | `ProfileView` / `SettingsView` | 它们仍坐在 `List` 里 ⇒ `MenuRow` 调用统一加 `showsSeparator: false`，避免双分隔线 |
+>
+> ### 判据
+>
+> 1. **自带白面 / 圆角 / 自定义布局（如 `FlowLayout`）的内容块，不要放进 `List` 行里**
+>    —— `List` 行给的是 ideal-size 测量，会把这类块压窄；让它们在 `ScrollView` 里
+>    由页面 padding 定宽，才能和周围卡片对齐。
+> 2. **`MenuRow` 之类既服务 `List` 又服务 `CardBox` 的行件，分隔线必须可控**
+>    ⇒ 保留 `showsSeparator`：在 `List` 里关、在 `CardBox` 里按首行/末行规则开。
+>
+> **验证**：`make verify`（touch 全量重编）`exit=0` · **0 条 Swift 编译警告** · `BUILD SUCCEEDED` ·
+> 五包 **1790 项 / 154 套件**（422/38 · 59/4 · 63/8 · 112/13 · 1134/91）。未提交。
+>
+> ## 走查第 90 条：P3 第二批收口 —— `RepoSectionListView` / `PullDetailView` 裁定保持 `ScrollView`（2026-10-16）
+>
+> ### 背景
+>
+> 走查 87 / 88 把能进 `List` 的行件都迁了；`NATIVE-MIGRATION.md §3` 原计划把剩下的
+> `RepoSectionListView`（Issues / PRs / Commits 三段）与 `PullDetailView` 也换成 `List`
+> —— 它们是 `RepoCommitRow` 的**全部**调用方，"必须同一批动"。
+>
+> ### 裁定：这两页**不换**，P3 第二批至此完成
+>
+> 依据是走查 89 第 1 条判据（**自带白面 / 圆角 / 自定义布局的块不进 `List` 行**）：
+>
+> | 页 | 为什么保持 `ScrollView` |
+> |---|---|
+> | `RepoSectionListView` | Issues / PRs 两段是「分段条 + `IssueCard` / `PullCard` 卡片」（卡片自带白面圆角），与 Commits 段**共用一个 `ScrollView` 外壳**；只把 Commits 换 `List` 会打破本文件「三页同构、没有壳子差异」的设计原则，且重蹈走查 89 |
+> | `PullDetailView` | 头部大卡 + 分段条 + `CommentRow` 气泡 + `DiffCard` 全是富块；Commits 只是它的一个子分区，嵌 `List` 会变成嵌套滚动区 |
+>
+> ⇒ `RepoCommitRow` 的 `showsSeparator` **保留**，归「`CardBox` 阵营」（同 `MenuRow` / `RepoFileRow`）。
+> P3 的 `List` 迁移边界由此定型：**只迁「朴素行列表」**（菜单 / 分支 / 链接 / 首页行 /
+> 搜索结果），**富详情页一律 `ScrollView`**。
+>
+> ### 连带修正
+>
+> - `MenuRow` 预览补 `showsSeparator: false`（此前 `List` 预览不传 ⇒ 自绘线与系统线叠成**双线**）；
+>   并改掉类型说明里「或不传，因为默认 `true`」那句**误导**（List 场景必须显式传 `false`）。
+> - `NATIVE-MIGRATION.md`：A 组清单里 `RepoTreeSection` / `IssueCard` / `PullCard` /
+>   `RepoFileRow`·`RepoCommitRow` / `RepoIssuesSection` / `RepoPullsSection` 六行标注
+>   「⏸ 保持 `ScrollView` / `CardBox`」，免得被当成没做完的 TODO。
+>
+> **验证**：`make verify`（touch 全量重编）`exit=0` · `BUILD SUCCEEDED` · 五包 **1790 项 / 154 套件**
+> （本批只改注释 / 文档 / 预览，测试项数不变）。未提交。
+>
+> ⇒ 现在是**有效 85 条、含作废记录共 90 个编号**
+> （作废 5 条 = 3 / 19 / 20 / 21 / 31）。
 
 > 第 22 条是 2026-10-07 目视陪跑时**补登**的（与 17–21 同批由 6.7 引出）。⚠️ 它只在**仓库真有受保护分支**时才看得见 ——
 > 多数个人仓库只有默认分支受保护（默认分支本来就不给删），所以这条经常"看不见"，不要因此以为它没实现。

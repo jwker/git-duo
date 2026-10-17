@@ -243,13 +243,6 @@ enum ExploreRepoCopy {
     static let languageSection = "语言构成"
     static let releaseSection = "Latest Release"
 
-    /// 第 ⑤ 分区的小节标题（原型逐字）。
-    ///
-    /// ⚠️ **2026-10-14 去掉了 ` · {path}` 那一半**：这一分区原先内嵌着目录树，
-    /// 子目录里要带出"现在是哪一层"；现在它是一条**入口行**，点进去才是目录页
-    /// ⇒ 这一页没有"当前层"可言，那个函数（`fileSection(path:)`）随之删除。
-    static let fileSection = "文件浏览"
-
     /// 那条入口行的标题。
     ///
     /// ⚠️ **2026-10-14 晚些去掉了 `与 README`**：README 现在**就在本页**（在这条入口
@@ -265,13 +258,17 @@ enum ExploreRepoCopy {
     //    现在两页共用 `RepoCopy.readmeSectionTitle`（由 `RepoReadmeSection` 渲染
     //    —— 2026-10-14 起那一块画在本页与 §4.4 首页上，不在代码页了）。
 
-    static let collaborationSection = "参与协作"
     static let releaseAssetsHint = "资产与源码下载依赖仓库的 Release 页面"
 
     static let issuesRowTitle = "Issues"
-    static let issuesRowSubtitle = "浏览与参与讨论 · 无关闭权限"
     static let pullsRowTitle = "Pull Requests"
-    static let pullsRowSubtitle = "查看他人贡献 · 可评论不可合并"
+
+    /// 第 ⑦ 分区（参与协作）+ 第 ⑤ 分区（文件浏览）合并后的**组标题**。
+    ///
+    /// ⚠️ 2026-10-16 合并：Issues / Pull Requests / 文件浏览三行合成一组导航入口，
+    /// 沿用原 ⑦ 的标题「参与协作」（用户裁定：虽「文件浏览」严格说不算"协作"，
+    /// 但比「浏览与协作」更贴近这一组的主语义 —— Issues / PR 才是它的主体）。
+    static let collaborationSection = "参与协作"
 
     static let skeletonNote = "加载中…"
     static let failureTitle = "加载失败 · 点击重试"

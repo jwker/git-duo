@@ -24,6 +24,16 @@ import SwiftUI
 /// 原型 `I.dir` / `I.file` 是自绘的 17px 线框图标。本仓从切片 3 起一律用
 /// SF Symbols（`GitHubIcon`），好处是无障碍与 Dynamic Type 一起生效。
 /// 这一处在 6.3 已按同一口径登记过（`GitHubIcon` 的说明），此处沿用。
+///
+/// ## ⚠️ 2026-10-16 起：在 `List` 里只画内容，在 `CardBox` 里自己画分隔线
+///
+/// 代码页（`RepoCodeView`）本轮从 `List` 回到 `ScrollView`：文件行重新坐在 `CardBox` 里，
+/// 本件恢复底部 hairline 与 `11px 4px` 内边距。`showsSeparator` 因此**又加回来**。
+///
+/// | 场景 | 谁给内边距 | 谁给分隔线 |
+/// |---|---|---|
+/// | `List`（如果未来又换回去） | `List` 行 | 系统 |
+/// | `CardBox`（当前代码页） | 本件自己 | 本件自己 |
 struct RepoFileRow: View {
 
     let entry: TreeEntry
@@ -32,6 +42,12 @@ struct RepoFileRow: View {
     let showsSeparator: Bool
 
     let action: () -> Void
+
+    init(entry: TreeEntry, showsSeparator: Bool = true, action: @escaping () -> Void) {
+        self.entry = entry
+        self.showsSeparator = showsSeparator
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
@@ -56,6 +72,7 @@ struct RepoFileRow: View {
             // 原型 `padding:11px 4px`（11 不在 4pt 阶里 ⇒ 写原值）。
             .padding(.vertical, 11)
             .padding(.horizontal, Theme.Spacing.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -95,7 +112,13 @@ struct RepoCommitRow: View {
 
     let now: Date
 
-    /// 最后一行不画下边线。
+    /// 画不画底部分隔线；末行传 `false`。
+    ///
+    /// ⚠️ 2026-10-16 起本件**长期留在 `CardBox` 阵营**（同 `MenuRow` / `RepoFileRow`）：
+    /// 它的两个调用方 `RepoSectionListView` / `PullDetailView` 经走查第 89 / 90 条裁定
+    /// **保持 `ScrollView`** —— 前者三分段里 Issues / PRs 是卡片列表、与 Commits 共用一个
+    /// 外壳（文件定过"三页同构、没有壳子差异"）；后者是头部 + 气泡 + diff 卡的富详情页。
+    /// ⇒ 分隔线仍由本件自画，`showsSeparator` 不删。
     let showsSeparator: Bool
 
     let action: () -> Void
@@ -155,28 +178,37 @@ struct RepoCommitRow: View {
     }
 }
 
-#Preview {
+#Preview("目录行（`CardBox` 里看）") {
+    ScrollView {
+        CardBox() {
+            RepoFileRow(
+                entry: TreeEntry(
+                    name: "GitDuo", path: RepoPath(path: "GitDuo"), kind: .directory,
+                    size: 0, sha: "abc"
+                ),
+                showsSeparator: true,
+                action: {}
+            )
+            RepoFileRow(
+                entry: TreeEntry(
+                    name: "README.md", path: RepoPath(path: "README.md"), kind: .file,
+                    size: 1_024, sha: "def"
+                ),
+                showsSeparator: false,
+                action: {}
+            )
+        }
+        .padding(Theme.Spacing.page)
+    }
+    .background(Theme.Palette.background)
+}
+
+// ⚠️ 提交行**不进 `List`** —— 它的两个调用方经走查第 89 / 90 条裁定保持 `ScrollView`
+//    （理由见上方 `showsSeparator` 的说明）⇒ `showsSeparator` 长期保留，
+//    与 `MenuRow` / `RepoFileRow` 同归「`CardBox` 阵营」。
+#Preview("提交行") {
     ScrollView {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            CardBox() {
-                RepoFileRow(
-                    entry: TreeEntry(
-                        name: "GitDuo", path: RepoPath(path: "GitDuo"), kind: .directory,
-                        size: 0, sha: "abc"
-                    ),
-                    showsSeparator: true,
-                    action: {}
-                )
-                RepoFileRow(
-                    entry: TreeEntry(
-                        name: "README.md", path: RepoPath(path: "README.md"), kind: .file,
-                        size: 1_024, sha: "def"
-                    ),
-                    showsSeparator: false,
-                    action: {}
-                )
-            }
-
             CardBox() {
                 RepoCommitRow(
                     commit: CommitSummary(

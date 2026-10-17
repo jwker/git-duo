@@ -22,7 +22,7 @@ import SwiftUI
 ///
 /// 两处变化：
 /// 1. `CardBox` 撤掉（行底 / 内边距 / 圆角由 `List` 给），本件只画内容；
-/// 2. **整行可点**（对外不再有 `onOpen`，由列表把它包进 `NavigationLink`）。
+/// 2. **整行可点**（对外不再有 `onOpen`，由列表把本行包进一个整行可点的按钮）。
 ///
 /// ⚠️ 第 2 条推翻了这里原先"只有「全名 + 副标题」那一块可点、图标不可点"的处置 ——
 /// 那条处置是为了逐字跟随原型的 `onclick` 落点。**功能没有变**（点这一行还是去这个仓库），
@@ -73,6 +73,9 @@ struct StarRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // ⚠️ 让整行矩形（含右侧空白）都成为命中区，
+        //    否则 `Button` 只认子视图几何并集，行内空白点不动。
+        .contentShape(Rectangle())
         // 读屏：整行合成一句（全名 + 星数 + 语言），而不是把三个碎片逐个念。
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)

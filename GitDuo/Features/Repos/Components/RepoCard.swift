@@ -41,6 +41,9 @@ struct RepoCard: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // ⚠️ 让整列矩形（含 `Spacer` 占的空白）都成为命中区，
+        //    否则 `Button` 只认"子视图几何并集"，行内右侧空白点不动。
+        .contentShape(Rectangle())
         // 无障碍：读屏读的是"这是什么、有什么"，而不是把六个碎片逐个念一遍
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)

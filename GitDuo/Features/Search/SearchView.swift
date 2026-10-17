@@ -6,6 +6,7 @@ import GitDuoKit
 /// 搜索页 —— **底部第 4 格 Tab 的根页**（2026-10-16 起；PRD §4.2、TECH_SPEC §9.2）。
 ///
 /// 结构（PRD §4.2）：
+/// 0. **顶栏大字标题「搜索」**（居左、放大；`TopBarTitleItem`）；
 /// 1. 搜索输入框（系统 `.searchable`）；
 /// 2. 范围分段：仓库 / 用户 / 代码 / Issue · PR；
 /// 3. 内容区（随输入与范围变化）：空闲态 / 骨架屏 / 结果 / 空态 / 失败。
@@ -41,12 +42,17 @@ import GitDuoKit
 /// ⚠️ 三处**有意保留**的自定观感（属 P5 令牌收尾）：页面底 `Theme.Palette.background`、
 ///    行底 `Theme.Palette.surface`（`.scrollContentBackground(.hidden)` 让开系统底色）。
 ///
-/// ## ⚠️ 标题保持 `inline`
+/// ## ⚠️ 标题是**顶栏大字居左**（走查第 86 条，2026-10-16）
 ///
-/// 它从前是推入页（那时 inline 是必然的）。成为 Tab 根页之后仍然保持 inline，
-/// 是一个**有意的选择**：本页顶部那两块（搜索框 + 范围分段）本身就是"标题区"，
-/// 再叠一行大标题「搜索」要多吃掉约 50pt，而这一屏的价值全在结果区。
+/// 与首页 / 仓库 / 探索三页同一档：`TopBarTitleItem`（居左、26pt、与顶栏同高）。
+/// ⚠️ 它**不额外占高度** —— 系统搜索框（`.searchable`）画在顶栏**下面**的 drawer 里，
+/// 顶栏标题与它不在同一层，所以不会像"内容区大标题"那样吃掉约 50pt。
+/// 这也是本页能用同一档标题而其他页必须牺牲吸顶分段条的原因。
 struct SearchView: View {
+
+    /// 顶栏那颗自绘大字标题与 `navigationTitle`，两处必须永远同一个字符串
+    /// （同 `ReposView` / `ExploreView` 的 `pageTitle`）。
+    private static let pageTitle = "搜索"
 
     @Environment(AppEnvironment.self) private var env
 
@@ -55,14 +61,6 @@ struct SearchView: View {
     /// 触发用户资料弹层的那一条（§5.10）。用 `Identifiable` 的行模型驱动
     /// `.sheet(item:)`，不用 `isPresented` 布尔量（同 `ExploreView` 的说明）。
     @State private var sheetUser: UserHit?
-
-    /// 系统搜索框是否展开（`.searchable(text:isPresented:)`）。
-    ///
-    /// ⚠️ 2026-10-16 起取代了自绘 `SearchField` 的 `@FocusState`（NATIVE-MIGRATION P1）：
-    /// `.searchable` 的输入框**归系统**，没有 `@FocusState` 可绑（它不是本视图树里的
-    /// `TextField`）。"进页自动聚焦"的原生等价是**让搜索框展开** —— 展开时系统自己
-    /// 把光标放进去。
-    @State private var isSearchPresented = false
 
     /// 取数与历史存储由**组合根**经 `RouteView` 传下来（5.5 装配）。
     init(loader: LoadSearch, history: any SearchHistoryStore) {
@@ -85,15 +83,22 @@ struct SearchView: View {
                 // 内容从它下面滚过去 ⇒ 这一层必须不透明。
                 .background(Theme.Palette.background)
         }
-        .navigationTitle("搜索")
+        .navigationTitle(Self.pageTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // ⚠️ 顶栏大字标题（居左、放大）—— 见 `TopBarTitleItem`。
+            //    `.navigationTitle` 仍保留（返回按钮文案 / 无障碍标题）。
+            TopBarTitleItem(text: Self.pageTitle)
+        }
         // ⚠️ **系统搜索框**（NATIVE-MIGRATION P1）—— 取代自绘 `SearchField`。
         //    `prompt` 是占位文案；`displayMode: .always` 让它常驻（PRD §4.2 那条
         //    "刷新结果区时保持输入焦点与光标" ⇒ 输入框不能随内容区一起滚/重建，
         //    而系统搜索框本来就在滚动区之外，这条要求由系统满足，不用自己钉）。
+        //
+        // ⚠️ 2026-10-16 起**不再自动展开搜索框**（走查第 86 条）：进 Tab 直接弹键盘
+        //    太吵，用户只想先进来看一眼。因此用不带 `isPresented` 的重载，系统默认不聚焦。
         .searchable(
             text: keywordBinding,
-            isPresented: $isSearchPresented,
             placement: .navigationBarDrawer(displayMode: .always),
             prompt: SearchCopy.fieldPlaceholder
         )
@@ -109,10 +114,7 @@ struct SearchView: View {
                 .presentationDragIndicator(.visible)
         }
         .task {
-            // 进入时展开搜索框（PRD §4.2「自动聚焦」的原生等价）。
-            // ⚠️ 放在 `await` **之后**：与视图出现同一轮里改呈现状态会被系统丢掉。
             await model.loadHistory()
-            isSearchPresented = true
         }
     }
 
@@ -249,27 +251,38 @@ struct SearchView: View {
         .listRowBackground(Theme.Palette.surface)
     }
 
-    /// 一行结果 —— **能跳转的用 `NavigationLink`，开弹层的用 `Button`**。
+    /// 一行结果 —— **跳转与开弹层都用 `Button` + `.buttonStyle(.plain)`**。
     ///
-    /// ⚠️ `NavigationLink` 没有 action 回调，而"点开"这一下**必须先记一笔**
-    /// （PRD §4.2：点开才是"这条搜索有用"的真实信号）⇒ 用同时触发的手势补上，
-    /// 它不影响跳转本身。
+    /// ⚠️ 不用 `NavigationLink(value:)`：它在 `.insetGrouped` 的 `List` 里
+    ///    - 分隔线会被系统默认缩短到 disclosure 左侧（见 `ReposView` 的同款注释）；
+    ///    - 再叠加一枚 `simultaneousGesture(TapGesture())` 来"点开先记一笔"时，
+    ///      那枚手势会**吞掉跳转**（iOS 上给 `NavigationLink` 加 `TapGesture`
+    ///      常让整行点不动）—— 这正是搜索结果"点不开"的根因。
+    /// `Button` + `.buttonStyle(.plain)` 同样整行可点、有按下高亮、分隔线全宽，
+    /// 且点击闭包里能先 `recordCurrentTerm()` 再 `router.push`（PRD §4.2：
+    /// 点开才是"这条搜索有用"的真实信号）。
     @ViewBuilder
     private func resultRow(_ row: SearchRow) -> some View {
         if let route = route(for: row) {
-            NavigationLink(value: route) {
+            Button {
+                model.recordCurrentTerm()
+                env.router.push(route)
+            } label: {
                 SearchRowView(row: row, now: model.loadedAt)
             }
-            .simultaneousGesture(TapGesture().onEnded { model.recordCurrentTerm() })
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
         } else {
-            // 用户行打开资料弹层 —— 是**动作**不是跳转 ⇒ 用默认样式的 `Button`
-            //（在 `List` 行里整行可点 + 按下高亮；不需要系统箭头）。
+            // 用户行打开资料弹层 —— 是**动作**不是跳转 ⇒ 同样 `Button` + `.plain`
+            //（整行可点 + 按下高亮；不画系统箭头，因为不是推入页）。
             Button {
                 model.recordCurrentTerm()
                 if case let .user(hit) = row { sheetUser = hit }
             } label: {
                 SearchRowView(row: row, now: model.loadedAt)
             }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
         }
     }
 

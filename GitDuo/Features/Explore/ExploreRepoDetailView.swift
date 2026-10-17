@@ -32,6 +32,18 @@ import GitDuoKit
 ///   而"在他人仓库上切分支"的语义（记忆照写、只读的切）在那里与 §4.4 共用一个实现。
 /// - 弹层从两个（分支 / 版本说明）收成一个（版本说明）。
 ///
+/// ## ⚠️ 2026-10-16 主干是 **`List`**，当天又回退成 **`ScrollView + VStack + CardBox`**
+///
+/// P3 第二批曾把整页换成 `List`：七块各一个 `Section`。实测复现了 §4.4 当年那个回归——
+/// **上下间距过大**：`List` 行默认 insets + Section 间距，把几块之间的距离拉得比设计大；
+/// 而且头部大卡 / README 这种"自带白面圆角、内部还有 `FlowLayout`"的块坐在 `List` 行里
+/// 会被行内边距再压窄一截（`FlowLayout` 在 ideal-size 测量下塌缩）。于是当天改回
+/// `ScrollView`：头部大卡与 README 自绘白卡、宽度由页面 padding 决定；语言 / Release /
+/// 贡献者三块用 `SectionHeader` + `CardBox`；导航入口那一组（Issues / PR / 文件浏览）
+/// 是 `CardBox` + `MenuRow`，并加 `SectionHeader`（标题 `参与协作`、副标题 `他人仓库 · 只读`）
+/// （与个人仓库首页四行入口同一件，见 `MenuRow`）。
+/// 这正是 P3 实证口径的"富详情页一律 `ScrollView`、自带白面圆角的块不进 `List` 行"。
+///
 /// ## ⚠️ 本页**不含任何写操作**（Star 除外）
 ///
 /// 没有 添加 / 编辑 / 提交 / Revert —— 那些只在「我的仓库」详情页。
@@ -141,9 +153,19 @@ struct ExploreRepoDetailView: View {
     }
 
     /// 分区顺序 = PRD §4.13（原 ②「我的收藏」已随功能移除）。
+    ///
+    /// ## ⚠️ 2026-10-16 回退到 `ScrollView + VStack`：七块平铺
+    ///
+    /// 七块直接平铺在一个 `VStack(spacing: 0)` 里，组距由 `SectionHeader` 自带的
+    /// 22pt 顶距给（同原型 `.section-label{margin:22px}`，也正是 §4.4 仓库首页那一份）。
+    /// 头部大卡与 README 自带白面圆角 ⇒ 直接放（不进 `CardBox`，免"卡里套卡"）；
+    /// 其余五块各是 `SectionHeader` + `CardBox`（见 `group(_:vertical:horizontal:content:)`）。
+    ///
+    /// ⚠️ `isPlaceholder` = 骨架态：骨架仍走**同一个** `sections(_:)` 喂 `.placeholder`
+    /// （P1 判据 ②），只是把每一块遮成灰块 —— 见 `masked(_:content:)`。
     @ViewBuilder
-    private func sections(_ insights: RepoInsights) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+    private func sections(_ insights: RepoInsights, isPlaceholder: Bool = false) -> some View {
+        masked(isPlaceholder) {
             RepoHeroCard(
                 detail: insights.detail,
                 now: now,
@@ -156,17 +178,19 @@ struct ExploreRepoDetailView: View {
             ) {
                 Task { await model.toggleStar() }
             }
+        }
 
-            languageSection(insights)
+        masked(isPlaceholder) { languageGroup(insights) }
 
-            releaseSection(insights)
+        masked(isPlaceholder) { releaseGroup(insights) }
 
-            fileSection
+        masked(isPlaceholder) { menuGroup }
 
-            // ⑥ README —— ⚠️ **2026-10-14 晚些回到本页**（用户要求它从代码页挪到仓库首页）。
-            //    它与 §4.4 首页那块是**同一个** `RepoReadmeSection`：三档（骨架 / 内容 /
-            //    块级失败）与三套接线（相对链接、相对图片、小节标题）全在那一件里。
-            //    ⚠️ 位置：按 §4.13 的分区顺序，它在 ⑤ 文件浏览之后、⑦ 参与协作之前。
+        // ⑥ README —— ⚠️ **2026-10-14 晚些回到本页**（用户要求它从代码页挪到仓库首页）。
+        //    它与 §4.4 首页那块是**同一个** `RepoReadmeSection`：三档（骨架 / 内容 /
+        //    块级失败）与三套接线（相对链接、相对图片、小节标题）全在那一件里。
+        //    ⚠️ 位置：按 §4.13 的分区顺序，它在 ⑤ 文件浏览之后、⑦ 参与协作之前。
+        masked(isPlaceholder) {
             RepoReadmeSection(
                 state: model.readme,
                 fullName: fullName,
@@ -176,14 +200,53 @@ struct ExploreRepoDetailView: View {
                 // ⚠️ `readOnly: true` —— 本页恒是**他人仓库**（路由在进入前定下，铁律 #7）
                 //    ⇒ README 里点进文件页 / 代码页都走只读那一组界面。
                 readOnly: true
+                // ⚠️ `headerMargins` 用默认 `.section`：本页是 `ScrollView`
+                //    ⇒ "README.md" 标题自带 22pt 顶距当组距（同 `RepoReadmeSection` 文档；
+                //    `List` 版的 `.none` 覆盖在此不再需要）。
             ) {
                 Task { await model.retryReadme() }
             }
-
-            collaborationSection
-
-            contributorSection(insights)
         }
+
+        masked(isPlaceholder) { contributorGroup(insights) }
+    }
+
+    /// 一个「分区标题 + 白卡」的组合（语言构成 / Latest Release / 贡献者三块共用）。
+    ///
+    /// ⚠️ `SectionHeader` 自带 22pt 顶距当组距；`CardBox` 给白面圆角与 14 内边距
+    ///    （横向 14）。导航入口那一组（`menuGroup`：Issues / Pull Requests / 文件浏览）
+    ///    是 `CardBox(horizontal: 0)` + 行自带 `contentPadding: 14` 的 `MenuRow`
+    ///    （与个人仓库首页四行入口逐字同构：40pt 色块图标 + 15/600 标题 + 14 内边距），
+    ///    并加 `SectionHeader`（标题 `参与协作`、副标题 `他人仓库 · 只读`）—— 见 `menuGroup`。
+    private func group(
+        _ title: String,
+        subtitle: String? = nil,
+        vertical: CGFloat = 14,
+        horizontal: CGFloat = 14,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionHeader(title: title, subtitle: subtitle)
+            CardBox(vertical: vertical, horizontal: horizontal) { content() }
+        }
+    }
+
+    /// 骨架期把一块遮成灰块。
+    ///
+    /// ⚠️ **逐块加，不加在整张 `ScrollView` 内容上**：`.allowsHitTesting(false)` 挂在
+    ///    某个块上，触摸会穿透到下面的 `ScrollView` ⇒ 滚动照旧、只是这一块不再接收点击
+    ///    （`ScrollView` 自己的滚动手势在容器上，不受内容 `redacted` / `allowsHitTesting` 影响）。
+    ///
+    /// ⚠️ `.redacted` **不拦截点击** ⇒ 两件事必须一起给：遮住的那几行入口
+    ///    （文件浏览 / Issues / PR）真的会推页，而且推过去的是 `placeholder/placeholder`。
+    @ViewBuilder
+    private func masked<Content: View>(
+        _ isPlaceholder: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .redacted(reason: isPlaceholder ? .placeholder : [])
+            .allowsHitTesting(!isPlaceholder)
     }
 
     // MARK: - ③ 语言构成
@@ -192,13 +255,11 @@ struct ExploreRepoDetailView: View {
     ///
     /// ⚠️ 不画一根全灰的条：那看起来像"这个仓库 100% 是某种语言"（§9.11 明写）。
     @ViewBuilder
-    private func languageSection(_ insights: RepoInsights) -> some View {
-        SectionHeader(title: ExploreRepoCopy.languageSection)
-
-        if insights.languages.isEmpty {
-            emptyLine(ExploreRepoCopy.noLanguages)
-        } else {
-            CardBox {
+    private func languageGroup(_ insights: RepoInsights) -> some View {
+        group(ExploreRepoCopy.languageSection) {
+            if insights.languages.isEmpty {
+                emptyLine(ExploreRepoCopy.noLanguages)
+            } else {
                 LanguageBar(shares: insights.languages)
             }
         }
@@ -207,17 +268,15 @@ struct ExploreRepoDetailView: View {
     // MARK: - ④ Latest Release
 
     @ViewBuilder
-    private func releaseSection(_ insights: RepoInsights) -> some View {
-        SectionHeader(title: ExploreRepoCopy.releaseSection)
-
-        if let release = insights.release {
-            CardBox {
+    private func releaseGroup(_ insights: RepoInsights) -> some View {
+        group(ExploreRepoCopy.releaseSection) {
+            if let release = insights.release {
                 releaseCard(release)
+            } else {
+                // `nil` = 这个仓库从没发过版本（**不是错误** —— `releases/latest` 的 404
+                // 在端点里已被翻译成 nil，见 `GitHubRepoInsightsEndpoint`）。
+                emptyLine(ExploreRepoCopy.noRelease)
             }
-        } else {
-            // `nil` = 这个仓库从没发过版本（**不是错误** —— `releases/latest` 的 404
-            // 在端点里已被翻译成 nil，见 `GitHubRepoInsightsEndpoint`）。
-            emptyLine(ExploreRepoCopy.noRelease)
         }
     }
 
@@ -294,31 +353,60 @@ struct ExploreRepoDetailView: View {
             .buttonStyle(.plain)
     }
 
-    // MARK: - ⑤ / ⑥ 文件浏览 · README
+    // MARK: - ⑤ / ⑦ 导航入口（文件浏览 · 参与协作 · 合并为一组）
 
-    /// §4.13 的 ⑤ / ⑥ 两分区 —— 一条入口行（2026-10-14 起，走查第 63 条）。
+    /// §4.13 的 ⑤「文件浏览」与 ⑦「参与协作（Issues / Pull Requests）」合并为**一组**
+    /// 导航入口（用户 2026-10-16 要求：三行放一起、Issues / PR 挪到 文件浏览 之上）。
     ///
-    /// ## ⚠️ 它原先**就是这两分区本身**（一块内嵌的目录浏览）
+    /// ## ⚠️ 它原先**就是这两分区** —— 各自一条入口行
     ///
-    /// 那时它渲染的是 `RepoTreeSection`（面包屑 + 目录卡片 + README），
-    /// 子目录要"推入一层新页面"。现在换成一个落点：
-    /// 点这一行 → `RepoCodeView（readOnly: true）` —— 目录层级在那一页内部推进，
-    /// 「哪一层」不再出现在本页（连带 `path` 参数一起删掉）。
+    /// ⑤ 文件浏览点进去是 `RepoCodeView（readOnly: true）`；⑦ 两行推到 Issues / PR 列表。
+    /// 现在三行坐在**同一张裸卡**里（与个人仓库首页四行入口逐字同构）：
     ///
-    /// ⚠️ 小节标题留着（原型这一块有「文件浏览」这个标题），
-    /// 但 ` · {path}` 那一半删了：本页已经不存在"当前目录"。
+    /// - 裸 `CardBox(vertical: 0, horizontal: 0)` —— 留白由行自己出；
+    /// - 每行 `MenuRow` 传 `contentPadding: 14`（原型 `.menu-item{padding:14px}`）
+    ///   ⇒ 文字离卡边 14、40pt 色块图标、15/600 标题；
+    /// - 分隔线由 `MenuRow` 自己画（首行不画，其后逐行画，见 §4.4 `entries`）。
     ///
-    /// ⚠️ **只读那一档在代码页里少一项**：导航栏右上角那颗「⋯」照给，
-    /// 只是菜单里只剩 `复制路径`（`添加文件` 在别人的仓库上做不了）。
+    /// ⚠️ **加 `SectionHeader`（标题 = 参与协作）**：这一组是 Issues / PR / 文件浏览
+    /// 三行合并的导航入口，标题把它兜成一组（不做"只读"副标题，用户 2026-10-16 要求去掉）。
+    /// 容器用 `group(..., vertical: 0, horizontal: 0)`。
+    ///
+    /// ⚠️ 顺序 = **Issues → Pull Requests → 文件浏览**（用户裁定：Issues / PR 挪到上面）。
     @ViewBuilder
-    private var fileSection: some View {
-        SectionHeader(title: ExploreRepoCopy.fileSection)
-
-        CardBox() {
-            LinkRow(
+    private var menuGroup: some View {
+        group(
+            ExploreRepoCopy.collaborationSection,
+            vertical: 0,
+            horizontal: 0
+        ) {
+            MenuRow(
+                systemImage: StateIcon.issueOpen,
+                iconTone: .green,
+                title: ExploreRepoCopy.issuesRowTitle,
+                accessory: .chevron,
+                showsSeparator: false,
+                contentPadding: 14
+            ) {
+                env.router.push(.exploreIssueList(fullName: fullName))
+            }
+            MenuRow(
+                systemImage: StateIcon.pullRequestOpen,
+                iconTone: .blue,
+                title: ExploreRepoCopy.pullsRowTitle,
+                accessory: .chevron,
+                showsSeparator: true,
+                contentPadding: 14
+            ) {
+                env.router.push(.explorePRList(fullName: fullName))
+            }
+            MenuRow(
                 systemImage: GitHubIcon.folder,
+                iconTone: .slate,
                 title: ExploreRepoCopy.fileBrowseRowTitle,
-                showsSeparator: false
+                accessory: .chevron,
+                showsSeparator: true,
+                contentPadding: 14
             ) {
                 env.router.push(.repoCode(
                     fullName: fullName,
@@ -334,47 +422,16 @@ struct ExploreRepoDetailView: View {
         }
     }
 
-    // MARK: - ⑦ 参与协作
-
-    @ViewBuilder
-    private var collaborationSection: some View {
-        SectionHeader(title: ExploreRepoCopy.collaborationSection)
-
-        CardBox() {
-            LinkRow(
-                systemImage: StateIcon.issueOpen,
-                iconTint: Theme.Palette.stateOpenIcon,
-                title: ExploreRepoCopy.issuesRowTitle,
-                subtitle: ExploreRepoCopy.issuesRowSubtitle
-            ) {
-                env.router.push(.exploreIssueList(fullName: fullName))
-            }
-            LinkRow(
-                systemImage: StateIcon.pullRequestOpen,
-                iconTint: Theme.Palette.stateOpenIcon,
-                title: ExploreRepoCopy.pullsRowTitle,
-                subtitle: ExploreRepoCopy.pullsRowSubtitle,
-                showsSeparator: false
-            ) {
-                env.router.push(.explorePRList(fullName: fullName))
-            }
-        }
-    }
-
     // MARK: - ⑧ 贡献者
 
     @ViewBuilder
-    private func contributorSection(_ insights: RepoInsights) -> some View {
+    private func contributorGroup(_ insights: RepoInsights) -> some View {
         let roster = insights.contributors
-        // 空名单时用不带计数的标题（`贡献者` 而不是 `贡献者 · 0 位`）——
-        // 判据收在 `ContributorRoster.displayTitle`，不在这里各写一次。
-        SectionHeader(title: roster.displayTitle)
-
-        if roster.contributors.isEmpty {
-            // ⚠️ **不画一排 `?` 占位头像**：那看起来像"头像还在加载"（§9.11 明写）。
-            emptyLine(ExploreRepoCopy.noContributors)
-        } else {
-            CardBox {
+        group(roster.displayTitle) {
+            if roster.contributors.isEmpty {
+                // ⚠️ **不画一排 `?` 占位头像**：那看起来像"头像还在加载"（§9.11 明写）。
+                emptyLine(ExploreRepoCopy.noContributors)
+            } else {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     AvatarStack(
                         members: roster.contributors.map {
@@ -413,15 +470,13 @@ struct ExploreRepoDetailView: View {
 
     /// ## ⚠️ 2026-10-16 起不再手抄几何（NATIVE-MIGRATION P1）
     ///
-    /// 画的是真实的 `sections(_:)` + 占位洞察 + `.redacted` —— 七个分区的形状
+    /// 画的是真实的 `sections(_:)` + 占位洞察 —— 七个分区的形状
     /// （头部大卡、三张卡的标题条与内容条）从此与内容同源。
     ///
-    /// ⚠️ `allowsHitTesting(false)`：`.redacted` **不拦截点击** —— 被遮住的那几行
-    /// 入口（文件浏览 / Issues / PR）真的会推页，而且推过去的是 `placeholder/placeholder`。
+    /// ⚠️ 遮罩由 `sections(_:isPlaceholder:)` **逐块**加（见 `masked(_:content:)` 那条：
+    ///    加在整张 `List` 上会把手势一起关掉，骨架期就滚不动了）。
     private var skeleton: some View {
-        sections(.placeholder)
-            .redacted(reason: .placeholder)
-            .allowsHitTesting(false)
+        sections(.placeholder, isPlaceholder: true)
             .accessibilityHidden(true)
     }
 

@@ -97,12 +97,16 @@ struct MyStarsView: View {
             // 不返回 `permissions`）⇒ 一律进只读页；而 `GET /user/starred` 返回的是**完整仓库
             // 对象**（`RepositoryDTO.permissions` 是有值的）⇒ 这里可以按真实权限分流，
             // 自己的仓库仍进可写详情页。
-            NavigationLink(value: route(for: repository)) {
+            Button {
+                env.router.push(route(for: repository))
+            } label: {
                 StarRow(
                     repository: repository,
                     state: model.starState(of: repository)
                 )
             }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
             .onAppear {
                 // 滚到底自动加载（PRD §4.18 明文：与仓库页同规矩）。
                 // 只对最后一行触发，否则每出现一行都会打一次请求。

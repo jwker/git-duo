@@ -48,7 +48,7 @@
 | `EmptyBox` | `ContentUnavailableView` | 24 |
 | `LinkRow` | `NavigationLink` | 21 —— ⏸ **P3 第二批**（仓库详情一族） |
 | `CodeTextArea` | `TextEditor` / `TextField(axis: .vertical)` | 16 |
-| `MenuCard`（+ `MenuRow`） | `List` + `Section` / `Form` | 15 —— ⏸ **P3 第二批**（「我的」根页） |
+| `MenuCard`（+ `MenuRow`） | `List` + `Section` / `Form` | 15 ✅ **P3 第二批第一小批已完成**（「我的」根页 / 设置页 / 仓库首页三处一起换；`MenuRow` 只画内容，`showsSeparator` 删除；`MenuCard` 已无调用方） |
 | `PanelBox` | `Section` + `.background(_:in:)` | 13 |
 | `BranchRow` | `List` 行 + `.swipeActions(edge: .trailing)` | 11 |
 | `LabelDot` | `Circle` / 直接删（用 `Label` 的图标位） | 8 |
@@ -56,19 +56,19 @@
 | `CodePreviewLine` | `Text` + `.monospaced()` | 6 |
 | `LabelAddButton` | `Button` + `.buttonBorderShape(.capsule)` | 4 ✅ **P2 已完成** |
 | `MarkdownImage` | `AsyncImage` | 17 |
-| `RepoTreeSection` | `List` + `NavigationLink`（层级进栈） | 28 |
-| `IssueCard` | `List` 行 + `NavigationLink` + `Label` | 22 |
-| `PullCard` | 同上 | 20 |
+| `RepoTreeSection` | ⏸ **保持 `ScrollView`**（走查 89：面包屑 + 文件行自带几何，进 `List` 行宽度不对） | 28 |
+| `IssueCard` | ⏸ **保持卡片 / `ScrollView`**（走查 90：`RepoIssuesSection` 的列表项，非朴素行） | 22 |
+| `PullCard` | ⏸ 同上（`RepoPullsSection` 的列表项） | 20 |
 | `PinRow` | `List` 行 | 14 ✅ **P3 已完成** |
 | `StarRow` | `List` 行 | 14 ✅ **P3 已完成**（`LabeledContent` 未用上：这一行是「全名 + 副标题」两行文本，不是 label/value 对） |
 | `RepoCard` | `List` 行 + `Button` + `.buttonStyle(.plain)` | 13 ✅ **P3 已完成**（去掉了首批失败的 `NavigationLink(value:)` 尝试，避免 `.insetGrouped` 分隔线缩短） |
 | `SearchRowView` / `SearchRowBox` | `List` + `Section`（分隔线由系统画） | 11 / 8 ✅ **P3 已完成**（`RowChevron` 已删） |
 | `RecentRow` | `List` 行 | 8 ✅ **P3 已完成** |
-| `RepoFileRow` / `RepoCommitRow` | `List` 行 + `NavigationLink` | 8 / 6 |
-| `RepoIssuesSection` | `List` + `Section` + `Picker(.segmented)` | 7 |
+| `RepoFileRow` / `RepoCommitRow` | ⏸ **保持 `CardBox`**（走查 89/90：代码页 / 提交列表回 `ScrollView`，分隔线自绘） | 8 / 6 |
+| `RepoIssuesSection` | ⏸ **保持 `ScrollView`**（走查 90：分段条 + `IssueCard` 卡片列表，非朴素行列表） | 7 |
 | `ExploreFilterSheet` | `.sheet` + `List` / `Picker` | 6 |
 | `SearchField` | `.searchable(text:)` | 5 |
-| `RepoPullsSection` | `List` + `Section` + `Picker(.segmented)` | 3 |
+| `RepoPullsSection` | ⏸ **保持 `ScrollView`**（走查 90：同 `RepoIssuesSection`） | 3 |
 | 6 个列表骨架（Explore/Home/Profile/Repos/Repo/Search） | `.redacted` | 3 / 8 / 5 / 4 / 7 / 4 |
 | `SearchIdleSection` | `.searchSuggestions { }` | 4 |
 | `PageFailure` / `SectionFailure` | `ContentUnavailableView`（带重试按钮） | 16 / 28 |
@@ -251,9 +251,34 @@
 > **状态（2026-10-16）**：**第一批已做完，并已修复两处回归**（见第 84 条）：
 > 首页置顶 / 最近访问行、仓库列表页、探索页把 `NavigationLink` 改回 `Button` + `.buttonStyle(.plain)`，
 > 恢复全宽分隔线；仓库 / 探索的分段条从吸顶的 `.safeAreaInset(edge: .top)` 改回 `List` 的
-> `Section` header，恢复导航栏大标题。第二批：**「我的」根页 + 仓库详情一族**
-> （`RepoDetailView` / `ExploreRepoDetailView` / `RepoSectionListView`（Issues / PRs / Commits 三段的行件）/
-> `RepoCodeView` / 各详情页）。
+> `Section` header，恢复导航栏大标题。
+>
+> **第二批 · 第一小批已做完（`MenuCard` / `MenuRow` 那一族，走查第 87 条）**：
+> 「我的」根页 · 设置页两处换 `List`。
+> ⚠️ 仓库首页（`RepoDetailView`）**先换了 `List`，后因回归在第 89 条改回 `ScrollView`**
+> —— 头部大卡含 `FlowLayout`（Star / Watch / Fork），坐在 `List` 行里会"塌缩"，
+> 导致统计数字消失、卡片宽度变窄、上下间距过大。
+> ⇒ `MenuRow` 的 `showsSeparator` **保留**（默认 `true`）：`List` 里的调用方传 `false`，
+> 仓库首页四行入口（回 `CardBox`）按卡内规则传。
+>
+> **第二批 · 第二小批已做完（`BranchRow` / `RepoFileRow` / `LinkRow` 三族，走查第 88 条）**：
+> `BranchesView` · `ExploreRepoDetailView` 两处换 `List`。
+> ⚠️ 代码页（`RepoCodeView`）**先换了 `List`，后因回归在第 89 条改回 `ScrollView`**
+> —— 面包屑与文件行自带几何，坐在 `List` 行里宽度不对、上下间距过大。
+> ⇒ `RepoFileRow` 的 `showsSeparator` **保留**（默认 `true`）：代码页文件行回 `CardBox`
+> 后按末行规则传。
+>
+> **第二批 · 收口（走查第 90 条，2026-10-16）**：剩下的 `RepoSectionListView`
+> · `PullDetailView` 经复核**裁定保持 `ScrollView`，第二批至此完成**。
+> 理由（走查 89 的同一条判据：**自带白面 / 圆角 / 自定义布局的块不进 `List` 行**）：
+> - `RepoSectionListView`：Issues / PRs 两段是「分段条 + `IssueCard` / `PullCard` 卡片」
+>   （卡片自带白面圆角），与 Commits 段**共用一个 `ScrollView` 外壳** —— 只把 Commits
+>   换成 `List` 会打破本文件「三页同构、没有壳子差异」的设计原则，且重蹈走查 89。
+> - `PullDetailView`：头部大卡 + 分段条 + `CommentRow` 气泡 + `DiffCard`，全是富块
+>   ⇒ 天生 `ScrollView`；Commits 只是它的一个子分区，嵌 `List` 会变成嵌套滚动区。
+> ⇒ `RepoCommitRow` 的 `showsSeparator` **保留**（归「`CardBox` 阵营」，同 `MenuRow` /
+>   `RepoFileRow`）。P3 的 `List` 迁移只覆盖「朴素行列表」（菜单 / 分支 / 链接 /
+>   首页行 / 搜索结果），富详情页一律 `ScrollView` —— 这是走查 89 定下的边界。
 >
 > ⚠️ 已用 iOS 模拟器探针目视：大标题 + 分组形状 + 全宽分隔线三者可以同时实现；
 > 代价是**分段条不再吸顶**（会随列表滚动）。SwiftUI 当前 API 下「大标题 + 分组形状 + 吸顶」
@@ -289,9 +314,14 @@
      而本件现在会被放进 header 位。在别处它是空操作。
 4. ⏸ **自绘 hairline 的那一族已随本批消失**（"顶线 vs 底线"、"缩进 66/56/57"、
    "首行/末行传 false"）—— 分隔线由系统画，它对"谁是首行"有确定的答案。
-   ⚠️ 因此 `REVIEW-CHECKLIST` 第 76/77 条那两套口径**在已迁移的页面上作废**
-   （`MenuRow` / `LinkRow` / `RepoFileRow` / `RepoCommitRow` 还留在第二批的页面里，
-   它们的 `showsSeparator` 等到那一批再删）。
+   ⚠️ 因此 `REVIEW-CHECKLIST` 第 76/77 条那两套口径**在已迁移的页面上作废**。
+   ⚠️ **第二批临时删掉的 `showsSeparator` 已恢复**：`MenuRow` 与 `RepoFileRow`
+   既要服务 `List` 行（需要关系统分隔线）又要服务 `CardBox`（需要自己画分隔线），
+   这个开关不能删。`List` 里的调用方传 `false`，`CardBox` 里的调用方按首行/末行规则传。
+   ✅ **第二批确实删掉的**：`BranchRow` / `LinkRow` 的 `showsSeparator`
+   （分支管理页 / 探索仓库详情页仍在 `List` 里）。
+   还留着这个开关的是 `RepoCommitRow` —— 但它的两个调用方经走查 89/90 裁定保持
+   `ScrollView` ⇒ **这个开关不清了**，`RepoCommitRow` 归「`CardBox` 阵营」。
 5. ⏸ `CardBox`（69）· `PanelBox`（13）· `MenuCard`（15）→ `Section` / `.listRowBackground`：
    **首批只吃掉了 `CardBox` 在六个页面里的用法**（组件本身留着 —— 仓库详情一族还在用）。
    `MenuCard`（「我的」根页）与详情页里的面板留第二批。

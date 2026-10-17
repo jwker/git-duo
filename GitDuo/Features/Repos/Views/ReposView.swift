@@ -5,7 +5,7 @@ import GitDuoKit
 
 /// 仓库 Tab 根页（PRD §4.3）。
 ///
-/// 结构：大标题「仓库」· 四个分段（全部 / 公开 / 私有 / Starred）· 卡片列表。
+/// 结构：**顶栏大字标题「仓库」**（居左、放大；`TopBarTitleItem`）· 四个分段（全部 / 公开 / 私有 / Starred）· 卡片列表。
 /// 状态：骨架屏 →「继续加载」/ 内容 / 逐段空态 / 失败重试（§8.5 的三档统一）。
 ///
 /// ⚠️ **2026-10-16：右上角那颗放大镜已移除**（走查第 85 条）。
@@ -20,9 +20,8 @@ import GitDuoKit
 ///    行底 / 分隔线 / 行内边距由系统给）。
 /// 2. **分段条回到 `List` 内部** —— 作为 `Section` 的 header。
 ///    P3 首批曾用 `.safeAreaInset(edge: .top)` 让它吸顶，但那会让导航栏**大标题消失**，
-///    属于回归。在 SwiftUI 当前 API 下，「大标题 + 分组形状 + 吸顶」三者不可兼得：
-///    `.plain` 风格能吸顶但行变通栏；`.safeAreaInset` 能吸顶但吞大标题。
-///    这里选择保留大标题 + 分组形状，让分段条随内容滚动。
+///    属于回归；修正后选择让分段条随内容滚动（分段条**仍不吸顶**：`.safeAreaInset` 会吞标题）。
+///    ⚠️ 2026-10-16 走查第 86 条：标题改成**顶栏大字居左**（`TopBarTitleItem`）。
 /// 3. **空态 / 失败态换成官方件**（`EmptyBox` / `PageFailure`）。
 ///
 /// ⚠️ 两条**有意保留**的自定观感（属 P5 令牌收尾）：页面底 `Theme.Palette.background`、
@@ -33,6 +32,10 @@ import GitDuoKit
 ///    本视图只读 `entry`，不自己判断"这是不是我的仓库" ——
 ///    原型里用 `fullName.hasPrefix("my-git/")` 是**无后端时的演示简化**，不得照搬。
 struct ReposView: View {
+
+    /// 页面标题。**只写一处** —— 它同时喂给 `.navigationTitle`（返回按钮文案 / 无障碍）
+    /// 与顶栏那颗自绘大字标题（`TopBarTitleItem`），两处必须永远同一个字符串。
+    private static let pageTitle = "仓库"
 
     @Environment(AppEnvironment.self) private var env
     @State private var model: RepoListViewModel
@@ -57,7 +60,13 @@ struct ReposView: View {
             }
         }
         .background(Theme.Palette.background)
-        .navigationTitle("仓库")
+        .navigationTitle(Self.pageTitle)
+        // ⚠️ 顶栏大字标题（居左、放大）—— 见 `TopBarTitleItem`。
+        //    `.navigationTitle` 仍保留（返回按钮文案 / 无障碍标题）。
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            TopBarTitleItem(text: Self.pageTitle)
+        }
         .task { await model.loadIfNeeded() }
     }
 
@@ -124,6 +133,7 @@ struct ReposView: View {
                 RepoCard(repository: repository)
             }
             .buttonStyle(.plain)
+            .contentShape(Rectangle())
             .onAppear {
                 // 滚到底自动加载（§4.4：普通列表用自动加载，搜索才用手动按钮）。
                 // 只对最后一行触发，否则每次出现一行都会打一次请求。

@@ -23,7 +23,7 @@ enum ExploreSheet: Identifiable {
 
 /// 探索 Tab 根页（PRD §4.12、TECH_SPEC §9.10）。
 ///
-/// 结构：大标题「探索」· 榜单分段（新星榜 / 活跃榜）· 两个筛选 chip ·
+/// 结构：**顶栏大字标题「探索」**（居左、放大；`TopBarTitleItem`）· 榜单分段（新星榜 / 活跃榜）· 两个筛选 chip ·
 /// （可选）结果不完整说明行 · 趋势卡片列表。
 ///
 /// ⚠️ **2026-10-16：右上角那颗放大镜已移除**（走查第 85 条）——
@@ -38,9 +38,9 @@ enum ExploreSheet: Identifiable {
 ///
 /// 与 `ReposView` 同一处置：`ScrollView + LazyVStack` → `List`；
 /// 榜单分段条从吸顶的 `.safeAreaInset(edge: .top)` 改回 `List` 的 `Section` header。
-/// P3 首批用 `.safeAreaInset` 实现了吸顶，但它会**吞掉导航栏大标题**，属于回归；
-/// 在 SwiftUI 当前 API 下「大标题 + 分组形状 + 吸顶」三者不可兼得，
-/// 这里保留大标题 + 分组形状，让榜单条随内容滚动。
+/// P3 首批用 `.safeAreaInset` 实现了吸顶，但它会**吞掉导航栏标题**，属于回归；
+/// 修正后选择让榜单条随内容滚动（**仍不吸顶**）。
+/// ⚠️ 2026-10-16 走查第 86 条：标题改成**顶栏大字居左**（`TopBarTitleItem`）。
 ///
 /// chip / 说明行 / 空态 / 失败态都是**行**（不坐白卡、不画分隔线 —— 它们不是列表内容）。
 ///
@@ -51,6 +51,10 @@ enum ExploreSheet: Identifiable {
 /// ① **缓存优先**（同一组合来回切直接命中，不出网）；② **防抖 300ms**；③ **取消在途**。
 /// 三道都在 `ExploreViewModel` 里（它是唯一知道"有没有新的点击到来"的地方）。
 struct ExploreView: View {
+
+    /// 页面标题。**只写一处** —— 它同时喂给 `.navigationTitle`（返回按钮文案 / 无障碍）
+    /// 与顶栏那颗自绘大字标题（`TopBarTitleItem`），两处必须永远同一个字符串。
+    private static let pageTitle = "探索"
 
     @Environment(AppEnvironment.self) private var env
     @State private var model: ExploreViewModel
@@ -90,7 +94,13 @@ struct ExploreView: View {
         .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         .refreshable { await model.refresh() }
-        .navigationTitle("探索")
+        .navigationTitle(Self.pageTitle)
+        // ⚠️ 顶栏大字标题（居左、放大）—— 见 `TopBarTitleItem`。
+        //    `.navigationTitle` 仍保留（返回按钮文案 / 无障碍标题）。
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            TopBarTitleItem(text: Self.pageTitle)
+        }
         .sheet(item: $sheet) { route in
             switch route {
             case let .filter(kind):
@@ -189,6 +199,7 @@ struct ExploreView: View {
                 TrendCard(summary: row.summary, badges: badges(row))
             }
             .buttonStyle(.plain)
+            .contentShape(Rectangle())
             .onAppear {
                 // 只有最后一行触发，否则每出现一行就打一次请求（§4.4：普通列表滚到底自动加载）。
                 if row.id == lastID {

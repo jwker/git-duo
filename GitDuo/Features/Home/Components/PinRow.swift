@@ -70,6 +70,9 @@ struct PinRow: View {
                 // Star 数不该被仓库名挤走 —— 挤掉之后这一行就看不出"置顶的这个有多热"。
                 .layoutPriority(1)
         }
+        // ⚠️ 让整行矩形（含 `Spacer` 占的空白）都成为命中区，
+        //    否则 `Button` 只认子视图几何并集，行内右侧空白点不动。
+        .contentShape(Rectangle())
         // 读屏：整行合成一句，而不是把四五个碎片逐个念出来。
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)

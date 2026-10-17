@@ -241,31 +241,82 @@ struct RepoCodeView: View {
     var body: some View {
         // ⚠️ 渲染的是**栈顶那一层**（不是 `levels[0]`）—— 换层就是换它，
         //    于是"进一层"在这一页里只体现为一次重绘（见类型说明）。
-        content(current)
-            // ⚠️ 这两条是给**外层**那条导航栏的：本页是推入页，标题写仓库名
-            //    （不写仓库全名 —— 顶部那行宽度有限，而全名在上一页刚看过）。
-            .navigationTitle(name)
-            .navigationBarTitleDisplayMode(.inline)
-            // ⚠️ 系统那颗返回键的语义是"退出这一页"（它属于**外层**栈），
-            //    而这一页要的是"先回上一层目录" ⇒ 藏掉它、换成 `backButton`。
-            //    ⚠️ 藏掉之后**左滑手势**还剩什么，只有真机才知道（见类型说明的"未目视"）。
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    backButton
-                }
-                // 右上角那颗「⋯」—— 与文件页（`FileView.operationsMenu`）
-                // **同一个位置、同一套控件**（2026-10-14 用户要求，从面包屑右侧搬来）。
-                // ⚠️ 它挂在 `body` 上（不在 `content(_:)` 里）⇒ 骨架 / 失败态也画得出来，
-                //    里面的项各自把关（与文件页同一条处置）。
-                ToolbarItem(placement: .topBarTrailing) {
-                    levelMenu(current.path)
-                }
+        //
+        // ⚠️ 2026-10-16 起：主干回到 `ScrollView`（本轮修复）。面包屑与文件行
+        //    自带几何，坐在 `List` 行里会被系统行内边距再缩一次 ⇒ 宽度不对、间距过大。
+        ScrollView {
+            content(current)
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.top, Theme.Spacing.m)
+                .padding(.bottom, Theme.Spacing.xl)
+        }
+        .background(Theme.Palette.background)
+        // ⚠️ 这两条是给**外层**那条导航栏的：本页是推入页，标题写仓库名
+        //    （不写仓库全名 —— 顶部那行宽度有限，而全名在上一页刚看过）。
+        .navigationTitle(name)
+        .navigationBarTitleDisplayMode(.inline)
+        // ⚠️ 系统那颗返回键的语义是"退出这一页"（它属于**外层**栈），
+        //    而这一页要的是"先回上一层目录" ⇒ 藏掉它、换成 `backButton`。
+        //    ⚠️ 藏掉之后**左滑手势**还剩什么，只有真机才知道（见类型说明的"未目视"）。
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                backButton
             }
-            .task { await model.start() }
-            .sheet(item: $sheet) { route in
-                presented(route)
+            // 右上角那颗「⋯」—— 与文件页（`FileView.operationsMenu`）
+            // **同一个位置、同一套控件**（2026-10-14 用户要求，从面包屑右侧搬来）。
+            // ⚠️ 它挂在 `body` 上（不在 `content(_:)` 里）⇒ 骨架 / 失败态也画得出来，
+            //    里面的项各自把关（与文件页同一条处置）。
+            ToolbarItem(placement: .topBarTrailing) {
+                levelMenu(current.path)
             }
+        }
+        .refreshable {
+            // 下拉 = 重取**这一层**（别的层没被看着，也没被要求刷新）。
+            await current.session.reload()
+        }
+        // ⚠️ 这个 id 由 `RepoCodeLoadKey` 算（两半都必须在，见那个类型的说明）：
+        //
+        // ① **默认分支**：它是**异步**来的，而这一层的取数要等它（`load` 的第一条守卫就是
+        //    `guard let defaultBranch`）。⚠️ **更正（2026-10-14 同日顺手核了一遍）**：
+        //    取数那一支只在分支到手之后才会被渲染（分支还没来那一格骨架由
+        //    `content(_:)` 画）⇒ 这一半**现在到不了 `nil`**、也就不会真的触发过一次重跑。
+        //    留着它是因为它描述了取数的**依赖**（同 `RepoCodeLoadKey` 的说明）——
+        //    哪天的改动让骨架由"会话自己"画（而不是整页那一格），少了它就会静默退化。
+        //
+        // ② **这一层的路径**：换层（点目录 / 点面包屑 / 返回上一层）在这里只体现为
+        //    `level` 换了个人，而 `defaultBranch` **一个字都没变** ⇒ id 里不含路径的话
+        //    `.task` **不会重跑** ⇒ 新那一层的会话从没被 `load` 过、`page` 停在 `idle`，
+        //    屏幕上是一块**永不消失的骨架**。⚠️ 2026-10-14 用户报回的正是这一条
+        //    （"点二级目录一直停在骨架屏、而别的页面都正常"）—— 它由"删掉嵌套栈"那次
+        //    修复引入（见类型说明）。
+        //
+        // ③ id 里**不再需要"我在不在栈顶"**（随嵌套栈一起去掉）：现在**只有栈顶那一层
+        //    被渲染**，走到这里的就是栈顶（见类型说明）。
+        //
+        // ⚠️ 而"返回上一层"**不会**因此重取：id 变了，`.task` 确实会再跑一次，
+        //    但那一层的 `page` 已经落地，`model.load` 的第一条守卫会把它挡掉 ——
+        //    "返回即所见"靠的是这个，不是"视图还留在栈里"（视图其实已经销毁了）。
+        //
+        // ⚠️ 第 ② 条在 2026-10-14 用最小复现**实跑验过**：id 只用分支时，换层那几次
+        //    `.task` **一次都不跑**（屏幕就是永久骨架）；id 带上路径之后，每一次换层都跑
+        //    （返回上一层那次也跑，由守卫挡掉重取）。
+        .task(id: RepoCodeLoadKey(branch: model.defaultBranch, path: current.path)) {
+            await model.load(current.session)
+        }
+        // ⚠️ 换层 = **换这一个 `ScrollView` 的身份**（2026-10-14 同批补）：滚动位置跟着归零。
+        //    不做的话，上一层那个偏移会被继承下来 —— 子目录进来就是滚下去的，
+        //    而"我在哪一层"（面包屑）恰恰在内容最上面。
+        //    （同日实测：不换身份时底层 `NSScrollView` 的偏移**原样留着**、换身份后归零，
+        //    数见 `REVIEW-CHECKLIST` 第 63 条那条补记。）
+        //    ⚠️ **取数不靠这一行**（靠上面那个 `.task` 的 id），两处分着写是有意的：
+        //    漏了下面这一行，症状是"进子目录时它是滚下去的"；漏了上面 id 里的路径，
+        //    症状是"永远停在骨架屏"。两种症状差得很远，判据就该分在两处。
+        .id(current.path.raw)
+        .task { await model.start() }
+        .sheet(item: $sheet) { route in
+            presented(route)
+        }
     }
 
     /// 当前层（栈顶）。
@@ -315,21 +366,12 @@ struct RepoCodeView: View {
         //    留下来的话藏的就是**外层**那条：这一页会连标题与返回键一起消失。
         if let failure = model.failure {
             // 头部拿不到 ⇒ 连目录都取不了（分支无从解析）—— 整页失败 + 一个出口。
-            ScrollView {
-                PageFailure(error: failure) { Task { await model.retry() } }
-                    .padding(.horizontal, Theme.Spacing.page)
-                    .padding(.top, Theme.Spacing.m)
-            }
-            .background(Theme.Palette.background)
+            PageFailure(error: failure) { Task { await model.retry() } }
 
         } else if model.defaultBranch == nil {
             // 头部还在路上 —— 目录还没法取（它要 `defaultBranch`）。
-            ScrollView {
-                RepoTreeSkeleton()
-                    .padding(.horizontal, Theme.Spacing.page)
-                    .padding(.top, Theme.Spacing.m)
-            }
-            .background(Theme.Palette.background)
+            // ⚠️ `RepoTreeSkeleton` 自带面包屑那一段（占位分支名 / 路径段）。
+            RepoTreeSkeleton()
 
         } else {
             tree(level)
@@ -337,67 +379,21 @@ struct RepoCodeView: View {
     }
 
     private func tree(_ level: RepoCodeLevel) -> some View {
-        ScrollView {
-            RepoTreeSection(
-                session: level.session,
-                onOpenDirectory: { target in openDirectory(target) },
-                onOpenFile: { target in
-                    // ⚠️ 文件页是**外层**路由（它是另一个页面，不属于这一页的层级）
-                    //    —— 返回时这一页连同整个层级原样还在（层级不重取，理由见类型说明）。
-                    env.router.push(.fileView(
-                        fullName: fullName, path: target.raw, readOnly: readOnly
-                    ))
-                },
-                onTapBranch: { sheet = .branch(level.path) },
-                onSelectSegment: { index in pop(toCrumb: index) }
-            )
-            .padding(.horizontal, Theme.Spacing.page)
-            .padding(.top, Theme.Spacing.m)
-            .padding(.bottom, Theme.Spacing.xl)
-        }
-        .background(Theme.Palette.background)
-        .refreshable {
-            // 下拉 = 重取**这一层**（别的层没被看着，也没被要求刷新）。
-            await level.session.reload()
-        }
-        // ⚠️ 这个 id 由 `RepoCodeLoadKey` 算（两半都必须在，见那个类型的说明）：
-        //
-        // ① **默认分支**：它是**异步**来的，而这一层的取数要等它（`load` 的第一条守卫就是
-        //    `guard let defaultBranch`）。⚠️ **更正（2026-10-14 同日顺手核了一遍）**：
-        //    这一支（`tree`）只在分支到手之后才会被渲染（分支还没来那一格骨架由
-        //    `content(_:)` 画）⇒ 这一半**现在到不了 `nil`**、也就不会真的触发过一次重跑。
-        //    留着它是因为它描述了取数的**依赖**（同 `RepoCodeLoadKey` 的说明）——
-        //    哪天的改动让骨架由"会话自己"画（而不是整页那一格），少了它就会静默退化。
-        //
-        // ② **这一层的路径**：换层（点目录 / 点面包屑 / 返回上一层）在这里只体现为
-        //    `level` 换了个人，而 `defaultBranch` **一个字都没变** ⇒ id 里不含路径的话
-        //    `.task` **不会重跑** ⇒ 新那一层的会话从没被 `load` 过、`page` 停在 `idle`，
-        //    屏幕上是一块**永不消失的骨架**。⚠️ 2026-10-14 用户报回的正是这一条
-        //    （"点二级目录一直停在骨架屏、而别的页面都正常"）—— 它由"删掉嵌套栈"那次
-        //    修复引入（见类型说明）。
-        //
-        // ③ id 里**不再需要"我在不在栈顶"**（随嵌套栈一起去掉）：现在**只有栈顶那一层
-        //    被渲染**，走到这里的就是栈顶（见类型说明）。
-        //
-        // ⚠️ 而"返回上一层"**不会**因此重取：id 变了，`.task` 确实会再跑一次，
-        //    但那一层的 `page` 已经落地，`model.load` 的第一条守卫会把它挡掉 ——
-        //    "返回即所见"靠的是这个，不是"视图还留在栈里"（视图其实已经销毁了）。
-        //
-        // ⚠️ 第 ② 条在 2026-10-14 用最小复现**实跑验过**：id 只用分支时，换层那几次
-        //    `.task` **一次都不跑**（屏幕就是永久骨架）；id 带上路径之后，每一次换层都跑
-        //    （返回上一层那次也跑，由守卫挡掉重取）。
-        .task(id: RepoCodeLoadKey(branch: model.defaultBranch, path: level.path)) {
-            await model.load(level.session)
-        }
-        // ⚠️ 换层 = **换这一份 `ScrollView` 的身份**（2026-10-14 同批补）：滚动位置跟着归零。
-        //    不做的话，上一层那个偏移会被继承下来 —— 子目录进来就是滚下去的，
-        //    而"我在哪一层"（面包屑）恰恰在内容最上面。
-        //    （同日实测：不换身份时底层 `NSScrollView` 的偏移**原样留着**、换身份后归零，
-        //    数见 `REVIEW-CHECKLIST` 第 63 条那条补记。）
-        //    ⚠️ **取数不靠这一行**（靠上面那个 `.task` 的 id），两处分着写是有意的：
-        //    漏了下面这一行，症状是"进子目录时它是滚下去的"；漏了上面 id 里的路径，
-        //    症状是"永远停在骨架屏"。两种症状差得很远，判据就该分在两处。
-        .id(level.path.raw)
+        // ⚠️ `RepoTreeSection` 现在吐的是普通视图（面包屑 + `CardBox` 装文件行），
+        //    容器是上面 `body` 里的 `ScrollView`。
+        RepoTreeSection(
+            session: level.session,
+            onOpenDirectory: { target in openDirectory(target) },
+            onOpenFile: { target in
+                // ⚠️ 文件页是**外层**路由（它是另一个页面，不属于这一页的层级）
+                //    —— 返回时这一页连同整个层级原样还在（层级不重取，理由见类型说明）。
+                env.router.push(.fileView(
+                    fullName: fullName, path: target.raw, readOnly: readOnly
+                ))
+            },
+            onTapBranch: { sheet = .branch(level.path) },
+            onSelectSegment: { index in pop(toCrumb: index) }
+        )
     }
 
     /// 导航栏右上角那颗「⋯」。

@@ -5,13 +5,14 @@ import GitDuoKit
 
 /// 首页 —— Tab 根页（PRD §4.1、TECH_SPEC §9.1）。
 ///
-/// 结构：大标题「首页」+ 右上角**头像**（进「我的」）· 「置顶仓库」**行列表**（最多 6 条，
+/// 结构：**顶栏大字标题「首页」**（与右上角头像同一行、居左；`TopBarTitleItem`）·
+/// 右上角**圆形头像**（进「我的」）· 「置顶仓库」**行列表**（最多 6 条，
 /// ⚠️ 2026-10-15 走查第 75 条起不再是 2 列网格）·「最近访问」列表。
 ///
 /// ## ⚠️ 2026-10-16：右上角从「搜索」换成「我的」（走查第 85 条）
 ///
 /// 用户要求把底部「我的」那一格让给「搜索」，而「我的」改从本页右上角进
-/// —— 形状照 App Store 的 Today 页（大标题 + 右上角圆形头像）。于是：
+/// —— 形状照 App Store 的 Today 页（右上角圆形头像）。于是：
 ///
 /// | | 从前 | 现在 |
 /// |---|---|---|
@@ -110,12 +111,22 @@ struct HomeView: View {
         .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         .navigationTitle(HomeCopy.title)
+        // ⚠️ 标题显示在**顶栏**（与右上角头像同一行、居左、放大）—— 见 `TopBarTitleItem`。
+        //    `.navigationTitle` 仍保留：它是返回按钮文案与无障碍标题的来源，
+        //    只是屏幕上那一颗由 `TopBarTitleItem` 顶掉了。
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            TopBarTitleItem(text: HomeCopy.title)
+
             // ⚠️ 2026-10-16：这里从前是一颗放大镜（`push(.search)`）。
             //    搜索搬去了底部 Tab、「我的」搬来了这里 —— 见文件头那张表。
             //
             // ⚠️ 它是一颗**普通 `Button`**，不是 `NavigationLink`：导航栏里没有
             //    "整行可点"那回事，`Button` 就是系统给 `UIBarButtonItem` 的写法。
+            //
+            // ⚠️ `.sharedBackgroundVisibility(.hidden)` 去掉 iOS 26+ 工具栏默认给
+            //    自定义视图加的玻璃胶囊背景；没有它，头像会被包进一颗椭圆/圆角背景里，
+            //    而不是露出本身那个正圆（走查第 86 条）。
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     env.router.push(.profile)
@@ -124,11 +135,13 @@ struct HomeView: View {
                         login: login,
                         // 取不到就是 `nil` ⇒ 画首字母兜底圆（本页不因此报错、不因此变灰）。
                         avatarURL: avatarURL,
-                        diameter: UserAvatar.navigationDiameter
+                        diameter: UserAvatar.navigationDiameter,
+                        initialFont: UserAvatar.navigationInitialFont
                     )
                 }
                 .accessibilityLabel(HomeCopy.profileAction)
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         .refreshable { await model.refresh() }
         .task {
@@ -225,6 +238,7 @@ struct HomeView: View {
                         PinRow(summary: summary)
                     }
                     .buttonStyle(.plain)
+                    .contentShape(Rectangle())
                 }
                 .listRowBackground(Theme.Palette.surface)
         }
@@ -262,6 +276,7 @@ struct HomeView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .contentShape(Rectangle())
                 }
                 .listRowBackground(Theme.Palette.surface)
             } else {

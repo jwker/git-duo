@@ -78,6 +78,8 @@ struct TrendCard: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // ⚠️ 同 `RepoCard`：让整列矩形（含 `Spacer` 空白）都成为命中区。
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }

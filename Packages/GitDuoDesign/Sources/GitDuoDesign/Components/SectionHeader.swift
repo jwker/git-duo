@@ -43,6 +43,13 @@ public struct SectionHeader: View {
 
     public let title: String
 
+    /// 标题下方的灰字说明（`他人仓库 · 只读` 这种）；`nil` = 不渲染。
+    ///
+    /// ⚠️ 原型没有这一档 —— 它是"把原来散在每行副标题里的信息提到组头"的产物
+    /// （见 `ExploreRepoDetailView.menuGroup`：Issues / PR / 文件浏览三行合并后，
+    /// 整组的只读身份统一说一次）。字号取 `caption`、色取 `textTertiary`。
+    public let subtitle: String?
+
     /// 右侧链接按钮文案（`管理` / `清除`）；`nil` = 不渲染。
     public let actionTitle: String?
 
@@ -65,43 +72,54 @@ public struct SectionHeader: View {
 
     public init(
         title: String,
+        subtitle: String? = nil,
         actionTitle: String? = nil,
         action: (() -> Void)? = nil,
         margins: Margins = .section
     ) {
         self.title = title
+        self.subtitle = subtitle
         self.actionTitle = actionTitle
         self.action = action
         self.margins = margins
     }
 
     public var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-            Text(title)
-                .font(Theme.Font.sectionLabel)
-                // 方案 D：组标题取正文色 —— 12px 时代它是"全屏最安静的一级文字"，
-                // 19pt 时代它是页面上最重的元素之一，灰色会让它看起来像一句说明。
-                .foregroundStyle(Theme.Palette.textPrimary)
-                // 原型 `letter-spacing:-.3px`（大标题收一点字距，笔画不那么散）。
-                // 字号令牌管不到字距，这里写原值并注明出处。
-                .tracking(-0.3)
-                // ⚠️ **2026-10-16 起补这一句**（NATIVE-MIGRATION P3）：本件现在会被放进
-                //    `Section` 的 header 位，而 `List` 的分组样式会给分区标题**加一层大写变换**
-                //    （SwiftUI 在 `.grouped` / `.insetGrouped` 下默认如此）——
-                //    「README.MD」会变成「README.MD」还算好，而混排的英文词会被整句抬成大写。
-                //    在别处 `.textCase(nil)` 是空操作，所以这一句对非列表的调用点没有任何影响。
-                .textCase(nil)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
+                Text(title)
+                    .font(Theme.Font.sectionLabel)
+                    // 方案 D：组标题取正文色 —— 12px 时代它是"全屏最安静的一级文字"，
+                    // 19pt 时代它是页面上最重的元素之一，灰色会让它看起来像一句说明。
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    // 原型 `letter-spacing:-.3px`（大标题收一点字距，笔画不那么散）。
+                    // 字号令牌管不到字距，这里写原值并注明出处。
+                    .tracking(-0.3)
+                    // ⚠️ **2026-10-16 起补这一句**（NATIVE-MIGRATION P3）：本件现在会被放进
+                    //    `Section` 的 header 位，而 `List` 的分组样式会给分区标题**加一层大写变换**
+                    //    （SwiftUI 在 `.grouped` / `.insetGrouped` 下默认如此）——
+                    //    「README.MD」会变成「README.MD」还算好，而混排的英文词会被整句抬成大写。
+                    //    在别处 `.textCase(nil)` 是空操作，所以这一句对非列表的调用点没有任何影响。
+                    .textCase(nil)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .font(Theme.Font.label)
-                    .foregroundStyle(Theme.Palette.accent)
-                    // 按钮要可点，但视觉上比分区标题稍宽一点（原型 `.linkbtn{padding:4px 2px}`），
-                    // 否则一行 12pt 的链接点起来太窄。
-                    .padding(.vertical, Theme.Spacing.xs)
-                    .padding(.horizontal, Theme.Spacing.xxs)
+                if let actionTitle, let action {
+                    Button(actionTitle, action: action)
+                        .font(Theme.Font.label)
+                        .foregroundStyle(Theme.Palette.accent)
+                        // 按钮要可点，但视觉上比分区标题稍宽一点（原型 `.linkbtn{padding:4px 2px}`），
+                        // 否则一行 12pt 的链接点起来太窄。
+                        .padding(.vertical, Theme.Spacing.xs)
+                        .padding(.horizontal, Theme.Spacing.xxs)
+                }
+            }
+
+            if let subtitle {
+                Text(subtitle)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    .lineLimit(1)
             }
         }
         .padding(.top, topPadding)
@@ -145,6 +163,7 @@ extension SectionHeader {
         SectionHeader(title: "置顶仓库", actionTitle: "管理") {}
         SectionHeader(title: "最近访问", actionTitle: "清除") {}
         SectionHeader(title: "Latest Release")
+        SectionHeader(title: "参与协作", subtitle: "他人仓库 · 只读")
         SectionHeader(title: "贡献者 · 23 位")
         // `.none` 那一档：上下左右都不带外边距，间距完全由外层 `gap` 给
         //（§4.10 新建 Issue 页的「标签」）。与上面几行并排看，差别就是"贴住了"。

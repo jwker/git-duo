@@ -24,6 +24,13 @@ import GitDuoKit
 /// ## 三张弹层由**一个**枚举驱动
 ///
 /// `BranchesViewModel.sheet`（见该类型的说明）。这里不再出现第二个 `isPresented`。
+///
+/// ## ⚠️ 2026-10-16 起主干是 **`List`**（NATIVE-MIGRATION P3 第二批）
+///
+/// 从前是 `ScrollView + VStack` + 一张 `CardBox`（`BranchRow` 自己画内边距与底线）。
+/// 现在两个分区各是一个 `Section`：分隔线与行内边距由系统给，`BranchRow` 只画内容
+/// ⇒ 它的 `showsSeparator` 随之删除。骨架仍走**同一个** `loaded(_:isPlaceholder:)`
+/// 喂占位列表（P1 判据 ②）。
 struct BranchesView: View {
 
     let fullName: String
@@ -54,11 +61,12 @@ struct BranchesView: View {
     }
 
     var body: some View {
-        ScrollView {
+        List {
             content
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.bottom, Theme.Spacing.xl)
         }
+        .listStyle(.insetGrouped)
+        // 主题的页面底 / 行底不交给系统（P5 才动令牌）—— 只把 `List` 自带的底色让开。
+        .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)
         // 原型 `SCR.branches.inline = () => '分支管理'`。
         .navigationTitle("分支管理")
@@ -108,81 +116,104 @@ struct BranchesView: View {
 
     // MARK: - 主区域
 
+    /// ⚠️ 2026-10-16 起三支**都是 `List` 的内容**（`Section`），不是一整屏 `ScrollView`
+    /// —— 见 `loaded(_:isPlaceholder:)` 那条说明。
     @ViewBuilder
     private var content: some View {
         switch model.list.presentation {
         case .skeleton:
-            skeleton
+            // 骨架 = **真实的 `loaded(_:)` 喂一份占位列表**（P1 判据 ②）：
+            // 骨架与内容走同一个渲染函数 ⇒ "骨架与内容失配"在结构上不可能发生。
+            loaded(BranchList.placeholder(), isPlaceholder: true)
 
         case .content:
             if let list = model.list.value {
-                loaded(list)
+                loaded(list, isPlaceholder: false)
             }
 
         case let .failure(error):
-            failureState(error)
+            Section {
+                failureState(error)
+                    // 失败态**不是列表内容** ⇒ 不坐白卡、不画分隔线（同 `HomeView`）。
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
         }
     }
 
-    private func loaded(_ list: BranchList) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: BranchCopy.sectionTitle(fullName: fullName, count: list.count))
+    /// 两个分区：**分支列表** + **两个动作**（新建 / 合并）。
+    ///
+    /// ## ⚠️ 2026-10-16 起主干是 `List` 的 `Section`（NATIVE-MIGRATION P3 第二批）
+    ///
+    /// 从前是 `VStack` + `SectionHeader` + `CardBox`（`BranchRow` 自己画内边距与底线）。
+    /// 现在行内边距与分隔线由系统给，`BranchRow` 只画内容 ⇒ 它的 `showsSeparator`
+    /// 一并删除（它本来也关不掉系统的线）。
+    ///
+    /// ## ⚠️ `isPlaceholder` 是"骨架态"的开关，不是第二份渲染路径
+    ///
+    /// 两个分区共用这一个函数（P1 判据 ②）。⚠️ 遮罩**逐行 / 逐块加**，不加在
+    /// `ForEach` 上 —— `List` 对"带修饰符的 `ForEach`"识别得不如逐行稳
+    /// （同 `PinRowsSkeleton` 那条）。
+    ///
+    /// ⚠️ `.redacted` **不拦截点击** ⇒ 遮住的行与按钮必须一起 `allowsHitTesting(false)`：
+    /// 否则骨架期点「新建分支」会真的翻开一张空弹层（P1 那条坑）。
+    @ViewBuilder
+    private func loaded(_ list: BranchList, isPlaceholder: Bool) -> some View {
+        Section {
+            ForEach(list.branches) { branch in
+                BranchRow(
+                    name: branch.name,
+                    badgeTitle: branch.name == model.currentBranch ? BranchCopy.currentPill : nil,
+                    // ⚠️ 唯一判据在领域层（决策 #53），视图只转发结果。
+                    canDelete: branch.canDelete(defaultBranch: model.defaultBranch),
+                    deleteTitle: BranchCopy.deleteAction,
+                    onSelect: { Task { await model.switchTo(branch) } },
+                    onDelete: { model.sheet = .deleteBranch(branch) }
+                )
+                .redacted(reason: isPlaceholder ? .placeholder : [])
+                .allowsHitTesting(!isPlaceholder)
+            }
+            .listRowBackground(Theme.Palette.surface)
+        } header: {
+            // ⚠️ `margins: .none` —— 组间距由 `List` 的 section 机制给，
+            //    标题再自带 22 的上边距就叠了一层（同 `SettingsView`）。
+            SectionHeader(
+                title: BranchCopy.sectionTitle(fullName: fullName, count: list.count),
+                margins: .none
+            )
+        }
 
-            CardBox(vertical: 0, horizontal: 0) {
-                ForEach(Array(list.branches.enumerated()), id: \.element.id) { index, branch in
-                    BranchRow(
-                        name: branch.name,
-                        badgeTitle: branch.name == model.currentBranch ? BranchCopy.currentPill : nil,
-                        // ⚠️ 唯一判据在领域层（决策 #53），视图只转发结果。
-                        canDelete: branch.canDelete(defaultBranch: model.defaultBranch),
-                        deleteTitle: BranchCopy.deleteAction,
-                        showsSeparator: index < list.branches.count - 1,
-                        onSelect: { Task { await model.switchTo(branch) } },
-                        onDelete: { model.sheet = .deleteBranch(branch) }
-                    )
+        Section {
+            // ⚠️ 两个按钮合成**一行**：`List` 里每多一个子视图就多一行，
+            //    两个按钮摆成两行会在中间插一条分隔线（本批那条判据）。
+            VStack(spacing: Theme.Spacing.s) {
+                ActionButton(
+                    title: BranchCopy.createAction,
+                    style: .primary,
+                    isWorking: model.isWorking
+                ) {
+                    model.sheet = .createBranch
                 }
-            }
 
-            ActionButton(
-                title: BranchCopy.createAction,
-                style: .primary,
-                isWorking: model.isWorking
-            ) {
-                model.sheet = .createBranch
+                ActionButton(
+                    title: BranchCopy.mergeAction(current: model.currentBranch),
+                    style: .ghost
+                ) {
+                    model.sheet = .merge
+                }
+                // ⚠️ 在途时禁用（同那把锁）：`isWorking` 时三个写入口一起停。
+                .disabled(model.isWorking)
             }
-            .padding(.top, Theme.Spacing.m)
-
-            ActionButton(
-                title: BranchCopy.mergeAction(current: model.currentBranch),
-                style: .ghost,
-            ) {
-                model.sheet = .merge
-            }
-            // ⚠️ 在途时禁用（同那把锁）：`isWorking` 时三个写入口一起停。
-            .disabled(model.isWorking)
-            .padding(.top, Theme.Spacing.s)
-
+            .redacted(reason: isPlaceholder ? .placeholder : [])
+            .allowsHitTesting(!isPlaceholder)
+            // 按钮**不坐白卡**（它们是页面级动作，不是一条记录）。
+            .listRowBackground(Color.clear)
+        } footer: {
             Text(BranchCopy.footer)
                 .font(Theme.Font.caption)
                 .foregroundStyle(Theme.Palette.textTertiary)
-                .frame(maxWidth: .infinity)
-                .padding(.top, Theme.Spacing.s)
+                .redacted(reason: isPlaceholder ? .placeholder : [])
         }
-    }
-
-    /// ## ⚠️ 2026-10-16 起它**不再自己画灰条**（NATIVE-MIGRATION P1）
-    ///
-    /// 直接把真实的 `loaded(_:)` 喂一份占位列表再 `.redacted` —— 上面那段注释里写过的
-    /// "容器参数 / 行内边距必须对齐"（2026-10-09 切片 10 修的那次失配）从此**不可能再犯**：
-    /// 骨架与内容走的是同一个 `loaded(_:)`，不存在第二份几何。
-    ///
-    /// 两个按钮也被遮成灰块 ⇒ 必须 `allowsHitTesting(false)`：**`.redacted` 不拦截点击**，
-    /// 遮住的"新建分支"仍然会被点到，那时 `model.sheet` 一翻开就是空的。
-    private var skeleton: some View {
-        loaded(BranchList.placeholder())
-            .redacted(reason: .placeholder)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 
     /// 首屏失败 —— 必须留一个出口（PRD §1 设计原则 4）。
