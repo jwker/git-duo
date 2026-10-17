@@ -68,7 +68,7 @@ public struct StatusPill: View {
             .padding(.vertical, 2.5)
             .padding(.horizontal, 9)
             // 原型 `border-radius:20px` 在 11pt 的文字上就是胶囊的两端半圆。
-            .background(Capsule().fill(Self.surface(tone)))
+            .background(Self.surface(tone), in: .capsule)
             .overlay(Capsule().stroke(Self.border(tone), lineWidth: 1))
             // 读屏把整颗胶囊念成一句；不带这一句，读屏会只念出"Open"而没有上下文。
             .accessibilityElement(children: .ignore)

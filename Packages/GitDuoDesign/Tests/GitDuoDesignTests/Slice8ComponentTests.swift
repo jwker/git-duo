@@ -65,75 +65,7 @@ struct Slice8ComponentTests {
         // 这一条只是把"借的是哪两对"钉住，不改变那个待评审状态。
     }
 
-    // MARK: - `SheetRow` 的危险色标题（PRD §5.15 / §5.12）
 
-    @Test("⚠️ `titleTone` 默认 `.normal` —— 既有七处调用点一个字都不用改")
-    func sheetRowTitleToneDefaultsToNormal() {
-        let row = SheetRow(systemImage: "folder", title: "管理分支…", action: {})
-        #expect(row.titleTone == .normal)
-        #expect(row.titleColor == Theme.Palette.textPrimary)
-    }
-
-    @Test("§5.15 那一行：`删除文件` 的标题是**危险色**，而它**不是**任何一档普通文字色")
-    func sheetRowDestructiveTitleUsesDestructiveToken() {
-        // 原型 `11-favorites.js:94` 的 `<div class="sheet-row" style="color:var(--closed-p)">`
-        // —— `--closed-p` 正是本仓的 `Palette.destructive`（`0xCF222E`）。
-        let row = SheetRow(title: "删除文件", titleTone: .destructive, action: {})
-        #expect(row.titleColor == Theme.Palette.destructive)
-        // （动态色时代 `Color ==` 比实例身份 ⇒ 冻结值改比浅色列的 resolve 分量。）
-        #expect(ColorResolve.same(row.titleColor, Color(hex: 0xCF222E), .light))
-
-        // 写成 `textPrimary` / `textSecondary` 不会报错，只会让"这是破坏性操作"
-        // 这条信息在画面上**完全消失**（点进去才知道）。
-        // （动态色时代 `!=` 比实例身份 ⇒ 改比 resolve 分量，两档各钉一次。）
-        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textPrimary, .light))
-        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textPrimary, .dark))
-        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textSecondary, .light))
-        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.textSecondary, .dark))
-        // 也别被标签兜底色串了（那是"白字压上去的底"，这里是"深色压在白底上的字"）。
-        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.labelFallbackSurface, .light))
-        #expect(ColorResolve.distinct(row.titleColor, Theme.Palette.labelFallbackSurface, .dark))
-    }
-
-    @Test("⚠️ 危险色只改**标题** —— 图标仍是次级色（原型 `.sheet-row svg{stroke:var(--text2)}` 写死）")
-    func sheetRowDestructiveToneDoesNotLeakToTheIcon() {
-        // 原型那一行的内联 `style="color:…"` 改的是 div 的 `color`，
-        // 而 svg 的 `stroke` 在 CSS 里被写死成 `var(--text2)` ⇒ **图标不变红**。
-        // 这里没有"图标色"这个参数，所以这条断言只能表达成"传了两个 leading 都还在"——
-        // 它的作用是：哪天有人给 `titleTone` 顺手加上"图标也跟着变红"，
-        // 至少得先看见这一条注释（原型查过了，不是这个行为）。
-        let withIcon = SheetRow(systemImage: GitHubIcon.trash, title: "删除文件", titleTone: .destructive, action: {})
-        #expect(withIcon.systemImage == GitHubIcon.trash)
-        #expect(withIcon.titleTone == .destructive)
-    }
-
-    // MARK: - `SheetField` 的多行（PRD §5.9 的提交信息框）
-
-    @Test("⚠️ `minLines` 默认 1 —— 既有五处调用点行为**逐字不变**（走的还是那一行单行 `TextField`）")
-    func sheetFieldMinLinesDefaultsToSingleLine() {
-        let field = SheetField("分支名", text: .constant(""))
-        #expect(field.minLines == 1)
-    }
-
-    @Test("§5.9 那一档：提交信息框保底 **2** 行（原型 `<textarea class=\"sheet-input\" id=\"cmsg\" rows=\"2\">`）")
-    func sheetFieldAcceptsMultiLineForCommitMessage() {
-        // ⚠️ 2 这个数是**原型写死的**（`15-sheets.js:43` 的 `rows="2"`），
-        // 不是选出来的。它也不是"1 与 13 之间随便取一个"——
-        // 编辑器那一档（13 行）走的是 `CodeTextArea`，另一个类（等宽 + `--card` 底）。
-        let field = SheetField("提交信息（commit message）", text: .constant(""), minLines: 2)
-        #expect(field.minLines == 2)
-
-        // 多行与"两个文本行为"是**正交**的：提交信息是一句话，不该被吃掉首字母大写。
-        // ⚠️ 这一条只钉"两个参数能并存"，不改变 `.never` 这个默认（分支名那一档）。
-        let sentenceCase = SheetField(
-            "提交信息",
-            text: .constant(""),
-            disablesAutocorrection: false,
-            capitalization: .sentences,
-            minLines: 2
-        )
-        #expect(sentenceCase.minLines == 2)
-    }
 
     // MARK: - `GitHubIcon` 两个新常量
 

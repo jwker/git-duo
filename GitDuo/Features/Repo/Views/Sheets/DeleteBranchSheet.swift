@@ -34,34 +34,35 @@ struct DeleteBranchSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(BranchCopy.deleteSheetTitle(branch: branch.name))
-
-            SheetHint(BranchCopy.deleteSheetHint)
-
-            ActionButton(
-                title: BranchCopy.deleteConfirmAction,
-                style: .destructive,
-                isWorking: isWorking
-            ) {
-                Task { await onConfirm() }
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        Form {
+            Section {
+                // 说明（原 `SheetHint`）。
+                Text(BranchCopy.deleteSheetHint)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            } header: {
+                Text(BranchCopy.deleteSheetTitle(branch: branch.name))
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
 
-            ActionButton(title: BranchCopy.cancelAction, style: .ghost) {
-                dismiss()
+            Section {
+                Button {
+                    Task { await onConfirm() }
+                } label: {
+                    if isWorking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(BranchCopy.deleteConfirmAction)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.Palette.destructive)
+
+                Button(BranchCopy.cancelAction) { dismiss() }
+                    .buttonStyle(.bordered)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.s)
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium])
     }
 }
 

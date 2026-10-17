@@ -37,8 +37,22 @@ struct ReleaseNotesSheet: View {
     let release: LatestRelease
 
     var body: some View {
+        // P4：自绘标题 → 原生 `Text`（逐字复刻 `.sheet-title` 的大写小灰；
+        // `SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // 正文是 Markdown，长文仍走 `ScrollView`；不套 `Form`——
+        // 这一张是只读文档，没有字段 / 按钮可收进原生表单。
         VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(LatestRelease.notesSheetTitle(tagName: release.tagName))
+            Text(LatestRelease.notesSheetTitle(tagName: release.tagName))
+                // 原型 12px bold ⇒ `sheetTitle`（`.caption` 12 + bold）。
+                .font(Theme.Font.sheetTitle)
+                .tracking(0.4)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .textCase(.uppercase)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // 原型 `padding:8px 8px 6px`。
+                .padding(.horizontal, Theme.Spacing.s)
+                .padding(.top, Theme.Spacing.s)
+                .padding(.bottom, 6)
 
             // ⚠️ 正文进 `ScrollView`：release note 可以是任意长（几百行都见过）。
             //    不滚动的话它会从弹层底部溢出去，而溢出的部分**看起来像"说明就到这儿"**。
@@ -55,6 +69,7 @@ struct ReleaseNotesSheet: View {
         .padding(.bottom, Theme.Spacing.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.Palette.surface)
+        .presentationDetents([.medium, .large])
     }
 }
 

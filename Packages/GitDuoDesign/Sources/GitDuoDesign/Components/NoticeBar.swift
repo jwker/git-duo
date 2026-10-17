@@ -111,8 +111,8 @@ public struct NoticeBar: View {
             .padding(.horizontal, Theme.Spacing.m)
             .background(
                 // 原型 `border-radius:9px` ⇒ `Radius.control`（该档的第四处来源，已在令牌注释登记）。
-                RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                    .fill(surface)
+                surface,
+                in: .rect(cornerRadius: Theme.Radius.control, style: .continuous)
             )
             // 整条合成一个元素：读屏一次读完，而不是"⚠"、"发送失败："、正文分三段。
             .accessibilityElement(children: .combine)

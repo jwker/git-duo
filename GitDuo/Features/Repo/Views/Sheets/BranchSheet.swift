@@ -46,80 +46,87 @@ struct BranchSheet: View {
     let onRetry: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(isReadOnly ? BranchCopy.switchSheetTitleReadOnly : BranchCopy.switchSheetTitle)
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // 分支行 → `Form` 内的原生 `Button` 行（leading 图标 + 标题 + 右侧 ✓ / chevron）。
+        Form {
+            Section {
+                switch state.presentation {
+                case .skeleton:
+                    skeleton
 
-            content
+                case .content:
+                    if let list = state.value {
+                        branchRows(list)
+                    }
 
-            Spacer(minLength: 0)
-        }
-        // 原型 `.sheet{padding:8px 10px 12px}`。
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
-    }
-
-    // MARK: - 主体
-
-    @ViewBuilder
-    private var content: some View {
-        switch state.presentation {
-        case .skeleton:
-            skeleton
-
-        case .content:
-            if let list = state.value {
-                rows(list)
+                case .failure:
+                    failure
+                }
+            } header: {
+                Text(isReadOnly ? BranchCopy.switchSheetTitleReadOnly : BranchCopy.switchSheetTitle)
             }
 
-        case .failure:
-            failure
-        }
-    }
-
-    @ViewBuilder
-    private func rows(_ list: BranchList) -> some View {
-        // 分支多起来（几十条）要能滚 —— 弹层是 `.medium` 起步的，装不下那么多行。
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(list.branches) { branch in
-                    SheetRow(systemImage: GitHubIcon.branch, title: branch.name) {
-                        onSelect(branch.name)
-                    } trailing: {
-                        if branch.name == currentBranch {
-                            // 原型：当前那条右边一个绿色 `✓`。
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Theme.Palette.accentStrong)
+            if isReadOnly {
+                Section {
+                    Text(BranchCopy.readOnlySheetHint)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.textTertiary)
+                }
+            } else if let onManage {
+                Section {
+                    Button { onManage() } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: GitHubIcon.folder)
+                                .font(.system(size: 18))
+                                .foregroundStyle(Theme.Palette.textSecondary)
+                            Text(BranchCopy.manageBranchesRow)
+                                .font(Theme.Font.rowTitle)
+                                .foregroundStyle(Theme.Palette.textPrimary)
+                            Spacer(minLength: 0)
+                            Image(systemName: GitHubIcon.chevron)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.Palette.textTertiary)
                         }
                     }
                 }
             }
         }
-        .scrollDisabled(list.branches.count <= 6)
+        .presentationDetents([.medium, .large])
+    }
 
-        if isReadOnly {
-            SheetHint(BranchCopy.readOnlySheetHint)
-        } else if let onManage {
-            SheetRow(systemImage: GitHubIcon.folder, title: BranchCopy.manageBranchesRow) {
-                onManage()
-            } trailing: {
-                Image(systemName: GitHubIcon.chevron)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.Palette.textTertiary)
+    // MARK: - 主体
+
+    @ViewBuilder
+    private func branchRows(_ list: BranchList) -> some View {
+        // 分支多起来（几十条）仍由 `Form` 自身滚动；行本身是原生 `Button` 行。
+        ForEach(list.branches) { branch in
+            Button { onSelect(branch.name) } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: GitHubIcon.branch)
+                        .font(.system(size: 18))
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                    Text(branch.name)
+                        .font(Theme.Font.rowTitle)
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                    Spacer(minLength: 0)
+                    if branch.name == currentBranch {
+                        // 原型：当前那条右边一个绿色 `✓`。
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Theme.Palette.accentStrong)
+                    }
+                }
             }
         }
     }
 
     /// 与 `BranchesView.skeleton` 同一条口径（NATIVE-MIGRATION P1）：渲染真实的
-    /// `rows(_:)` + 占位列表 + `.redacted`，不再手抄行高。
+    /// `branchRows(_:)` + 占位列表 + `.redacted`，不再手抄行高。
     ///
     /// ⚠️ `allowsHitTesting(false)`：**`.redacted` 不拦截点击** —— 遮住的行被点到
     /// 会把一条叫 `placeholder-0` 的分支名回调出去，那是一次必然失败的切换。
     private var skeleton: some View {
-        rows(BranchList.placeholder(count: 4))
+        branchRows(BranchList.placeholder(count: 4))
             .redacted(reason: .placeholder)
             .allowsHitTesting(false)
             .accessibilityHidden(true)

@@ -48,112 +48,103 @@ struct MergeSheet: View {
     @State private var failure: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(BranchCopy.mergeSheetTitle(target: target))
-
-            sourceSection
-            targetSection
-
-            SheetField(BranchCopy.mergeMessagePlaceholder, text: $message)
-                .padding(.horizontal, Theme.Spacing.s)
-                .padding(.top, Theme.Spacing.m)
-
-            if let failure {
-                Text(failure)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.destructive)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Theme.Spacing.s)
-                    .padding(.top, Theme.Spacing.s)
-            }
-
-            ActionButton(
-                title: BranchCopy.mergeConfirmAction,
-                style: .primary,
-                // 原型 `.browser-body .btn{width:100%;padding:12px}` 那一族 ——
-                // 弹层底部的确认按钮统一 12。
-                isWorking: isWorking
-            ) {
-                Task { await submit() }
-            }
-            // 没有源分支可选 ⇒ 不可点。
-            // ⚠️ 这里用 `.disabled` 是**对的**（`allowsHitTesting(false)` 留给
-            //    决策 #51 那类"画出来但这一版就不做"的按钮）：这一档是**真的**
-            //    "暂时不可用"，只是恰好在当前仓库里没有可选项。
-            .disabled(candidates.isEmpty)
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
-
-            SheetHint(BranchCopy.mergeConflictHint)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
-        // 源分支的默认选中：进入弹层时先挑第一条（用户不改就是它）。
-        .onAppear { if source == nil { source = candidates.first } }
-    }
-
-    // MARK: - 源分支
-
-    @ViewBuilder
-    private var sourceSection: some View {
-        subLabel(BranchCopy.mergeSourceLabel)
-
-        if candidates.isEmpty {
-            Text(BranchCopy.mergeNoSourceHint)
-                .font(Theme.Font.footnote)
-                .foregroundStyle(Theme.Palette.textTertiary)
-                .padding(.horizontal, Theme.Spacing.s)
-                .padding(.vertical, Theme.Spacing.s)
-        } else {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(candidates, id: \.self) { name in
-                        SheetRow(systemImage: GitHubIcon.branch, title: name) {
-                            source = name
-                        } trailing: {
-                            if name == source {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Theme.Palette.accentStrong)
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // 源分支选择行 → 原生 `Button` 行。
+        Form {
+            Section {
+                if candidates.isEmpty {
+                    Text(BranchCopy.mergeNoSourceHint)
+                        .font(Theme.Font.footnote)
+                        .foregroundStyle(Theme.Palette.textTertiary)
+                } else {
+                    ScrollView {
+                        ForEach(candidates, id: \.self) { name in
+                            Button { source = name } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: GitHubIcon.branch)
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(Theme.Palette.textSecondary)
+                                    Text(name)
+                                        .font(Theme.Font.rowTitle)
+                                        .foregroundStyle(Theme.Palette.textPrimary)
+                                    Spacer(minLength: 0)
+                                    if name == source {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(Theme.Palette.accentStrong)
+                                    }
+                                }
                             }
                         }
                     }
+                    .scrollDisabled(candidates.count <= 5)
+                    .frame(maxHeight: 190)
+                }
+            } header: {
+                Text(BranchCopy.mergeSourceLabel)
+            }
+
+            Section {
+                HStack(spacing: 10) {
+                    Image(systemName: GitHubIcon.branch)
+                        .font(.system(size: 18))
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                    Text(target)
+                        .font(Theme.Font.rowTitle)
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                    Spacer(minLength: 0)
+                }
+                Text(BranchCopy.mergeTargetHint)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            } header: {
+                Text(BranchCopy.mergeTargetLabel)
+            }
+
+            Section {
+                // 提交信息输入框（P4：原生 `TextField`，原 `SheetField`；默认关纠错、不大写）。
+                TextField(BranchCopy.mergeMessagePlaceholder, text: $message)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+            }
+
+            if let failure {
+                Section {
+                    Text(failure)
+                        .foregroundStyle(Theme.Palette.destructive)
+                        .multilineTextAlignment(.leading)
                 }
             }
-            .scrollDisabled(candidates.count <= 5)
-            .frame(maxHeight: 190)
-        }
-    }
 
-    // MARK: - 目标分支
-
-    private var targetSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            subLabel(BranchCopy.mergeTargetLabel)
-
-            HStack(spacing: 10) {
-                Image(systemName: GitHubIcon.branch)
-                    .font(.system(size: 18))
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                Text(target)
-                    .font(Theme.Font.rowTitle)
-                    .foregroundStyle(Theme.Palette.textPrimary)
-                Spacer(minLength: 0)
+            Section {
+                Button {
+                    Task { await submit() }
+                } label: {
+                    if isWorking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(BranchCopy.mergeConfirmAction)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                // 没有源分支可选 ⇒ 不可点。
+                // ⚠️ 这里用 `.disabled` 是**对的**（`allowsHitTesting(false)` 留给
+                //    决策 #51 那类"画出来但这一版就不做"的按钮）：这一档是**真的**
+                //    "暂时不可用"，只是恰好在当前仓库里没有可选项。
+                .disabled(candidates.isEmpty)
             }
-            .padding(.vertical, Theme.Spacing.m)
-            .padding(.horizontal, 10)
 
-            Text(BranchCopy.mergeTargetHint)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Palette.textTertiary)
-                .padding(.horizontal, 10)
+            Section {
+                Text(BranchCopy.mergeConflictHint)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            }
         }
+        .presentationDetents([.medium, .large])
+        // 源分支的默认选中：进入弹层时先挑第一条（用户不改就是它）。
+        .onAppear { if source == nil { source = candidates.first } }
     }
 
     // MARK: - 提交
@@ -161,20 +152,6 @@ struct MergeSheet: View {
     private func submit() async {
         guard let source, !source.isEmpty else { return }
         failure = await onMerge(source, message)
-    }
-
-    /// 小节标题。
-    ///
-    /// ⚠️ **样式是「规格未给」**：原型没有合并弹层（决策 #52 才有的），
-    /// 而 PRD 只给了两个名字。取"编号选色的小号灰字 + 与 `SheetHint` 同档缩进"——
-    /// 不与 `SheetTitle`（大写、更重）争夺注意力，也不引入新字号。
-    private func subLabel(_ text: String) -> some View {
-        Text(text)
-            .font(Theme.Font.caption)
-            .foregroundStyle(Theme.Palette.textTertiary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
     }
 }
 

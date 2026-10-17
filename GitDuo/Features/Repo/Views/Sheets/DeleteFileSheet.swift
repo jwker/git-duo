@@ -62,39 +62,41 @@ struct DeleteFileSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(FileCopy.deleteSheetTitle(fileName: fileName))
-
-            SheetHint(FileCopy.deleteSheetHint(branch: branch))
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // `NoticeBar` 警告行属 P6 不动件，保留。
+        Form {
+            Section {
+                // 说明（原 `SheetHint`）。
+                Text(FileCopy.deleteSheetHint(branch: branch))
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            } header: {
+                Text(FileCopy.deleteSheetTitle(fileName: fileName))
+            }
 
             // 警告行（§5.17 逐字）。紧贴红按钮 —— 它要起作用的位置就在那里。
-            NoticeBar(text: FileCopy.deleteWarning)
-                .padding(.horizontal, Theme.Spacing.s)
-                .padding(.top, Theme.Spacing.s)
-
-            ActionButton(
-                title: FileCopy.deleteConfirmAction,
-                style: .destructive,
-                isWorking: isWorking
-            ) {
-                Task { await onConfirm() }
+            Section {
+                NoticeBar(text: FileCopy.deleteWarning)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
 
-            ActionButton(title: FileCopy.cancelAction, style: .ghost) {
-                dismiss()
+            Section {
+                Button {
+                    Task { await onConfirm() }
+                } label: {
+                    if isWorking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(FileCopy.deleteConfirmAction)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.Palette.destructive)
+
+                Button(FileCopy.cancelAction) { dismiss() }
+                    .buttonStyle(.bordered)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.s)
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium])
     }
 }
 

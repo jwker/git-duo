@@ -119,10 +119,23 @@ public struct ExploreFilters: Sendable, Hashable {
     /// 初始状态：日期范围 **本周**、语言**不选**（PRD §3.12 明写；原型 `EXPLORE_FILTERS = { range:'本周', lang:'' }`）。
     public static let `default` = ExploreFilters(range: .thisWeek, language: nil)
 
-    /// 语言选项 —— PRD §3.12 固定 5 项，**不是**从榜单结果里现算的。
+    /// 语言选项 —— **不是**从榜单结果里现算的，是一份固定的主流编程语言清单。
     ///
-    /// ⚠️ 弹层里**没有「全部」这一行**：取消靠"再点一次当前项"（`harness.js:329` 断言无此选项）。
-    public static let languageOptions = ["Swift", "Rust", "TypeScript", "Python", "Go"]
+    /// 原 PRD §3.12 只列了 5 项（Swift / Rust / TypeScript / Python / Go），
+    /// 2026-10-17 按用户要求补全为 GitHub trending / explore 官方语言筛选里的主流语言
+    /// （按 GitHub 热度大致排序，常用语言排在前）。GitHub 全量语言有 600+ 项
+    /// （含 Adblock Filter List / Adobe Font Metrics 这类非编程语言），不适合直接塞进移动端弹层。
+    ///
+    /// ⚠️ 仍**没有「全部」这一行**：取消靠"再点一次当前项"（`harness.js:329` 断言无此选项）。
+    public static let languageOptions = [
+        "JavaScript", "TypeScript", "Python", "Java", "C++", "C", "C#", "Go",
+        "Rust", "Ruby", "PHP", "Swift", "Kotlin", "Dart", "Shell", "Objective-C",
+        "Scala", "R", "MATLAB", "Lua", "Perl", "Haskell", "Elixir", "Clojure",
+        "Erlang", "F#", "OCaml", "Julia", "Crystal", "Zig", "Nim", "Solidity",
+        "Assembly", "Fortran", "Groovy", "Visual Basic", "Delphi", "COBOL",
+        "Pascal", "PowerShell", "Vim Script", "Batchfile", "SQL", "HTML", "CSS",
+        "Vue", "Svelte", "CoffeeScript", "TeX", "ActionScript",
+    ]
 
     /// 日期 chip 文案（未选 = 占位 `日期`）。
     public var rangeChipLabel: String { range?.title ?? ExploreFilterKind.range.blankLabel }

@@ -110,7 +110,8 @@ struct ExploreView: View {
                 ) { picked in
                     apply(kind: kind, picked: picked)
                 }
-                .presentationDetents([.medium])
+                // ⚠️ detents 由 `ExploreFilterSheet` 自己持有（`.medium, .large`，
+                // 与仓库目录「切换分支」弹层同构），这里不再重复设置。
                 .presentationDragIndicator(.visible)
             }
         }

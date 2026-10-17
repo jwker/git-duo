@@ -221,32 +221,6 @@ struct Slice7ComponentTests {
         #expect(bar.padsHorizontally == false)
     }
 
-    // MARK: - `SheetRow` 的 leading 第二种形态（切片 7 补口，PRD §5.2 标签弹层）
-
-    @Test("⚠️ `leadingDotColorHex` 默认是 `nil` —— 既有的分支 / 管理那一族行一个字都不用改")
-    func sheetRowLeadingDefaultsToIcon() {
-        // 既有调用点（`BranchSheet` 的两处、以及任何传 `systemImage` 的地方）
-        // 都不该因为这一档新形态而改变行为：默认 `nil` ⇒ 走原来的图标分支。
-        let row = SheetRow(systemImage: "folder", title: "管理分支…", action: {})
-        #expect(row.leadingDotColorHex == nil)
-        #expect(row.systemImage == "folder")
-    }
-
-    @Test("§5.2 那一行：leading 给的是标签色块，且**它同时不带图标**")
-    func sheetRowLeadingDotCarriesLabelColour() {
-        // 原型 `07-issues.js:38` 的 `<span class="lbl-dot" style="background:#d73a4a">`
-        // —— 那一行的 leading **只有色块**，没有 svg 图标。
-        // 两个都传时以色块为准（实现里是 `if let leadingDotColorHex { } else if let systemImage`），
-        // 所以这一条同时钉住"两者并存时谁赢"，免得哪天被改成两个都画。
-        let row = SheetRow(
-            systemImage: "tag",
-            leadingDotColorHex: "d73a4a",
-            title: "bug",
-            action: {}
-        )
-        #expect(row.leadingDotColorHex == "d73a4a")
-        #expect(row.title == "bug")
-    }
 
     // MARK: - 评论输入区两件（切片 7 补口：`CommentComposer` / `NoticeBar`）
 

@@ -54,8 +54,8 @@ public struct PanelBox<Content: View>: View {
         .padding(.vertical, verticalPadding)
         .padding(.horizontal, horizontalPadding)
         .background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Theme.Palette.surface)
+            Theme.Palette.surface,
+            in: .rect(cornerRadius: cornerRadius, style: .continuous)
         )
     }
 }

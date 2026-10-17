@@ -82,13 +82,25 @@ struct NewIssueView: View {
                     .font(Theme.Font.caption)
                     .foregroundStyle(Theme.Palette.textTertiary)
 
-                SheetField(
-                    IssueCopy.titlePlaceholder,
-                    text: $model.draft.title,
-                    // 标题是一句话 —— 见类型说明（`SheetField` 的默认档是给分支名定的）。
-                    disablesAutocorrection: false,
-                    capitalization: .sentences
-                )
+                TextField(IssueCopy.titlePlaceholder, text: $model.draft.title)
+                    // 标题是一句话 ⇒ 按句首大写、纠错开着（原 `SheetField` 的 `.sentences` 档）。
+                    .font(Theme.Font.rowTitle)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    // 原型 `.sheet-input{padding:10px 12px}`。
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, Theme.Spacing.m)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                            .fill(Theme.Palette.background)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                            .stroke(Theme.Palette.border, lineWidth: 1)
+                    )
+                    .autocorrectionDisabled(false)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.sentences)
+                    #endif
 
                 CodeTextArea(IssueCopy.bodyPlaceholder, text: $model.draft.body)
 

@@ -40,35 +40,30 @@ struct CloseIssueSheet: View {
     let onConfirm: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(IssueCopy.closeSheetTitle)
-
-            SheetHint(IssueCopy.closeSheetHint)
-
-            ActionButton(
-                title: IssueCopy.closeAction,
-                style: .primary,
-                // 弹层底部的按钮统一 12（原型 `padding:12px`）。
-                action: onConfirm
-            )
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
-
-            // ⚠️ 「取消」这两个字全项目同一串，直接复用设置页那一份 ——
-            //    再写一个 `IssueCopy.cancelAction` 只会多一处将来要同步的副本。
-            ActionButton(title: ProfileCopy.cancelAction, style: .ghost) {
-                dismiss()
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        Form {
+            Section {
+                // 说明段（原 `SheetHint`）。
+                Text(IssueCopy.closeSheetHint)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            } header: {
+                Text(IssueCopy.closeSheetTitle)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.s)
 
-            Spacer(minLength: 0)
+            Section {
+                // ⚠️ 按钮是**主色、不是红底**（与 §5.11 退出登录那张有意不同）：
+                // 关闭 Issue 随时可撤销，红底会传达"不可逆"的假话。
+                Button(IssueCopy.closeAction, action: onConfirm)
+                    .buttonStyle(.borderedProminent)
+
+                // ⚠️ 「取消」这两个字全项目同一串，直接复用设置页那一份 ——
+                //    再写一个 `IssueCopy.cancelAction` 只会多一处将来要同步的副本。
+                Button(ProfileCopy.cancelAction) { dismiss() }
+                    .buttonStyle(.bordered)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium])
     }
 }
 

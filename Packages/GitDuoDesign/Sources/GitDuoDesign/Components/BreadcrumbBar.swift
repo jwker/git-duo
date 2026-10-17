@@ -100,8 +100,8 @@ public struct BreadcrumbBar: View {
         .background(
             // 方案 A（2026-10-15，走查第 76 条）：面包屑条是**页面上的白块**，边框去掉
             //（原型 `.crumb{background:var(--card);border:none;border-radius:12px}`）。
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Theme.Palette.surface)
+            Theme.Palette.surface,
+            in: .rect(cornerRadius: 12, style: .continuous)
         )
     }
 
@@ -125,8 +125,8 @@ public struct BreadcrumbBar: View {
         .background(
             // ⚠️ 分支胶囊是**卡内控件**（原型 `.branch-chip{background:var(--chip)}`）——
             // 它坐在白面包屑条上 ⇒ 保持 `surfaceSunken`（灰），不跟着条一起翻白。
-            RoundedRectangle(cornerRadius: Theme.Radius.branchChip, style: .continuous)
-                .fill(Theme.Palette.surfaceSunken)
+            Theme.Palette.surfaceSunken,
+            in: .rect(cornerRadius: Theme.Radius.branchChip, style: .continuous)
         )
         .contentShape(Rectangle())
         .onTapGesture { onTapBranch?() }

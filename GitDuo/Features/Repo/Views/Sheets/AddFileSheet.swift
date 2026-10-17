@@ -114,25 +114,23 @@ struct AddFileSheet: View {
     @State private var failure: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(RepoCopy.addFileSheetTitle(branch: branch))
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // 三行动作 → `Form` 内的原生 `Button` 行（leading 图标 + 标题）。
+        Form {
+            Section {
+                // 三行**共用同一个图标**（原型 `openAddSheet` 三行都是 `svg(I.file)`）——
+                // 不是"随手复用"：原型就是同一支，改成三个图标会让这一屏与原型不一致。
+                Button { onNewFile() } label: { rowLabel(GitHubIcon.file, RepoCopy.newFileAction) }
+                    .disabled(isPreparing)
 
-            // 三行**共用同一个图标**（原型 `openAddSheet` 三行都是 `svg(I.file)`）——
-            // 不是"随手复用"：原型就是同一支，改成三个图标会让这一屏与原型不一致。
-            SheetRow(systemImage: GitHubIcon.file, title: RepoCopy.newFileAction) {
-                onNewFile()
-            }
-            .disabled(isPreparing)
+                Button { startPick { isImportingFile = true } } label: { rowLabel(GitHubIcon.file, RepoCopy.uploadFileAction) }
+                    .disabled(isPreparing)
 
-            SheetRow(systemImage: GitHubIcon.file, title: RepoCopy.uploadFileAction) {
-                startPick { isImportingFile = true }
+                Button { startPick { isPickingPhoto = true } } label: { rowLabel(GitHubIcon.file, RepoCopy.uploadImageAction) }
+                    .disabled(isPreparing)
+            } header: {
+                Text(RepoCopy.addFileSheetTitle(branch: branch))
             }
-            .disabled(isPreparing)
-
-            SheetRow(systemImage: GitHubIcon.file, title: RepoCopy.uploadImageAction) {
-                startPick { isPickingPhoto = true }
-            }
-            .disabled(isPreparing)
 
             // 压缩 / 转码要几百毫秒到一两秒（最多 13 次编码）⇒ 必须有个动静，
             // 否则用户按下去之后会以为弹层死了、然后再点一次。
@@ -144,28 +142,22 @@ struct AddFileSheet: View {
                 ProgressView()
                     .controlSize(.small)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, Theme.Spacing.s)
             }
 
             if let failure {
-                Text(failure)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.destructive)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Theme.Spacing.s)
-                    .padding(.top, Theme.Spacing.s)
+                Section {
+                    Text(failure)
+                        .foregroundStyle(Theme.Palette.destructive)
+                        .multilineTextAlignment(.leading)
+                }
             }
 
-            SheetHint(RepoCopy.addFileSheetHint)
-
-            Spacer(minLength: 0)
+            Section {
+                Text(RepoCopy.addFileSheetHint)
+                    .font(Theme.Font.caption)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium])
         // 两个系统选择器都挂在**行自己**身上：行的动作只置一个 `Bool`，
         // 呈现交给这两个修饰符 —— 行里包一个 `PhotosPicker` 按钮会撞两层样式
         //（它自带按钮外观），而"点击区域与整行不一致"是那种看得出但说不清的瑕疵。
@@ -190,6 +182,19 @@ struct AddFileSheet: View {
         .onChange(of: pickedPhoto) { _, item in
             guard let item else { return }
             Task { await handlePhoto(item) }
+        }
+    }
+
+    /// 弹层行：leading 图标（18pt 次级色）+ 标题（同 `SheetRow` 几何）。
+    private func rowLabel(_ systemImage: String, _ title: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18))
+                .foregroundStyle(Theme.Palette.textSecondary)
+            Text(title)
+                .font(Theme.Font.rowTitle)
+                .foregroundStyle(Theme.Palette.textPrimary)
+            Spacer(minLength: 0)
         }
     }
 

@@ -125,8 +125,19 @@ struct CommitSheet: View {
     }
 
     var body: some View {
+        // P4：移除对 `SheetPrimitives` 的依赖（见 `NATIVE-MIGRATION.md` §P4）。
+        // 标题 / 输入框 / 说明行就地换成原生件，结构与原先一致（视觉不变）。
         VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(CommitSheetCopy.sheetTitle(source: source.title))
+            Text(CommitSheetCopy.sheetTitle(source: source.title))
+                // 复刻原 `SheetTitle` 的小号大写次级灰字。
+                .font(Theme.Font.sheetTitle)
+                .tracking(0.4)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .textCase(.uppercase)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.s)
+                .padding(.top, Theme.Spacing.s)
+                .padding(.bottom, 6)
 
             switch phase {
             case .editing:
@@ -161,18 +172,16 @@ struct CommitSheet: View {
                 destinationRow(destinationPath, adjustment: adjustment)
             }
 
-            SheetField(
-                CommitSheetCopy.messagePlaceholder,
-                text: $message,
-                // ⚠️ 提交信息是一句话 ⇒ 按句首大写、纠错开着。
-                //    `SheetField` 的默认档是给分支名 / 标签名定的（不纠错、不大写）。
-                disablesAutocorrection: false,
-                capitalization: .sentences,
-                // 原型 `<textarea class="sheet-input" id="cmsg" rows="2">` ⇒ 保底两行。
-                minLines: 2
-            )
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.s)
+            // 提交信息输入框（P4：原生 `TextField`，原 `SheetField`）。
+            // ⚠️ 提交信息是一句话 ⇒ 按句首大写、纠错开着。
+            TextField(CommitSheetCopy.messagePlaceholder, text: $message, axis: .vertical)
+                .lineLimit(2...)
+                .autocorrectionDisabled(false)
+                #if os(iOS)
+                .textInputAutocapitalization(.sentences)
+                #endif
+                .padding(.horizontal, Theme.Spacing.s)
+                .padding(.top, Theme.Spacing.s)
 
             targetPicker
                 .padding(.horizontal, Theme.Spacing.s)
@@ -207,7 +216,15 @@ struct CommitSheet: View {
             .padding(.horizontal, Theme.Spacing.s)
             .padding(.top, Theme.Spacing.s)
 
-            SheetHint(CommitSheetCopy.footer)
+            // 底部说明（P4：原生 `Text`，原 `SheetHint`）。
+            Text(CommitSheetCopy.footer)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .lineSpacing(Theme.Spacing.xxs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.s)
+                .padding(.top, 6)
+                .padding(.bottom, Theme.Spacing.xxs)
         }
     }
 
@@ -275,14 +292,23 @@ struct CommitSheet: View {
     private var branchInputs: some View {
         VStack(alignment: .leading, spacing: 0) {
             subLabel(CommitSheetCopy.newBranchNameLabel)
-            SheetField(CommitSheetCopy.newBranchNameLabel, text: $newBranchName)
+            // 分支名输入框（P4：原生 `TextField`，原 `SheetField`；默认关纠错、不大写）。
+            TextField(CommitSheetCopy.newBranchNameLabel, text: $newBranchName)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
                 .padding(.horizontal, Theme.Spacing.s)
                 // 预填值看起来像一段"不可改的说明文字"，而决策 #67 存在的全部理由
                 // 恰恰是用户对这两个值有控制权 ⇒ 读屏里要说明白。
                 .accessibilityHint(CommitSheetCopy.newBranchNameAccessibilityHint)
 
             subLabel(CommitSheetCopy.prTitleLabel)
-            SheetField(CommitSheetCopy.prTitleLabel, text: prTitleBinding)
+            TextField(CommitSheetCopy.prTitleLabel, text: prTitleBinding)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
                 .padding(.horizontal, Theme.Spacing.s)
         }
     }
@@ -360,7 +386,14 @@ struct CommitSheet: View {
 
     private func latestBody(_ latest: RemoteLatest) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHint(CommitSheetCopy.viewLatestHint)
+            // 说明（P4：原生 `Text`，原 `SheetHint`）。
+            Text(CommitSheetCopy.viewLatestHint)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .lineSpacing(Theme.Spacing.xxs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.s)
+                .padding(.top, Theme.Spacing.s)
 
             if let text = latest.text {
                 ScrollView {

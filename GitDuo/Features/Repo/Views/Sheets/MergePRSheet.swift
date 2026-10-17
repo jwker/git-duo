@@ -51,30 +51,26 @@ struct MergePRSheet: View {
     @State private var method: PullMergeMethod = PullCopy.defaultMergeMethod
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(PullCopy.mergeSheetTitle(branchFlow: branchFlow))
-
-            methods
-
-            ActionButton(
-                title: PullCopy.mergeConfirmAction(base: base),
-                style: .primary,
-                // 原型 `style="width:100%;padding:12px"` —— 弹层底部的确认按钮统一 12。
-            ) {
-                onConfirm(method)
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        Form {
+            Section {
+                methods
+            } header: {
+                Text(PullCopy.mergeSheetTitle(branchFlow: branchFlow))
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
 
-            SheetHint(PullCopy.mergeSheetHint)
+            Section {
+                Button(PullCopy.mergeConfirmAction(base: base)) { onConfirm(method) }
+                    .buttonStyle(.borderedProminent)
+            }
 
-            Spacer(minLength: 0)
+            Section {
+                Text(PullCopy.mergeSheetHint)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium])
     }
 
     // MARK: - 三种方式
@@ -83,23 +79,27 @@ struct MergePRSheet: View {
     ///
     /// ⚠️ 三行是**数据**（`PullCopy.mergeMethodOptions`）不是写三遍 ——
     /// "默认选中第一项"的可信来源就是那个数组的顺序（见 `MergeMethodOption` 的说明）。
-    ///
-    /// ⚠️ `action:` 这个标签**必须写出来**：本行右侧要放那颗 ✓，
-    /// 而省略它会让尾随闭包绑到不带标签的那个 `init` 上，图标根本不画
-    /// （`SheetPrimitives` 里那条陷阱的说明）。
     private var methods: some View {
         ForEach(PullCopy.mergeMethodOptions) { option in
-            SheetRow(
-                title: option.title,
-                subtitle: option.detail,
-                action: { method = option.method }
-            ) {
-                // 原型 `<b class="mk" style="color:var(--green)">✓</b>` ——
-                // 与 `MergeSheet` 的选中标记同一形态（同一个 `accentStrong` + `checkmark`）。
-                if option.method == method {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.Palette.accentStrong)
+            Button { method = option.method } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(option.title)
+                            .font(Theme.Font.rowTitle)
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                        // 原型 `<b class="mk" style="color:var(--green)">✓</b>` ——
+                        // 与 `MergeSheet` 的选中标记同一形态（同一个 `accentStrong` + `checkmark`）。
+                        Text(option.detail)
+                            .font(Theme.Font.caption)
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                            .padding(.top, Theme.Spacing.xxs)
+                    }
+                    Spacer(minLength: 0)
+                    if option.method == method {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Theme.Palette.accentStrong)
+                    }
                 }
             }
         }

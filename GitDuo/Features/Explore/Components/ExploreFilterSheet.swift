@@ -48,36 +48,35 @@ struct ExploreFilterSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(kind.title)
-                // 弹层小标题（原型 `.sheet-title`）⇒ `sheetTitle`（2026-10-15 起与
-                // 页面分区标题 `sectionLabel` 分道，走查第 73 条）。
-                .font(Theme.Font.sheetTitle)
-                .tracking(0.4)
-                .foregroundStyle(Theme.Palette.textTertiary)
-                .textCase(.uppercase)
-                .padding(.horizontal, Theme.Spacing.s)
-                .padding(.top, Theme.Spacing.s)
-                .padding(.bottom, 6)
-
-            // ⚠️ 选项里**没有「全部」那一行** —— 取消靠"再点一次当前项"（PRD §5.4、harness 断言过）。
-            //    加一行"全部"会多出一种取消方式，而两种方式里必然有一种先被写错。
-            ForEach(options.indices, id: \.self) { index in
-                let option = options[index]
-                row(option)
+        // P4 同款：自绘 `VStack` → 原生 `Form`，与仓库目录「切换分支」弹层同构
+        // （分组内缩 + 系统分隔线 + `Section` header 标题 + 右侧 ✓ + 标准 detents）。
+        Form {
+            Section {
+                // ⚠️ 选项里**没有「全部」那一行** —— 取消靠"再点一次当前项"（PRD §5.4、harness 断言过）。
+                //    加一行"全部"会多出一种取消方式，而两种方式里必然有一种先被写错。
+                ForEach(options, id: \.self) { option in
+                    row(option)
+                }
+            } header: {
+                Text(kind.title)
             }
 
-            Text(hint)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.Palette.textTertiary)
-                .padding(.horizontal, Theme.Spacing.s)
-                .padding(.top, 6)
-                .padding(.bottom, Theme.Spacing.xxs)
+            Section {
+                Text(hint)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            }
         }
-        .padding(.horizontal, Theme.Spacing.m)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium, .large])
+    }
+
+    /// 每个类别一个统一的 leading 图标（日期 = 日历；语言 = 代码花括号），
+    /// 复刻 `BranchSheet` 行「leading 图标 + 标题 + 右侧 ✓」的节奏。
+    private var leadingIcon: String {
+        switch kind {
+        case .range: "calendar"
+        case .language: "curlybraces"
+        }
     }
 
     private func row(_ option: String) -> some View {
@@ -85,29 +84,30 @@ struct ExploreFilterSheet: View {
             onPick(option)
             dismiss()
         } label: {
-            HStack(spacing: Theme.Spacing.m) {
+            HStack(spacing: 10) {
+                Image(systemName: leadingIcon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(Theme.Palette.textSecondary)
                 Text(option)
                     .font(Theme.Font.rowTitle)
                     .foregroundStyle(Theme.Palette.textPrimary)
-
                 Spacer(minLength: 0)
-
                 // ✓ 用强调绿（原型 `color:var(--green)`）—— `accentStrong` 就是那个值。
                 if selected == option {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Theme.Palette.accentStrong)
                 }
             }
-            .padding(.vertical, Theme.Spacing.m)
-            .padding(.horizontal, 10)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .accessibilityAddTraits(selected == option ? [.isSelected] : [])
     }
 }
 
 #Preview {
-    ExploreFilterSheet(kind: .range, selected: "本周") { _ in }
+    VStack(spacing: Theme.Spacing.xl) {
+        ExploreFilterSheet(kind: .range, selected: "本周") { _ in }
+        ExploreFilterSheet(kind: .language, selected: "Swift") { _ in }
+    }
+    .background(Theme.Palette.background)
 }

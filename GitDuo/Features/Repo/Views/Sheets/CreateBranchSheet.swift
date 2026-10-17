@@ -36,49 +36,47 @@ struct CreateBranchSheet: View {
     @State private var failure: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(BranchCopy.createSheetTitle)
-
-            SheetField(BranchCopy.createFieldPlaceholder(current: current), text: $name)
-                .padding(.horizontal, Theme.Spacing.s)
-                .padding(.top, Theme.Spacing.s)
-                // 名字里的 `/`（`feature/x`）是合法的，且是 git 的常规用法 ——
-                // 键盘上要够得到它（`SheetField` 默认关掉了自动大写，这里不额外改键盘类型）。
-                .submitLabel(.done)
+        // P4：自绘弹层 → 原生 `Form` + `Section` + `TextField` + 系统 `Button`
+        // （`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // 标题用 `Section` header（原生次级灰字，不再大写）；输入框走原生 `TextField`
+        // （分支名那档：关自动纠错、不大写）。
+        Form {
+            Section(BranchCopy.createSheetTitle) {
+                TextField(BranchCopy.createFieldPlaceholder(current: current), text: $name)
+                    // 名字里的 `/`（`feature/x`）是合法的，且是 git 的常规用法 ——
+                    // 键盘上要够得到它（`SheetField` 默认关掉了自动大写，这里不额外改键盘类型）。
+                    .submitLabel(.done)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+            }
 
             if let failure {
-                Text(failure)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.Palette.destructive)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Theme.Spacing.s)
-                    .padding(.top, Theme.Spacing.s)
+                Section {
+                    Text(failure)
+                        .foregroundStyle(Theme.Palette.destructive)
+                        .multilineTextAlignment(.leading)
+                }
             }
 
-            ActionButton(
-                title: BranchCopy.createConfirmAction,
-                style: .primary,
-                isWorking: isWorking
-            ) {
-                Task { failure = await onCreate(name) }
-            }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
+            Section {
+                Button {
+                    Task { failure = await onCreate(name) }
+                } label: {
+                    if isWorking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(BranchCopy.createConfirmAction)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
 
-            ActionButton(title: BranchCopy.cancelAction, style: .ghost) {
-                dismiss()
+                Button(BranchCopy.cancelAction) { dismiss() }
+                    .buttonStyle(.bordered)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.s)
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium, .large])
     }
 }
 

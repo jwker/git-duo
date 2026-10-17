@@ -68,7 +68,7 @@ public struct LabelPill: View {
             .padding(.horizontal, 9)
             // 原型 `border-radius:20px` 在 11pt 的文字上就是胶囊的两端半圆。
             // ⚠️ 也**不画边框** —— `.lbl-tag` 与 `.pill` 的差别之一就是它没有 `border`。
-            .background(Capsule().fill(LabelColor.surface(forHex: colorHex)))
+            .background(LabelColor.surface(forHex: colorHex), in: .capsule)
             // 读屏把整颗胶囊念成一句；不带这一句，读屏只会念出标签名而说不出"这是个标签"。
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("标签 \(name)")

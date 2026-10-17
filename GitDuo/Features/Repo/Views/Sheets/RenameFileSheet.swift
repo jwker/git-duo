@@ -66,55 +66,52 @@ struct RenameFileSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(FileCopy.renameSheetTitle)
-
-            SheetField("", text: $newPath)
-                .padding(.horizontal, Theme.Spacing.s)
-                .padding(.top, Theme.Spacing.s)
-                // 路径里的 `/` 是常规用法（`docs/guide.md`）——
-                // 键盘上要够得到它（`SheetField` 默认关掉自动大写与纠错，这里不额外改）。
-                .submitLabel(.done)
-
-            // 说明行（§5.16 逐字）。放在输入框与按钮之间：
-            // 它说的是"按下保存会发生什么"，紧贴按钮才读得顺。
-            SheetHint(FileCopy.renameSheetHint)
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // 说明行（`SheetHint`）作为输入框 Section 的 footer，保持「紧贴输入框下方」的位置。
+        Form {
+            Section {
+                TextField("", text: $newPath)
+                    // 路径里的 `/` 是常规用法（`docs/guide.md`）——
+                    // 键盘上要够得到它（`SheetField` 默认关掉自动大写与纠错，这里不额外改）。
+                    .submitLabel(.done)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+            } header: {
+                Text(FileCopy.renameSheetTitle)
+            } footer: {
+                Text(FileCopy.renameSheetHint)
+                    .font(Theme.Font.caption)
+            }
 
             if let failure {
-                // ⚠️ 这一段原先**裸写在这里**（`Text` + 四个修饰符），2026-10-09 收拢进
-                //    `SheetFailureHint`（决策 #77）—— 同样的那四行后面还要出现在别处
-                //    （标签新建 · 两个宿主），再抄一遍就是会各自漂移的副本。**形态逐字不变**。
-                //
-                // ⚠️ 本件是那个形态的**出处**：它原型里没有（§5.16 是新规格，决策 #66），
-                //    当时只能自己定一行 —— 定的就是这个。于是"没有原型参照"的那一次自拟，
-                //    成了后来那几处同类弹层的依据。
-                SheetFailureHint(failure)
+                // 弹层内"这一下没成"的那一行（决策 #77）：位置在确认按钮上方、
+                // 读屏能看见，而不是被弹层整块盖住的页面级提示条。
+                Section {
+                    Text(failure)
+                        .foregroundStyle(Theme.Palette.destructive)
+                        .multilineTextAlignment(.leading)
+                }
             }
 
-            ActionButton(
-                title: FileCopy.renameConfirmAction,
-                style: .primary,
-                // 弹层底部的确认按钮统一 12（原型 `.browser-body .btn{padding:12px}`）。
-                isWorking: isWorking
-            ) {
-                Task { failure = await onRename(newPath) }
-            }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.m)
+            Section {
+                Button {
+                    Task { failure = await onRename(newPath) }
+                } label: {
+                    if isWorking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(FileCopy.renameConfirmAction)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
 
-            ActionButton(title: FileCopy.cancelAction, style: .ghost) {
-                dismiss()
+                Button(FileCopy.cancelAction) { dismiss() }
+                    .buttonStyle(.bordered)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, Theme.Spacing.s)
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium, .large])
     }
 }
 

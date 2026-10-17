@@ -15,9 +15,23 @@ struct ExploreFiltersTests {
         #expect(ExploreFilters.default.language == nil)
     }
 
-    @Test("语言选项**固定 5 项**，逐字对齐 PRD §3.12")
-    func languageOptionsMatchPRD() {
-        #expect(ExploreFilters.languageOptions == ["Swift", "Rust", "TypeScript", "Python", "Go"])
+    @Test("语言选项是补全后的主流编程语言清单（GitHub trending/explore 官方筛选，2026-10-17 起不再限 5 项）")
+    func languageOptionsMatchExpandedGitHubSet() {
+        #expect(ExploreFilters.languageOptions == [
+            "JavaScript", "TypeScript", "Python", "Java", "C++", "C", "C#", "Go",
+            "Rust", "Ruby", "PHP", "Swift", "Kotlin", "Dart", "Shell", "Objective-C",
+            "Scala", "R", "MATLAB", "Lua", "Perl", "Haskell", "Elixir", "Clojure",
+            "Erlang", "F#", "OCaml", "Julia", "Crystal", "Zig", "Nim", "Solidity",
+            "Assembly", "Fortran", "Groovy", "Visual Basic", "Delphi", "COBOL",
+            "Pascal", "PowerShell", "Vim Script", "Batchfile", "SQL", "HTML", "CSS",
+            "Vue", "Svelte", "CoffeeScript", "TeX", "ActionScript",
+        ])
+        // 仍保留原 PRD 的 5 项（harness.js 对其有断言）。
+        #expect(ExploreFilters.languageOptions.contains("Swift"))
+        #expect(ExploreFilters.languageOptions.contains("Rust"))
+        #expect(ExploreFilters.languageOptions.contains("TypeScript"))
+        #expect(ExploreFilters.languageOptions.contains("Python"))
+        #expect(ExploreFilters.languageOptions.contains("Go"))
     }
 
     @Test("chip 文案：未选时是占位「日期」/「语言」，已选时是选中值")

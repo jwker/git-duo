@@ -88,49 +88,59 @@ struct LabelPickerSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SheetTitle(title)
+        // P4：自绘弹层 → 原生 `Form`（`SheetPrimitives` 五件退休，见 `NATIVE-MIGRATION.md` §P4）。
+        // 标签行 → `Form` 内的原生 `Button` 行（leading `LabelDot` + 标题 + 右侧 ✓）。
+        // 两段标题 → `Section` header（系统默认即大写小灰，与原 `.sheet-title` 一致）。
+        Form {
+            Section {
+                labelList
+            } header: {
+                Text(title)
+            }
 
-            labelList
+            Section {
+                TextField(IssueCopy.newLabelPlaceholder, text: $model.newName)
+                    .submitLabel(.done)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
 
-            SheetTitle(IssueCopy.newLabelSectionTitle)
-                // 原型那一段自己的 `margin-top:8px`。
-                .padding(.top, Theme.Spacing.s)
+                palettes
+            } header: {
+                Text(IssueCopy.newLabelSectionTitle)
+            }
 
-            SheetField(IssueCopy.newLabelPlaceholder, text: $model.newName)
-                .padding(.horizontal, Theme.Spacing.s)
-
-            palettes
-                // 原型 `margin:12px 0 4px`。
-                .padding(.top, Theme.Spacing.m)
-                .padding(.bottom, Theme.Spacing.xs)
-
-            // 决策 #77：两条"没成"的路径画在这里 —— 空名与请求失败**都不关弹层**，
+            // 决策 #77：两条"没成"的路径画在弹层内（空名 / 请求失败都不关弹层），
             // 而提示条挂在根容器上、会被弹层整块盖住（偏差第 45 条）。
             if let hint = model.creationHint {
-                SheetFailureHint(hint)
+                Section {
+                    Text(hint)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.destructive)
+                        .multilineTextAlignment(.leading)
+                }
             }
 
-            ActionButton(
-                title: IssueCopy.createLabelAction,
-                style: .primary,
-                isWorking: model.isCreating
-            ) {
-                Task { await create() }
+            Section {
+                Button { Task { await create() } } label: {
+                    if model.isCreating {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(IssueCopy.createLabelAction)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.top, 10)
 
-            SheetHint(IssueCopy.labelSheetHint)
-
-            Spacer(minLength: 0)
+            Section {
+                Text(IssueCopy.labelSheetHint)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    .multilineTextAlignment(.leading)
+            }
         }
-        // 原型 `.sheet{padding:8px 10px 12px}`（同 `BranchSheet` / `DeleteBranchSheet`）。
-        .padding(.horizontal, 10)
-        .padding(.top, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Theme.Palette.surface)
+        .presentationDetents([.medium, .large])
         .task { await model.load() }
     }
 
@@ -160,35 +170,35 @@ struct LabelPickerSheet: View {
         }
     }
 
-    /// 标签可能上百条（`LabelCatalog.maxPages` × 100）⇒ 必须能滚。
+    /// 标签可能上百条（`LabelCatalog.maxPages` × 100）⇒ 放进 `Form`，由它自身滚动。
     private func rows(_ labels: [GitDuoKit.Label]) -> some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(labels) { label in
-                    SheetRow(
-                        // 原型 `07-issues.js:38` 的 `.lbl-dot`（leading 的色块形态）。
-                        leadingDotColorHex: label.colorHex,
-                        title: label.name
-                    ) {
-                        onToggle(label)
-                    } trailing: {
-                        if isSelected(label) {
-                            // 原型：已选的那一行右边一个绿色 `✓`（`var(--green)` = `#1f883d`）。
-                            // ⚠️ `Theme.Palette.accentStrong` 就是 `#1F883D` —— **不是新造的色**，
-                            //    而且切片 6 的 `BranchSheet`（当前分支那个 `✓`）用的就是它。
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Theme.Palette.accentStrong)
-                        }
+        ForEach(labels) { label in
+            Button { onToggle(label) } label: {
+                HStack(spacing: 10) {
+                    // 原型 `07-issues.js:38` 的 `.lbl-dot`（leading 的色块形态）。
+                    LabelDot(colorHex: label.colorHex)
+
+                    Text(label.name)
+                        // 原型 14.5px/500 ⇒ 最近的一档是 `rowTitle`（`.subheadline` 15）。
+                        .font(Theme.Font.rowTitle)
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                        .multilineTextAlignment(.leading)
+
+                    Spacer(minLength: 0)
+
+                    if isSelected(label) {
+                        // 原型：已选的那一行右边一个绿色 `✓`（`var(--green)` = `#1f883d`）。
+                        // ⚠️ `Theme.Palette.accentStrong` 就是 `#1F883D` —— **不是新造的色**，
+                        //    而且切片 6 的 `BranchSheet`（当前分支那个 `✓`）用的就是它。
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Theme.Palette.accentStrong)
                     }
-                    // 读屏：一行里"已选"这个状态没有可见文字承载（只有一个 `✓` 图形）。
-                    .accessibilityHint(isSelected(label) ? IssueCopy.selectedLabelHint : "")
                 }
             }
+            // 读屏：一行里"已选"这个状态没有可见文字承载（只有一个 `✓` 图形）。
+            .accessibilityHint(isSelected(label) ? IssueCopy.selectedLabelHint : "")
         }
-        // 与 `BranchSheet` 同一条：行少的时候不让它变成可滚区域
-        //（可滚但没得滚时，iOS 的下拉回弹会让人以为"下面还有"）。
-        .scrollDisabled(labels.count <= 6)
     }
 
     /// 按**名字**比对（`Label.id` 就是名字 —— 同一仓库内唯一，§5.2 的"已存在则自动选中"）。
@@ -202,7 +212,7 @@ struct LabelPickerSheet: View {
     /// + 占位标签 + `.redacted`。
     ///
     /// ⚠️ 那条"给一个最小高度、免得上跳"的注释随灰条一起作废了：现在行高就是
-    /// `SheetRow` 的真实行高，骨架与内容不可能差出高度。
+    /// 原生 `Button` 行的真实行高，骨架与内容不可能差出高度。
     private var skeleton: some View {
         rows((0..<4).map { Label.placeholder(index: $0) })
             .redacted(reason: .placeholder)

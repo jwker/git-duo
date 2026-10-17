@@ -139,9 +139,31 @@ struct EditorView: View {
     ///
     /// ⚠️ 它与提交弹层里那一行只读的「将写入 `{path}`」**是两件事**：
     /// 这一行用户可以改；那一行是 App 已经定下来的落点（§5.8 的两个上传出口）。
-    /// 所以这里用 `SheetField`（可编辑），那一处用一行只读。
+    /// 所以这里用可编辑输入框，那一处用一行只读。
+    ///
+    /// ⚠️ P4：原先是 `SheetField`（设计包五件之一，现已退休）。这里换成原生 `TextField`，
+    /// 边框 / 圆角 / 浅底色逐字同 `SheetField` 默认档（见 `NATIVE-MIGRATION.md` §P4）。
     private var pathField: some View {
-        SheetField("", text: $model.newFilePath)
+        TextField("", text: $model.newFilePath)
+            .font(Theme.Font.rowTitle)
+            .foregroundStyle(Theme.Palette.textPrimary)
+            // 原型 `.sheet-input{padding:10px 12px}`。
+            .padding(.vertical, 10)
+            .padding(.horizontal, Theme.Spacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    // 输入框比弹层白底更浅一层（同 `SheetField`：`--bg` 落在 `--surface` 上）。
+                    .fill(Theme.Palette.background)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .stroke(Theme.Palette.border, lineWidth: 1)
+            )
+            // 路径框是分支名那一档：关自动纠错 + 首字母不大写。
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            #endif
     }
 
     private var submitButton: some View {
