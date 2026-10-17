@@ -17,7 +17,7 @@ import Testing
 /// 同 `Slice4`–`Slice9` 的纪律：**不测长相**（那要靠逐屏对照），只钉算法与四条边界。
 ///
 /// ⚠️ 本套件**不标 `@MainActor`**：被测的两个函数都是 `nonisolated static` 纯函数
-/// （同 `UserAvatar.initial(for:)` / `colorIndex(for:)` 那两条既有断言），
+/// （同 `UserAvatar.initial(for:)` 那条既有断言），
 /// 与主 actor 无关 —— 标上只是照抄邻座的样子。
 @Suite("UserAvatar · 按显示尺寸降采样")
 struct UserAvatarDownsamplingTests {

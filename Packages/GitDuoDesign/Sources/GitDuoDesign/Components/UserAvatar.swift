@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// 单个用户头像 —— 圆形首字母 + 确定性兜底色（原型 `styles/03-components.css` 的 `.avatar`）。
+/// 单个用户头像 —— 圆形首字母兜底（**主色描边 + 白底 + 主色字母**）。
 ///
 /// ```css
 /// .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;
 ///         justify-content:center;font-weight:700;color:#fff;font-size:13px}
 /// ```
+///
+/// ⚠️ 上面这段原型 CSS 只剩"34×34 圆"这一处还有效（`.rowDiameter`）——
+/// 它的 `color:#fff`（白字 + 实底色）已作废，见下面「兜底圆」一节。
 ///
 /// ## 四处消费场景，四个尺寸档
 ///
@@ -28,12 +31,21 @@ import SwiftUI
 /// 那是切片 4 / 5 已验收的样子，本片**不去动它**。
 /// 要一次性收口就改这一个默认值 —— 但那是另一次决定，别在加第三档的时候顺手做。
 ///
-/// ## ⚠️ 兜底色**不能用 `hashValue`**
+/// ## ⚠️ 兜底圆：2026-10-17 起是「主色描边 + 白底 + 主色字母」
 ///
-/// Swift 的字符串哈希每个进程带随机种子 ⇒ 同一账号会在每次冷启动后换一个颜色
-/// （严重时在一次会话里因列表重绘而换色），而"头像颜色"是用户用来**认人**的视觉线索。
-/// 这里用 djb2，跨进程稳定 —— 与 `AvatarStack` 用的是**同一份实现**
-/// （这个类型把它提了出来，那边改为委派，免得两份算法各自漂移）。
+/// 原来它是**每人一色的实底圆 + 白字**：色由登录名的 djb2 哈希从
+/// `Theme.Palette.avatarFallback` 那 8 色里挑一个（GitHub 网页端的做法）。
+/// 主色统一为橙之后，那 8 色成了**与主色打架的第二套彩虹**
+/// （其中第一档绿 `#1F883D` 尤其显眼 —— 它正是改色前主按钮的那支绿），
+/// 用户裁定换成现在这一版：**白底 + 主色描边 + 主色字母**。
+///
+/// ⚠️ 连带**删掉**了三件东西（它们唯一的用途就是"每人一色"）：
+/// `Theme.Palette.avatarFallback` 色表、`UserAvatar.colorIndex(for:)`、
+/// 以及 `fallbackSeed` 这个入参（`AvatarStack` 曾用它给匿名条目错开颜色）。
+/// **兜底圆如今对所有账号是同一个样子** —— 认人靠的是那个首字母，不再是颜色。
+///
+/// ⚠️ 因此那条"绝不能用 `hashValue`"的旧约束也随之作废：现在**没有任何颜色依赖哈希**了。
+/// （那条约束当年是对的 —— Swift 字符串哈希每进程随机化，会让同一账号每次冷启动换色。）
 ///
 /// ## 图片按显示尺寸降采样（2026-10-11 落地，`TECH_SPEC §5.3`）
 ///
@@ -95,17 +107,17 @@ public struct UserAvatar: View {
     /// 而它挂在 86pt 的圆上（比 `sheetDiameter` 大一倍多），字重差一档是看得出来的。
     public static let profileInitialFont: Font = .system(size: 30, weight: .heavy)
 
+    /// 兜底圆的描边宽度（**2pt**，沿 `ColorSwatch.borderWidth` 的既有档）。
+    ///
+    /// ⚠️ 它挂在 34 / 36 / 52 / 86 四个直径上：2pt 在最小那档已经清楚，
+    /// 在 86pt 那档偏细但仍是"一圈环"而不是"一条线"。要加粗就改这一个数。
+    public static let borderWidth: CGFloat = 2
+
     /// 登录名。**可空** —— 匿名贡献者没有。
     public let login: String?
 
     /// 头像地址。**可空** —— 取不到就画首字母兜底。
     public let avatarURL: URL?
-
-    /// 兜底色的种子。`nil` = 用 `login`。
-    ///
-    /// 只有**匿名条目**需要它：一排没有登录名的头像若都用同一个种子，
-    /// 会得到同一个颜色、糊成一块。`AvatarStack` 为此传 `anonymous-<下标>`。
-    public let fallbackSeed: String?
 
     public let diameter: CGFloat
 
@@ -122,13 +134,11 @@ public struct UserAvatar: View {
         login: String?,
         avatarURL: URL? = nil,
         diameter: CGFloat = UserAvatar.rowDiameter,
-        fallbackSeed: String? = nil,
         initialFont: Font? = nil
     ) {
         self.login = login
         self.avatarURL = avatarURL
         self.diameter = diameter
-        self.fallbackSeed = fallbackSeed
         self.initialFont = initialFont
     }
 
@@ -169,10 +179,12 @@ public struct UserAvatar: View {
 
     private var fallback: some View {
         ZStack {
-            Circle().fill(Theme.Palette.avatarFallback[Self.colorIndex(for: fallbackSeed ?? login)])
+            Circle().fill(Theme.Palette.surface)
+            Circle().strokeBorder(Theme.Palette.accent, lineWidth: Self.borderWidth)
             Text(Self.initial(for: login))
                 .font(initialFont ?? Theme.Font.label)
-                .foregroundStyle(Theme.Palette.surface)
+                // 首字母压在白底上：`accent` 浅色档是 5.18:1，达正文 AA。
+                .foregroundStyle(Theme.Palette.accent)
         }
     }
 
@@ -192,17 +204,6 @@ public struct UserAvatar: View {
             return "?"
         }
         return String(first).uppercased()
-    }
-
-    /// 兜底色下标（djb2，**跨进程稳定**）。
-    ///
-    /// `seed` 传登录名；匿名条目传一个**稳定的替身**（`AvatarStack` 用的是
-    /// `anonymous-<下标>`，这样一排匿名头像不会因为同色而糊成一块）。
-    public nonisolated static func colorIndex(for seed: String?) -> Int {
-        let text = seed ?? "anonymous"
-        var hash: UInt64 = 5_381
-        for byte in text.utf8 { hash = hash &* 33 &+ UInt64(byte) }
-        return Int(hash % UInt64(Theme.Palette.avatarFallback.count))
     }
 
     // MARK: - 纯函数：降采样（可单测）

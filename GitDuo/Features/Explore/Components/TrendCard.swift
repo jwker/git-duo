@@ -108,13 +108,14 @@ struct TrendCard: View {
             ForEach(badges.indices, id: \.self) { index in
                 let badge = badges[index]
                 Text(badge.text)
-                    // `metric` 用 `accentStrong`：原型这处写的是 `color:var(--green)`，
-                    // 而 `--green` 同时是主按钮的底色 —— 两处本就同一个值，别新造一个 token。
+                    // `metric` 那一档用 `success`：原型这处写的是 `color:var(--green)`。
+                    // ⚠️ 2026-10-17 主色统一为橙后，原型那个"一个绿同时当主按钮底"的口径**已经拆开**：
+                    //    「主按钮」跟主色走（`accentStrong` = 橙），「绿 = 正向」这一支留在 `success`。
                     .font(badge.tone == .metric
                           ? Theme.Font.caption.weight(.semibold)
                           : Theme.Font.caption)
                     .foregroundStyle(badge.tone == .metric
-                                     ? Theme.Palette.accentStrong
+                                     ? Theme.Palette.success
                                      : Theme.Palette.textSecondary)
             }
         }

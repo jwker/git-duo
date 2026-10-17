@@ -187,12 +187,12 @@ struct LabelPickerSheet: View {
                     Spacer(minLength: 0)
 
                     if isSelected(label) {
-                        // 原型：已选的那一行右边一个绿色 `✓`（`var(--green)` = `#1f883d`）。
-                        // ⚠️ `Theme.Palette.accentStrong` 就是 `#1F883D` —— **不是新造的色**，
-                        //    而且切片 6 的 `BranchSheet`（当前分支那个 `✓`）用的就是它。
+                        // 原型：已选的那一行右边一个绿色 `✓`（`var(--green)`）。
+                        // ⚠️ 文字色取 `success`（那对绿）—— **不是** `accentStrong`：
+                        //    2026-10-17 主色统一为橙后，`accentStrong` 已经跟主色走、变橙了。
                         Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Theme.Palette.accentStrong)
+                            .foregroundStyle(Theme.Palette.success)
                     }
                 }
             }

@@ -78,16 +78,25 @@ struct Slice6ComponentTests {
         #expect(CodeSurface.color(.function) == Theme.Palette.syntaxFunction)
     }
 
-    @Test("⚠️ `accentSubtle`（hunk 头的底）与 `accentSurface`（筛选 chip 选中态）：浅色两个值，深色**有意同值**（已登记）")
+    @Test("⚠️ `accentSubtle`（短哈希徽章的底）与 `accentSurface`（筛选 chip 选中态）：浅色两个值，深色**有意同值**（已登记）")
     func accentSubtleIsNotAccentSurface() {
-        // 浅色两档是两个值（`#DDF4FF` 偏青 / `#F0F6FF` 偏灰）：混用会让 diff 的
-        // hunk 头与"已选 chip"看起来像同一族控件。
-        // ⚠️ 2026-10-15 深色列两档**有意合并**（都是 `#388BFD@0.10`，Primer 深色
+        // 浅色两档是两个值（`#FFEDE4` 深一档 / `#FFF1E5` 更浅一档）：混用会让
+        // 徽章与"已选 chip"看起来像同一族控件。
+        // ⚠️ 2026-10-15 深色列两档**有意合并**（都取"同色相低透明"，Primer 深色
         // 本就只有一档"强调浅底"）—— 已在 `Theme.swift` 登记，所以深色档反过来
         // 钉"就是同值"，哪天有人想拆开必须先看见这条。
         // （动态色时代 `==` / `!=` 比实例身份 ⇒ 全部改比 resolve 分量。）
         #expect(ColorResolve.distinct(Theme.Palette.accentSubtle, Theme.Palette.accentSurface, .light))
         #expect(ColorResolve.same(Theme.Palette.accentSubtle, Theme.Palette.accentSurface, .dark))
+
+        // ⚠️ **2026-10-17 新口径**：`accentSubtle` 此前**兼管** diff 的 hunk 头
+        // （原型里 `.hunk` 与 `.sha` 同写 `#ddf4ff`）。现在 hunk 头有了自己的
+        // `hunkSurface`，这条钉住"**主色改了、diff 没跟着改**" ——
+        // hunk 头是 diff 自己的行文记号，不该被品牌色牵走。
+        // 哪天有人把 `.hunk` 换回 `accentSubtle`，先在这里被拦一次。
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(ColorResolve.distinct(Theme.Palette.hunkSurface, Theme.Palette.accentSubtle, scheme))
+        }
         // 行内代码的底是**半透明**的（要能透出下面的卡片白），不能换成不透明色。
         for scheme in [ColorScheme.light, .dark] {
             #expect(ColorResolve.distinct(Theme.Palette.codeInlineSurface, Theme.Palette.surface, scheme))
@@ -104,11 +113,12 @@ struct Slice6ComponentTests {
         #expect(DiffRow.Tone.allCases.count == 6)
     }
 
-    @Test("行底色：增 / 删各有底色，hunk 头用强调浅底，其余三档**不画底**（用容器的底）")
+    @Test("行底色：增 / 删各有底色，hunk 头用自己的记号底，其余三档**不画底**（用容器的底）")
     func diffRowSurfaces() {
         #expect(DiffRow.surface(.added) == Theme.Palette.diffAddedSurface)
         #expect(DiffRow.surface(.removed) == Theme.Palette.diffDeletedSurface)
-        #expect(DiffRow.surface(.hunk) == Theme.Palette.accentSubtle)
+        // ⚠️ hunk 头**不跟主色**：它有自己的 `hunkSurface`（2026-10-17 从 `accentSubtle` 拆出）。
+        #expect(DiffRow.surface(.hunk) == Theme.Palette.hunkSurface)
 
         // 上下文行在原型里没有 `background`（继承卡片的白）。
         // 三档"没有底色"的必须是**同一个值** —— 各画各的会多出三种看不见的偏差。
@@ -121,12 +131,13 @@ struct Slice6ComponentTests {
         }
     }
 
-    @Test("行文字色：增删各有色，hunk 头走强调色，注解比正文轻一档、未知行与正文同重")
+    @Test("行文字色：增删各有色，hunk 头走自己的记号色，注解比正文轻一档、未知行与正文同重")
     func diffRowTextColors() {
         #expect(DiffRow.textColor(.context) == Theme.Palette.textPrimary)
         #expect(DiffRow.textColor(.added) == Theme.Palette.diffAddedText)
         #expect(DiffRow.textColor(.removed) == Theme.Palette.diffDeletedText)
-        #expect(DiffRow.textColor(.hunk) == Theme.Palette.accent)
+        // ⚠️ 同上：hunk 头的字色也有专属令牌（`hunkText`），它**不是**主色 `accent`。
+        #expect(DiffRow.textColor(.hunk) == Theme.Palette.hunkText)
         #expect(DiffRow.textColor(.note) == Theme.Palette.textTertiary)
         #expect(DiffRow.textColor(.content) == Theme.Palette.textPrimary)
 

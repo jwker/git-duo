@@ -247,13 +247,12 @@ struct RepoDetailView: View {
         }
     }
 
-    /// 色块色档照原型 `05-repo.js` 的 `--ic`（方案 D，走查第 73 条）：
-    /// 代码灰 / Issues 绿 / PR 链接蓝 / Commits 紫。
+    /// 入口的图标色档（方案 D，走查第 73 条）：代码 / Issues / PR / Commits 各一档。
     ///
-    /// ⚠️ 这三个入口**都不是状态**（它们是"去哪个列表"），所以颜色只是沿用
-    /// "这一类东西"的固定色 —— 与列表行上的状态胶囊无关，不要从这里推"这个仓库
-    /// 有没有开放的 Issue"。⚠️ Issues 用的绿是 `accentStrong`（原型 `--green`），
-    /// **不是**开放态的 `stateOpen`（见 `MenuRow.IconTone` 的取值表）。
+    /// ⚠️ **2026-10-17 新口径：四个色块今天一律中性灰。** 主色统一为橙之后，
+    /// "每个入口一个颜色"的彩虹编码与主色打架，而"是哪个入口"本来就已经由
+    /// **图标形状 + 文案** 表达。这个函数**留着** —— 它记的是"这一行是哪个入口"，
+    /// 将来要恢复按类别着色时就是现成的接线（见 `MenuRow.IconTone`）。
     private func tone(for section: RepoSection) -> MenuRow.IconTone {
         switch section {
         case .issues: .green

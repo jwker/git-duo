@@ -221,18 +221,6 @@ struct ThemeTests {
         #expect(onChip < 3.0, "若哪天它达标了，请删掉 §10.7 的已知偏差登记")
     }
 
-    @Test("头像兜底色：8 色、两两可辨（同一屏最多画 8 个，撞色就分不清谁是谁）")
-    func avatarFallbackColorsAreDistinct() {
-        let palette = Theme.Palette.avatarFallback
-        #expect(palette.count == 8)
-
-        for i in palette.indices {
-            for j in palette.indices where j > i {
-                #expect(distance(palette[i], palette[j], .light) > 0.15, "兜底色 \(i) 与 \(j) 过于接近")
-            }
-        }
-    }
-
     @Test("两档下：「其他」段的中性灰与两种底都分得开，且不抢眼（方向随档反转）")
     func shareNeutralIsVisibleButQuiet() {
         for scheme in bothSchemes {
@@ -292,9 +280,12 @@ struct ThemeTests {
             #expect(distance(Theme.Palette.accentSurface, Theme.Palette.surfaceSunken, scheme) > 0.02,
                     "\(scheme) 档已选底与中性底分不开")
 
-            // ② 是"蓝底"：蓝色通道明显高于红色（中性灰的三通道几乎相等）。
+            // ② 是"暖底"：红色通道明显高于蓝色（中性灰的三通道几乎相等）。
+            // ⚠️ 2026-10-17 主色由蓝统一为橙 ⇒ 这一条从 `blue > red` **反了过来**。
+            // 它钉的从来不是"蓝"，而是"**它跟中性灰不是一个族**"这个意思 —— 换成橙之后
+            // 由红通道承担这个信号（判据本身没变，只是方向的来源从 `--link` 换成主色橙）。
             let c = resolved(Theme.Palette.accentSurface, scheme)
-            #expect(c.blue > c.red, "\(scheme) 档已选底不是蓝族")
+            #expect(c.red > c.blue, "\(scheme) 档已选底不是暖色族")
 
             // ③ 强调色文字压在（合成后的）已选底上要达到正文 AA。
             #expect(contrast(Theme.Palette.accent, on: Theme.Palette.accentSurface, scheme: scheme) >= 4.5,

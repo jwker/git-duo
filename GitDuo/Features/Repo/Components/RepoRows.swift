@@ -97,6 +97,8 @@ struct RepoFileRow: View {
 ///      padding:2px 7px;border-radius:6px}
 /// ```
 ///
+/// ⚠️ 上面那段是**出处记录**：`.sha` 的底与字色 2026-10-17 已随主色改橙
+/// （真值在 `SHABadge` / `Theme.Palette.accentSubtle` + `accent`，不是这里的 `#ddf4ff`）。
 /// 第二行是 `{作者} 提交于 {时间}`。⚠️ 作者取不到时**只留时间** ——
 /// 原型那处会拼出 `undefined 提交于 …`（它的演示数据里每个提交都有作者）。
 /// 判据收在 `CommitSummary.metaLabel(now:)`，不在这里各写一次。

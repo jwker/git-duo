@@ -13,7 +13,7 @@ import SwiftUI
 ///
 /// GitHub 只把前 500 个邮箱关联到账号，其余贡献者**没有 `login`、没有头像**
 /// （§9.11 / 决策 #40）。所以 `login` 与 `avatarURL` **都可空**，
-/// 缺名字就用 `?` 占位、缺图片就用确定性的兜底色 —— 而不是让整块区域消失。
+/// 缺名字就用 `?` 占位、缺图片就画**主色描边 + 白底 + 主色字母**的兜底圆 —— 而不是让整块区域消失。
 ///
 /// ## 它是内容层
 ///
@@ -72,15 +72,14 @@ public struct AvatarStack: View {
 
         HStack(spacing: 6) {
             ForEach(shown.indices, id: \.self) { index in
-                // 逐个复用 `UserAvatar` —— 首字母与兜底色算法**只有那一份实现**
+                // 逐个复用 `UserAvatar` —— 首字母的算法**只有那一份实现**
                 // （它原本是本文件私有的，切片 5 把它提到了 `UserAvatar` 上）。
-                // 匿名条目传 `anonymous-<下标>` 当种子：一排没有登录名的头像
-                // 若都用同一个种子会得到同一个颜色、糊成一块。
+                // ⚠️ 2026-10-17 起兜底圆是"白底 + 主色描边 + 主色字母"、**所有人都一样**，
+                //    所以这里不再给匿名条目传 `fallbackSeed` 错开颜色（那个入参已随主色统一删掉）。
                 UserAvatar(
                     login: shown[index].login,
                     avatarURL: shown[index].avatarURL,
-                    diameter: diameter,
-                    fallbackSeed: shown[index].login ?? "anonymous-\(index)"
+                    diameter: diameter
                 )
             }
         }

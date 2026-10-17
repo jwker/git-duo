@@ -72,35 +72,6 @@ struct Slice5ComponentTests {
         #expect(UserAvatar.initial(for: login) == "?")
     }
 
-    @Test("匿名条目的兜底色种子回落到一个固定串 —— 不是随机来一个")
-    func nilSeedFallsBackToFixedString() {
-        #expect(UserAvatar.colorIndex(for: nil) == UserAvatar.colorIndex(for: "anonymous"))
-    }
-
-    @Test("⚠️ 兜底色下标是 djb2 —— **冻结算法**，别改成 `hashValue`")
-    func colorIndexIsFrozen() {
-        // `hashValue` 每个进程带随机种子 ⇒ 同一账号每次冷启动换一个颜色。
-        // 下面两条黄金值把算法钉死；改了算法它们会红，而"改了也没人发现"才是最坏的情况。
-        //
-        // djb2 初值 5381：'a'(97) ⇒ 5381*33 + 97 = 177670；177670 % 8 = 6
-        #expect(UserAvatar.colorIndex(for: "a") == 6)
-        // 空串 ⇒ 一个字节都没走，hash 停在初值：5381 % 8 = 5
-        #expect(UserAvatar.colorIndex(for: "") == 5)
-    }
-
-    @Test("下标恒落在色表范围内（越界会当场崩在 `Theme.Palette.avatarFallback[...]`）")
-    func colorIndexAlwaysInRange() {
-        let logins = [
-            "jiangjiang", "dev-k", "yyx990803", "torvalds", "a", "Z", "9号",
-            "匿名用户", "a-very-long-login-name-that-nobody-would-pick",
-        ]
-        for login in logins {
-            let index = UserAvatar.colorIndex(for: login)
-            #expect(index >= 0)
-            #expect(index < Theme.Palette.avatarFallback.count)
-        }
-    }
-
     @Test("⚠️ `AvatarStack.Member.initial` 与 `UserAvatar.initial` 是**同一份实现**（不是各写一遍）")
     func memberInitialDelegatesToUserAvatar() {
         for login in ["jiangjiang", "Dev-K", "9号", nil, "", "   "] as [String?] {

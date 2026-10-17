@@ -71,7 +71,8 @@ struct MergeSheet: View {
                                     if name == source {
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 14, weight: .bold))
-                                            .foregroundStyle(Theme.Palette.accentStrong)
+                                            // 原型 `color:var(--green)` ⇒ `success`（2026-10-17）。
+                                            .foregroundStyle(Theme.Palette.success)
                                     }
                                 }
                             }

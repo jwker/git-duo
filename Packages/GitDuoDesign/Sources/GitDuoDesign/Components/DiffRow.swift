@@ -14,6 +14,10 @@ import SwiftUI
 ///       font-size:11px;padding:3px 10px}
 /// ```
 ///
+/// ⚠️ **2026-10-17：那一对蓝搬进了 `hunkSurface` / `hunkText` 两个专属令牌**
+/// （此前借的是 `accentSubtle` / `accent`）。主色统一为橙后，diff 的记号**不该跟着变橙** ——
+/// hunk 头是 diff 自己的行文记号，与 `diffAddedText` / `syntaxKeyword` 同类，不是品牌色。
+///
 /// ## ⚠️ 它只收基础类型（判据 #43）
 ///
 /// 收 `number` / `text` / `tone` 三个基础类型，**不认识** `DiffLine` / `DiffHunk`。
@@ -124,7 +128,7 @@ public struct DiffRow: View {
         case .context: .clear
         case .added: Theme.Palette.diffAddedSurface
         case .removed: Theme.Palette.diffDeletedSurface
-        case .hunk: Theme.Palette.accentSubtle
+        case .hunk: Theme.Palette.hunkSurface
         // 两档中性：不发明新视觉（原型没给它们配色）。
         case .note, .content: .clear
         }
@@ -136,7 +140,7 @@ public struct DiffRow: View {
         case .context: Theme.Palette.textPrimary
         case .added: Theme.Palette.diffAddedText
         case .removed: Theme.Palette.diffDeletedText
-        case .hunk: Theme.Palette.accent
+        case .hunk: Theme.Palette.hunkText
         // `\ No newline` 是**注解**（比代码轻一档）；未知行是**原文**（与上下文同重）。
         case .note: Theme.Palette.textTertiary
         case .content: Theme.Palette.textPrimary

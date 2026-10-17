@@ -35,8 +35,11 @@ import SwiftUI
 ///
 /// ## ⚠️ 方案 D：图标是「40pt 实底色块 + 白字形」
 ///
-/// 行上唯一有分量的元素就是这块色 —— 它同时是"这一行是什么类别"的颜色编码（`IconTone`）。
-/// 字形的白由 `foregroundStyle` 给（SF Symbol 整体白色）。
+/// 行上唯一有分量的元素就是这块色。字形的白由 `foregroundStyle` 给（SF Symbol 整体白色）。
+///
+/// ⚠️ **2026-10-17 新口径：色块一律中性灰**，不再按类别着色（原"颜色编码"那套与
+/// 统一成橙的主色打架）。`IconTone` 的档位保留在 API 上是为了让调用点继续表达
+/// "这一行是什么类别"，但今天五档画出的是同一个灰 —— 见 `tileColor`。
 ///
 /// ## ⚠️ 它与 `LinkRow` **不是同一件**
 ///
@@ -83,32 +86,36 @@ public struct MenuRow: View {
     /// 图标色块的色档（方案 D 新增，见类型说明）。
     ///
     /// ⚠️ 判据 **#43**：纯视觉枚举，不认识任何领域模型。
-    /// 色值全部落在 `Theme.Palette` 的既有/新增令牌上（见 `tileColor`）。
+    ///
+    /// ⚠️ **2026-10-17 新口径：五档今天画的是同一个中性灰。**
+    /// 主色统一为橙后，"每个入口一个颜色"那套彩虹编码与主色打架，故取消。
+    /// 档位**不删**：调用点仍按类别传（`.green` = Issues、`.blue` = PR …），
+    /// 这一层信息留着 —— 将来要恢复"按类别着色"时是现成的接线，
+    /// 而**恢复的第一步就是给 `tileColor` 的对应档换回令牌**。
     public enum IconTone: Sendable, Hashable {
 
-        /// 中性灰（原型 `--slate`）—— 代码 / 设置这类"没有专属色"的行，也是**缺省档**。
+        /// 中性灰 —— 代码 / 设置这类"没有专属色"的行，也是**缺省档**，且是今天**唯一的实际取值**。
         case slate
 
-        /// 金（原型 `--gold`）—— Star。
+        /// 金（原 Star 那一档）。
         case gold
 
-        /// 绿（原型 `--green` = `accentStrong`）—— Issues。
+        /// 绿（原 Issues 那一档）。
         case green
 
-        /// 链接蓝（原型 `--link` = `accent`）—— Pull Requests / 收藏。
+        /// 链接蓝（原 Pull Requests / 收藏那一档）。
         case blue
 
-        /// 紫（原型 `--merge` = `stateMerged`）—— Commits。
+        /// 紫（原 Commits 那一档）。
         case purple
 
         /// 色档 → 色块底色。⚠️ 非 `private`：单测要能钉住"哪一档取的是哪个令牌"。
+        ///
+        /// ⚠️ 五档今天同值（见类型说明）—— 这里写成五路同归而不是把参数删掉，
+        /// 是为了让"档位还在、颜色没了"这件事**在唯一一处显形**。
         public var tileColor: Color {
             switch self {
-            case .slate: Theme.Palette.iconTileSlate
-            case .gold: Theme.Palette.iconTileGold
-            case .green: Theme.Palette.accentStrong
-            case .blue: Theme.Palette.accent
-            case .purple: Theme.Palette.stateMerged
+            case .slate, .gold, .green, .blue, .purple: Theme.Palette.iconTileSlate
             }
         }
     }

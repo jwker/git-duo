@@ -12,7 +12,7 @@ import SwiftUI
 ///
 /// | `Style` | 对应官方样式 | 说明 |
 /// |---|---|---|
-/// | `.primary` | `.buttonStyle(.borderedProminent)` + `.tint(accentStrong)` | 主操作（GitHub 绿） |
+/// | `.primary` | `.buttonStyle(.borderedProminent)` + `.tint(accentStrong)` | 主操作（主色 · 2026-10-17 起为橙） |
 /// | `.ghost` | `.buttonStyle(.bordered)` | 次要操作，吃系统默认 tint |
 /// | `.destructive` | `.borderedProminent` + `.tint(destructive)` | 破坏性操作（系统红） |
 ///

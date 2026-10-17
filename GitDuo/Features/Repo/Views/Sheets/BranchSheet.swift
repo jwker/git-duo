@@ -110,10 +110,10 @@ struct BranchSheet: View {
                         .foregroundStyle(Theme.Palette.textPrimary)
                     Spacer(minLength: 0)
                     if branch.name == currentBranch {
-                        // 原型：当前那条右边一个绿色 `✓`。
+                        // 原型：当前那条右边一个绿色 `✓` ⇒ `success`（2026-10-17）。
                         Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Theme.Palette.accentStrong)
+                            .foregroundStyle(Theme.Palette.success)
                     }
                 }
             }

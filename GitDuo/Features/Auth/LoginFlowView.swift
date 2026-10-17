@@ -81,7 +81,8 @@ private struct LoginFormView: View {
                 HStack(alignment: .top, spacing: Theme.Spacing.s) {
                     Image(systemName: "checkmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.Palette.accentStrong)
+                        // 「正向」语义 ⇒ `success`（2026-10-17 主色改橙前，它借的是 `accentStrong` 的绿）。
+                        .foregroundStyle(Theme.Palette.success)
                         .padding(.top, 3)
 
                     VStack(alignment: .leading, spacing: 1) {

@@ -92,11 +92,12 @@ struct ExploreFilterSheet: View {
                     .font(Theme.Font.rowTitle)
                     .foregroundStyle(Theme.Palette.textPrimary)
                 Spacer(minLength: 0)
-                // ✓ 用强调绿（原型 `color:var(--green)`）—— `accentStrong` 就是那个值。
+                // ✓ 是「正向 / 已选中」语义 —— 取 `success`（那对绿）。
+                // 2026-10-17 主色改橙前它借的是 `accentStrong`；那个令牌现在跟主色走、已变橙。
                 if selected == option {
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Theme.Palette.accentStrong)
+                        .foregroundStyle(Theme.Palette.success)
                 }
             }
         }

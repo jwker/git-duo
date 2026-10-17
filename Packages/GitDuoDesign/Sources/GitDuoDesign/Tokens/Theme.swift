@@ -51,9 +51,34 @@ public enum Theme {
         public static let textSecondary   = Color(light: 0x656D76, dark: 0x8D96A0)  // 深 = fgColor-muted
         public static let textTertiary    = Color(light: 0x8B949E, dark: 0x6E7681)  // 深 = fg.subtle（v8 已无该 token；#6E7681 同其 bgColor-neutral-emphasis 真值）
 
-        public static let accent          = Color(light: 0x0969DA, dark: 0x4493F8)  // 深 = fgColor-accent // 链接 / 强调
-        public static let accentStrong    = Color(light: 0x1F883D, dark: 0x238636)  // 深 = button-primary-bgColor-rest // 主按钮（GitHub 绿）
+        /// ⚠️ **2026-10-17 新口径：主色由「蓝 + 绿」统一为「橙」。**
+        ///
+        /// 改色前这里是**两个色相**：`accent` 取原型 `01-base.css` 的 `--link:#0969da`（蓝）、
+        /// `accentStrong` 取 `--green:#1f883d`（绿）。同屏出现会被读成"两个主色"。
+        /// 现在两者是**同一个色相（橙）的两个明度档** —— 这仍然是"一个主色"，
+        /// 因为**色相只有一个**（"统一"要求的是一族色，不是同一个数值）。
+        ///
+        /// 选值依据（`.opencode/color-preview.html` 有实测对照）：
+        /// - `accent` 要当**白底上的链接文字** ⇒ 必须 ≥ 4.5:1 ⇒ `#C2410C` 是橙里能满足这条的上限一带。
+        /// - `accentStrong` 要当**压白字的按钮底** ⇒ 可以更亮 ⇒ `#EA580C`。
+        ///   而且**越亮的橙离危险红越远**（RGB 距离 69，而暗橙 `#C2410C` 只有 48），
+        ///   再往上（`#F97316`）就开始贴到星标金 —— `#EA580C` 是两头都分得开的那个点。
+        /// - 深色档链接取 `#FFA657`（压 `#0D1117` 是 9.77:1，深色模式本就能亮）。
+        public static let accent          = Color(light: 0xC2410C, dark: 0xFFA657)  // 链接 / 强调文字（白底 5.18:1 · 深底 9.77:1）
+        public static let accentStrong    = Color(light: 0xEA580C, dark: 0xEA580C)  // 主按钮底（压白字；浅深同值）
         public static let destructive     = Color(light: 0xCF222E, dark: 0xF85149)  // 深 = fgColor-danger // 危险操作（删除 / 退出登录）
+
+        /// **正向 / 已完成**的绿 —— 各种"已选中 `✓`"与"上涨"数字。
+        ///
+        /// ⚠️ **2026-10-17 从 `accentStrong` 里拆出来**（主色改橙的连带）。
+        /// 改色前这些 `✓` 借的是 `accentStrong` 的绿 —— 原型 `--green` **一个值同时当**
+        /// "主按钮底"和"选中 `✓`"。主色改橙后这两件事必须分开：**主按钮跟主色走**，
+        /// 而"**绿 = 正向**"这条语义要留下（与 `stateOpen` / `diffAddedText` 同一族）。
+        ///
+        /// 取值就是改色前 `accentStrong` 的那对绿 —— 这一支**观感一字未动**。
+        /// ⚠️ 与 `stateOpen`（`#1A7F37`）接近但**不是同一个令牌**：那个是"Issue / PR 开放"这个状态，
+        /// 这个只表"正向 / 完成"，两者互不替代（沿"接近但不是同一个值"的先例）。
+        public static let success         = Color(light: 0x1F883D, dark: 0x238636)  // 原 `accentStrong` 的绿
 
         /// 状态色沿用 GitHub 语义（PRD §1 / §10.7 一致口径）：
         /// 开放 = 绿 · 已合并 = 紫 · 已关闭 = 红 · 已发布 = 紫
@@ -89,6 +114,16 @@ public enum Theme {
         public static let diffAddedText      = Color(light: 0x116329, dark: 0x3FB950)  // 深 = fgColor-success
         public static let diffDeletedSurface = Color(light: 0xFFEBE9, lightAlpha: 1, dark: 0xF85149, darkAlpha: 0.10)  // 深 = bgColor-danger-muted #f851491a
         public static let diffDeletedText    = Color(light: 0xCF222E, dark: 0xF85149)  // 深 = fgColor-danger
+
+        /// **diff 的 hunk 头**（`@@ -1,7 +1,9 @@` 那一行）的底与字。
+        ///
+        /// ⚠️ **2026-10-17 新口径：它不跟主色走。** 它此前借的是 `accentSubtle` + `accent`，
+        /// 主色改橙后会一并变橙 —— 但那不对：hunk 头是 **diff 自己的行文记号**
+        /// （与 `diffAddedText` / `syntaxKeyword` 同类），不是品牌色。
+        /// 所以把改色前的那对蓝（原型 `.hunk{background:#ddf4ff;color:#0969da}`）
+        /// 原样搬进这两个**专属令牌** —— diff 观感一字未动，也从此**不再被主色改动牵连**。
+        public static let hunkSurface = Color(light: 0xDDF4FF, lightAlpha: 1, dark: 0x388BFD, darkAlpha: 0.10)  // 原 `accentSubtle`
+        public static let hunkText    = Color(light: 0x0969DA, dark: 0x4493F8)  // 原 `accent`
 
         /// 代码面底色 —— 搜索结果「代码」范围的等宽预览行（原型
         /// `styles/01-base.css` 的 `--code-bg:#f6f8fa`，用于 `.sr-code`）。
@@ -130,21 +165,20 @@ public enum Theme {
         public static let syntaxString   = Color(light: 0x0A3069, dark: 0xA5D6FF)  // 深 = prettylights.syntax.string
         public static let syntaxComment  = Color(light: 0x6E7781, dark: 0x8B949E)  // 深 = prettylights.syntax.comment
 
-        /// **强调色的浅底** —— 原型 `styles/04-screens.css` 的
-        /// `.hunk{background:#ddf4ff}` **与** `.sha{background:#ddf4ff}`。
+        /// **强调色的浅底** —— 短哈希徽章（`SHABadge`）的底，原型 `.sha{background:#ddf4ff}`。
         ///
-        /// ⚠️ 两处**同值**，故合成一档、不立同值异名（沿 `stateMerged` 同时管
-        /// `.pill.merged` 与 `.pill.closed-i` 的先例）。它管的两件事其实是同一件：
-        /// "**把一段信息标成参考性 / 元信息**"—— diff 的 hunk 头与提交的短 SHA 都是这类。
-        /// 文字色一律配 `accent`（原型的 `.hunk{color:#0969da}` 与 `.sha{color:var(--link)}` 同值）。
+        /// 文字色配 `accent`（原型 `.sha{color:var(--link)}`）：`#C2410C` 压本令牌是 **4.56:1**，
+        /// 与改色前（`#0969DA` 压 `#ddf4ff`）**同一个数**。徽章字号很小（`.caption2`、11pt），
+        /// 底再深一点点（`#FFE9DB` 起）就会掉到 4.5 以下 —— 所以这一档**浅得不能再浅**。
         ///
-        /// ⚠️ 它与 `accentSurface`（`#F0F6FF`，筛选 chip 选中态）**不是**同一个值：
-        /// 这个偏青一档、那个偏灰一档。混用会让 hunk 头与"已选 chip"看起来像同一族控件。
+        /// ⚠️ **2026-10-17 拆分**：它原来**同时**管 diff 的 hunk 头与短 SHA（原型两处都写 `#ddf4ff`）。
+        /// 主色改橙后 hunk 头移去了 `hunkSurface`（diff 的记号不跟品牌色走），本令牌只剩徽章一处。
         ///
-        /// ⚠️ **深色档两处同值**（都取 `bgColor-accent-muted` 的 `#388bfd1a`）—— 有意的合并：
-        /// Primer dark 只给了这一档"强调淡底"，浅色下那 0.06 的色相差在深底上不可辨。
-        /// 两个令牌**仍然分开定义**（沿"同值不是同一个令牌"的判例），将来要拆随时能拆。
-        public static let accentSubtle   = Color(light: 0xDDF4FF, lightAlpha: 1, dark: 0x388BFD, darkAlpha: 0.10)
+        /// ⚠️ 它与 `accentSurface`（更浅一档、筛选 chip 选中态）**不是**同一个值：
+        /// 混用会让徽章与"已选 chip"看起来像同一族控件。
+        ///
+        /// ⚠️ **深色档两处同值**（都取 `#EA580C @0.10`）—— 有意的合并，说明见 `accentSurface`。
+        public static let accentSubtle   = Color(light: 0xFFEDE4, lightAlpha: 1, dark: 0xEA580C, darkAlpha: 0.10)
 
         /// **行内代码**的底 —— 原型 `styles/04-screens.css` 的
         /// `.markdown code{background:rgba(175,184,193,.35)}`。
@@ -206,12 +240,15 @@ public enum Theme {
         /// 筛选 chip 的**已选**底色（原型 `styles/03-components.css` 的 `.fchip.on{background:#f0f6ff}`）。
         ///
         /// 原型这处写的是一个内联色值而非变量，所以它此前没有名字。
-        /// 它是"强调色的极浅底"——与 `accent`（`#0969DA`）成对使用：
+        /// 它是"强调色的极浅底"——与 `accent` 成对使用：
         /// chip 选中时**底 + 边框 + 文字**三处都是强调色的不同浓淡。
         /// ⚠️ 不要拿 `surfaceSunken` 顶替：那是中性灰，会让"已选"看起来像"禁用"。
         ///
-        /// ⚠️ **深色档与 `accentSubtle` 同值**（`#388bfd1a`）—— 有意合并，见那边的说明。
-        public static let accentSurface  = Color(light: 0xF0F6FF, lightAlpha: 1, dark: 0x388BFD, darkAlpha: 0.10)
+        /// ⚠️ **2026-10-17 跟主色改橙**。它比 `accentSubtle`（`#FFEDE4`，徽章底）**更浅一档** ——
+        /// 沿改色前"这个偏灰一档、那个偏青一档"的同一关系（那边深、这边浅），只是色相换成橙。
+        ///
+        /// ⚠️ **深色档与 `accentSubtle` 同值**（`#EA580C @0.10`）—— 有意合并，见那边的说明。
+        public static let accentSurface  = Color(light: 0xFFF1E5, lightAlpha: 1, dark: 0xEA580C, darkAlpha: 0.10)
 
         // MARK: 轻提示（Toast）—— 原型 `styles/05-overlays.css` 的 `.toast`
 
@@ -242,11 +279,18 @@ public enum Theme {
 
         // MARK: 方案 D 的「菜单图标色块」（2026-10-15，走查第 73 条）
         //
-        // 菜单行 / 四行入口的图标从「19pt 灰线稿」升级为「40pt 实底圆角块 + 白字形」，
-        // 色由每行给（原型 `--ic` 内联变量）。五档里三档直接复用既有令牌：
-        // 绿 = `accentStrong`（--green）、蓝 = `accent`（--link）、紫 = `stateMerged`（--merge）；
+        // 菜单行 / 四行入口的图标从「19pt 灰线稿」升级为「40pt 实底圆角块 + 白字形」。
+        //
+        // ⚠️ **2026-10-17 新口径：色块一律取中性灰（`iconTileSlate`）。**
+        // 改色前每行按类别给色（绿 = `accentStrong`、蓝 = `accent`、紫 = `stateMerged`、
+        // 金 = `iconTileGold`，照原型 `--ic` 内联变量）。主色统一为橙之后，
+        // "四个色块的彩虹"与"一个主色"直接打架；而入口类别本来就已经由**图标形状 + 文案**
+        // 表达，颜色那一层是重复信息 ⇒ 退成中性。
+        // `MenuRow.IconTone` 的五个档位**仍在**（调用点照旧按类别传值，将来若要恢复着色是现成的接线），
+        // 但 `tileColor` 今天对五档返回同一个值 —— 见那边的说明。
+        //
         // 金与中性灰是原型新立的两个变量（--gold / --slate），浅色取原型真值，
-        // 深色按"色块要在页面底上浮起来"各自取亮一档。
+        // 深色按"色块要在页面底上浮起来"各自取亮一档。⚠️ 金档自 2026-10-17 起**没有调用点**。
 
         /// 图标色块的**金色**（Star 那一档）—— 原型 `--gold:#d4a72c`。
         ///
@@ -261,18 +305,6 @@ public enum Theme {
         /// 一个是色块底（沿 `repoAvatarSurface` 那条"接近但不是同一个值"的先例）。
         /// 深色取 `#6e7681`（v8.2.0 `bgColor-neutral-emphasis`）。
         public static let iconTileSlate = Color(light: 0x57606A, dark: 0x6E7681)
-
-        /// 头像图片**取不到时**的兜底配色（原型 `scripts/10-explore-repo.js` 的 8 色）。
-        ///
-        /// 取色下标由登录名的稳定哈希决定 —— **不要用 `hashValue`**（Swift 的哈希每个进程随机化，
-        /// 同一账号会在每次启动后换色，甚至在一次会话里因列表重绘而换色）。
-        ///
-        /// ⚠️ **深浅同值**：这是**内容色**（GitHub 语言色系），GitHub 深色界面直接沿用
-        /// 同一套 —— 不走主题映射。
-        public static let avatarFallback: [Color] = [
-            Color(hex: 0x1F883D), Color(hex: 0x8250DF), Color(hex: 0xD73A4A), Color(hex: 0xE16F24),
-            Color(hex: 0x0075CA), Color(hex: 0xDB61A2), Color(hex: 0x5B3A8E), Color(hex: 0x0E8A16),
-        ]
 
         /// 玻璃着色值（浅色约 30% 混合，**深色 50%** —— §10.4 #4：两种模式混合比例不同）
         public static let glassTint       = Color(light: 0xFFFFFF, lightAlpha: 0.30, dark: 0xFFFFFF, darkAlpha: 0.50)

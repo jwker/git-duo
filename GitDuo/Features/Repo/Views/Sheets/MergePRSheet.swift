@@ -88,7 +88,8 @@ struct MergePRSheet: View {
                             .font(Theme.Font.rowTitle)
                             .foregroundStyle(Theme.Palette.textPrimary)
                         // 原型 `<b class="mk" style="color:var(--green)">✓</b>` ——
-                        // 与 `MergeSheet` 的选中标记同一形态（同一个 `accentStrong` + `checkmark`）。
+                        // 与 `MergeSheet` 的选中标记同一形态（同一个 `success` + `checkmark`）。
+                        // ⚠️ 2026-10-17 起是 `success` 而**不是** `accentStrong`：后者跟主色变成橙了。
                         Text(option.detail)
                             .font(Theme.Font.caption)
                             .foregroundStyle(Theme.Palette.textTertiary)
@@ -98,7 +99,8 @@ struct MergePRSheet: View {
                     if option.method == method {
                         Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Theme.Palette.accentStrong)
+                            // 原型 `color:var(--green)` ⇒ `success`（2026-10-17）。
+                            .foregroundStyle(Theme.Palette.success)
                     }
                 }
             }
