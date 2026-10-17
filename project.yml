@@ -67,7 +67,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"       # 纯 iPhone（决策 #2）
         # 【新口径 2026-10-11】App 图标已定稿并接入（此前"暂不补、显式置空"的口径作废）。
         # 定稿 = 黑底酸性绿霓虹一笔画，1024×1024 无 alpha，单尺寸 universal（iOS 单图标规范）。
-        # 仓库根另有母版 gitduo-icon-final-1024.png；appiconset 内那份是构建用副本。
+        # 2026-10-17 起 appiconset 内这份是**唯一**一份（仓库根那份 1024 母版与生图素材已删）。
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SUPPORTS_MACCATALYST: NO

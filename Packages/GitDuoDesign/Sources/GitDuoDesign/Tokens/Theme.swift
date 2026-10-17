@@ -18,7 +18,7 @@ import AppKit
 ///    因此**玻璃着色值也必须走令牌**（`glassTint`），不得内联色值。
 public enum Theme {
 
-    // MARK: - 颜色（浅深双列；浅色取值与原型 `redesign/prototype/styles/01-base.css` 的 `:root` 一致，
+    // MARK: - 颜色（浅深双列；浅色取值原与原型 `styles/01-base.css` 的 `:root` 逐条一致（原型树已删），
     //        深色列统一取自 Primer primitives v8.2.0 dark —— 出处标在各令牌行尾）
 
     public enum Palette {
@@ -717,7 +717,7 @@ private func nsColor(hex: UInt32, alpha: Double) -> NSColor {
 
 private func dynamicNSColor(light: UInt32, lightAlpha: Double,
                             dark: UInt32, darkAlpha: Double) -> NSColor {
-    // ⚠️ 实测（2026-10-15 探针，.workbuddy/probe-dynamic-color.swift）：这条 provider
+    // ⚠️ 实测（2026-10-15 探针，`.opencode/probes/probe-dynamic-color.swift`）：这条 provider
     //    的 resolve 在**非主线程会死锁**（后台线程"resolving…"后不再返回；主线程毫秒级完成）。
     //    本 App 的 target 是 iOS（走 UIColor 那条，不受影响）；macOS 只是包级声明
     //    （swift test 跑 macOS 变体，测试已在 `ThemeTests` 标 `@MainActor` 绕开）。

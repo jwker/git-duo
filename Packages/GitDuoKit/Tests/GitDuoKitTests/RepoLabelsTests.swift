@@ -82,7 +82,8 @@ struct RepoLabelsTests {
     @Test("色板逐字对齐原型 `LBL_COLORS`（去掉 CSS 的 `#`）")
     func paletteMatchesPrototype() {
         // ⚠️ 2026-10-08 换过四档（橙 / 黄 / 粉 / 灰）—— 理由见 `LabelPalette` 的文档注释。
-        // 这份清单必须与 `redesign/prototype/scripts/07-issues.js` 的 `LBL_COLORS` 逐字一致。
+        // 这份清单冻结自原型 `07-issues.js` 的 `LBL_COLORS`（原型树已于 2026-10-17 删除；
+        // 此处就是现正本，再改动要单独说明）。
         #expect(
             LabelPalette.hexes == [
                 "d73a4a", "bc4c00", "9a6700", "0e8a16", "0075ca",

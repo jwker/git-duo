@@ -1,7 +1,7 @@
 # AGENTS.md —— GitDuo 2.0（AI 的唯一常驻入口）
 
 > **读这一份就够。** 规则、命令、代码地图都在这里。
-> ⚠️ **前期文档已全部归档到 `archive/`，默认不要读** —— 只有在要追溯"某个决定当年为什么这么定"时才翻，见 §6。
+> 更细的实测结论与背景说明在 **`.opencode/MEMORY.md`** —— 需要时再翻。
 
 ---
 
@@ -9,18 +9,15 @@
 
 **GitDuo 2.0** —— 一个 iPhone 上的 GitHub 客户端（SwiftUI + Liquid Glass）。
 
-**状态：主体开发已完成。** 十个功能切片全部落地 · 用户走查报回的全部缺陷已修复 · `make verify` 全绿。
-
 - 纯 iPhone（**不做** iPad / 折叠屏）· iOS 27.0 · **零第三方依赖** · Swift 6 严格并发 · xcodegen 生成工程
 - 五包 + 一个 App target（见 §2）
-- **功能**的验收依据 = 原型 `redesign/prototype/`（入口 `index.html`）
-  ⚠️ **2026-10-16 用户澄清（新口径）**：「按原型」指的是**功能**按原型，**不是视觉与原型一模一样**。
-  原型**不再是视觉规格正本** ⇒ 视觉正本 = **Apple HIG / SwiftUI 官方控件**。
-- **进行中的改造**：全面改用 SwiftUI 原生控件，计划与替换清单见 **`NATIVE-MIGRATION.md`**（根目录）。
-  在那份计划走完之前，**不要再为"对齐原型观感"新增自绘件**（反过来：自绘件正在分批退休）。
+- **视觉正本 = Apple HIG / SwiftUI 官方控件。**「按原型」只指**功能**按原型，**不是视觉一模一样**。
+- **方向是"自绘件分批退休、改用官方控件"** ⇒ **不要再为"对齐原型观感"新增自绘件**。
+- ⚠️ **仓库里没有文档层**：规格 / 决策表 / 原型树 / 改造计划都不在工作区（只在 git 历史里）
+  ⇒ 代码注释里的出处引用当"背景说明"读，见 §5 末。
 
-**留给 AI 的活**：维护性改动（修 bug、加小功能、跟随系统升级）。
-**动手前读本文 + 读你要改的那几个文件，就够。** 需要规格细节时按需去 `archive/` 查（§6）。
+**本仓库的活**：维护性改动（修 bug、加小功能、跟随系统升级）。
+**动手前读本文 + 读你要改的那几个文件，就够。**
 
 ---
 
@@ -47,11 +44,10 @@
 
 ### 沙箱：报 `sandbox_apply: Operation not permitted` 时**不要改代码**
 
-**口诀：只要出现 `sandbox_apply: Operation not permitted`，一律是运行环境问题**（不是源码写错了）。
-机理：受限环境里内核拒绝一切嵌套 `sandbox-exec`，而 SwiftPM 与 Xcode **都用它包子进程** ⇒ 症状是
-`Could not resolve package dependencies: sandbox_apply…`（包解析）或 `@Observable` / `#Preview` 报
-*"produced malformed response"*（宏根本没跑起来）。**本项目已在 `Makefile` 里自愈**（`sandbox-fix` 目标先探测，
-健康机器上等于什么都没做）⇒ `build` / `device` 已自动带上。**看到这条别去改代码。**
+**只要出现 `sandbox_apply: Operation not permitted`，一律是运行环境问题**（不是源码写错）。
+机理：受限环境里内核拒绝一切嵌套 `sandbox-exec`，而 SwiftPM 与 Xcode 都用它包子进程 ⇒
+症状是包解析失败，或 `@Observable` / `#Preview` 报 *"produced malformed response"*（宏没跑起来）。
+`Makefile` 已自愈（`sandbox-fix` 先探测，健康机器上等于什么都没做）⇒ `build` / `device` 自动带上。
 
 > 另：**别用 `rm -rf` 做 clean** —— 本环境会拦截它，且 `&&` 短路会让后续命令**压根不执行**（看起来"跑了但没过"）。
 
@@ -114,9 +110,9 @@
 
 ## 4. 改动纪律
 
-1. **先想清楚"这是不是已定过的事"** —— ⚠️ **文档已归档**。动手前若发现要改的是一处**已注册的既有决定**，
-   先去 `archive/` 里把它查出来（决策表 / 有意偏差表），**不要默默改掉一个定过的事**；
-   确属新决定，就在答复里**写明"这是新口径"**。
+1. **先想清楚"这是不是已定过的事"** —— ⚠️ 规格与偏差表的正本**不在工作区**（只在 git 历史里）。
+   拿不准时**别自己拍板**：要么去 git 历史里捞（见 §5 末），要么**问用户**。
+   **不要默默改掉一个定过的事**；确属新决定，就在答复里**写明"这是新口径"**。
 2. **文案是契约** —— 改文案要 grep 全仓（同一句话常散落 4–6 处）；行为类文案改完还要**真跑一遍**确认兑现得出。
 3. **改完必须验证** —— `make verify`；无法验证的改动要在答复里明确说"未验证 + 原因"。
 4. **不要替用户拍板** —— 遇到未定义的点，**给选项与推荐**，不要自定义一个值然后当成事实。
@@ -141,26 +137,8 @@
 **测试** `Packages/<包>/Tests/<包>Tests/` —— Swift Testing（`@Test` / `#expect`）。
 ⚠️ 网络桩件**按命名空间隔离**（每套件自持 `Harness`）⇒ 网络测试可自由并行，**不要加 `.serialized`**。
 
-**原型** `redesign/prototype/` —— 入口 `index.html` + `styles/`(5 CSS) + `scripts/`(16 JS)。
-⚠️ 16 个 JS **共享同一全局作用域，加载顺序即依赖顺序**；**不要给 script 加 `type="module"`**（`file://` 下会被 CORS 拦掉，原型就没法双击打开）。
-
-> ⚠️ 代码注释里到处写着 `TECH_SPEC §x.y` / `决策 #NN` / `偏差第 N 条` —— 这些编号的**正本在 `archive/`**。
-> 读注释时把它们当"背景说明"即可；**要查原委再翻 `archive/`**。
-
 ---
 
-## 6. 归档（`archive/`，默认不读）
-
-**以下全部已归档，AI 默认不要读。** 索引见 `archive/README.md`；只有要追溯"当年为什么这么定"时才查。
-
-| 文件 | 是什么 |
-|---|---|
-| `archive/PRD.md` | 产品需求 —— 页面 / 弹层 / 文案口径 |
-| `archive/TECH_SPEC.md` | 技术规格 —— 架构 / API 映射 / 配额 / 数据模型 / **81 项决策表** |
-| `archive/REVIEW-CHECKLIST.md` | 切片计划正本 + 完成定义 + **走查记录 + 有意偏差表** |
-| `archive/GITHUB-APP-SETUP.md` | GitHub App 运维配置（表单逐栏值 / 权限 6 项 / 错误码对照） |
-| `archive/DEVICE-TESTING.md` | 真机测试流程与 1.8 验收清单 |
-| `archive/AGENTS-full-history.md` | **本文件归档前的完整版** —— 十个切片 + 全部走查修复的逐条实录 |
-| `archive/ai-memory/` | AI 的逐日工作实录 + 细节正本（`DETAILS.md`） |
-
-> AI 的**常驻记忆**现在只剩 `.workbuddy/memory/MEMORY.md`（一屏内），历史全部在 `archive/ai-memory/`。
+> ⚠️ **代码注释里的出处编号 `TECH_SPEC §x.y` / `决策 #NN` / `偏差第 N 条` / `NATIVE-MIGRATION P#`，
+> 以及 `redesign/prototype/**` 这类路径 —— 正本都不在工作区** ⇒ 当"背景说明"读、**别去找那个文件**
+> （找不到是正常的）。要追溯原文只有 git 历史一条路：`git show <删除前那次提交>:archive/TECH_SPEC.md`。

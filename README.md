@@ -1,4 +1,4 @@
-<img src="gitduo-icon-final-1024.png" width="120" alt="GitDuo 图标">
+<img src="GitDuo/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="120" alt="GitDuo 图标">
 
 # GitDuo
 
@@ -29,7 +29,7 @@ make verify                                     # 跑单测 + 构建模拟器版
 
 ## 关于登录
 
-用 GitHub App 的 OAuth 流程登录，凭据存在 Keychain 里，不写日志、不进 UserDefaults。想自己部署的话，需要在 GitHub 上注册一个 App，回调地址填 `gitduo://oauth/callback`，权限勾 Contents、Issues、Pull requests、Metadata、Starring、Followers。具体步骤见 `archive/GITHUB-APP-SETUP.md`。
+用 GitHub App 的 OAuth 流程登录，凭据存在 Keychain 里，不写日志、不进 UserDefaults。想自己部署的话，需要在 GitHub 上注册一个 App，回调地址填 `gitduo://oauth/callback`，权限勾 Contents、Issues、Pull requests、Metadata、Starring、Followers。
 
 ## 代码结构
 
