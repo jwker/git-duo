@@ -21,7 +21,8 @@ import Testing
 ///
 /// 死锁实录（2026-10-15）：断言里大量 `Color.resolve(in:)`，而双列令牌在 **macOS**
 /// （`swift test` 跑的就是 macOS 变体）走 `NSColor(name:)` dynamic provider ——
-/// **非主线程 resolve 直接死锁**（探针实锤：后台线程"resolving…"后 15 秒无返回；
+/// **非主线程 resolve 直接死锁**（探针实锤，源码 `.ai/tools/probe-dynamic-color.swift`：
+/// 后台线程"resolving…"后 15 秒无返回；
 /// 主线程毫秒级完成）。swift-testing 并行/串行执行都不保证主线程 ⇒ 整套件挂起
 /// （`make verify` 第 4 包 20 分钟零输出）。
 ///

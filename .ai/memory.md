@@ -3,60 +3,15 @@
 > 建档 **2026-10-17**。来源：`.workbuddy/memory/`（`MEMORY.md` + 7 份日记，约 240 KB）的提炼，
 > **原目录已删**。仓库入口仍是根目录 `AGENTS.md`。
 >
-> **只读 §1 + §2 就能接手**；§3 之后是查得到的参考件，需要时再翻。
+> **这里只放事实、已定口径与方法论** —— 任务、进度、未完成**一律不在这儿**：那些在 `.ai/prompts/`。
+> **接手时先读 §4 已定口径**（"别再提"清单）与 §5 方法论；其余是查得到的参考件，需要时再翻。
 > ⚠️ **前期文档层（`archive/` 规格 + 决策表、`redesign/` 原型、`NATIVE-MIGRATION.md` 计划）
 > 已于 2026-10-17 从工作区删除**，只在 git 历史里 ⇒ 代码注释里的 `TECH_SPEC §x.y` /
 > `决策 #NN` / `偏差第 N 条` / `NATIVE-MIGRATION P#` 都是**历史出处**，别去找文件。
 
 ---
 
-## §1 当前状态（2026-10-17）
-
-主体已完成，`make verify` 全绿 —— **1776 项 / 153 套件**
-（口径 = 五包各一行 `Test run with N tests in M suites` 相加，**不是** `grep -c "passed after"`，
-那是输出行数）。
-
-**进行中的改造 = 全面改用 SwiftUI 原生控件**（原计划文档 `NATIVE-MIGRATION.md` 已于 2026-10-17 删除，
-只能在 git 历史里取：`git show <删除前那次提交>:NATIVE-MIGRATION.md`）。
-口径：原型降级成「功能清单」，**视觉正本 = Apple HIG / SwiftUI 官方控件**。
-- ✅ **P0** 口径落地 · **P1** 白拿系统行为（骨架 → `.redacted`，102 处自绘骨架全清）· **P2** 按钮与控件样式
-- ✅ **P3** 列表主干（`List` 迁移边界由走查 **89/90** 定型：只迁朴素行列表，富详情页留 `ScrollView`）
-- ✅ **P4** 弹层（`SheetPrimitives` 五件退休；`Repo/Views/Sheets/` 11 个 + `ExploreFilterSheet` 全走 `Form`）
-- ⬜ **P5 令牌收尾 —— 未做**：`Theme.Palette` 48 色 → Asset Catalog / 语义色；`Spacing`/`Radius`/`Font` 瘦身；
-  补 `@ScaledMetric` + 动态类型。**判据：全仓 `@ScaledMetric` 现在 0 处**。
-- ◐ **P6 部分**：保留自绘件（热力图 / diff / Markdown / 高亮 / Toast / 面包屑 / 气泡）内部改用官方积木。
-- 计划里的分组：**A 44 项**有官方对应 · **B 32 项**官方有积木但拼不出原形状、重写 · **C 7 项永远自绘**
-  （**别把这 7 件当成"还没改完"**）。
-
-**主色统一为橙（2026-10-17 新口径）**：原「蓝 + 绿」两个色相 → 一个橙。
-`accent` L`#C2410C`/D`#FFA657`（链接、强调文字）· `accentStrong` `#EA580C`（主按钮实底）；
-**新增 `success`**（= 原 `accentStrong` 的绿）接走 7 处 ✓ / 指标；
-**新增 `hunkSurface`/`hunkText`** 收原 hunk 蓝；`MenuRow.IconTone` 五档统一中性灰。
-
-**T1（给 App target 补测试 target）**：阶段 0–1 ✅（`project.yml` 加 `GitDuoTests`，挂 `TEST_HOST`）。
-**阶段 2（补 ViewModel 测试）/ 阶段 3（`make test-app` 并进 `make verify`）待办** ——
-在此之前 **`make verify` 不编译也不跑 `GitDuoTests`**。
-⚠️ App 层测试必须**整块 `@MainActor`**：项目级 `SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor`
-会让 `#expect` 宏里用 `Route: Equatable` 直接编译失败。
-
----
-
-## §2 铁律
-
-1. 改完必跑 `make verify`。宣布"零警告"前先
-   `find Packages GitDuo -name '*.swift' -print0 | xargs -0 touch` 再跑（**增量构建会吞警告**）。
-   单包用 `make test-<包名>`。
-2. `sandbox_apply: Operation not permitted` = **环境问题，不是代码问题**（`Makefile` 已自愈）⇒ 别去改代码。
-3. **绝不 `git add -A`** —— 逐文件 `git add`。推送走 SSH（`git@github.com:jwker/git-duo.git`）。
-4. 改**已注册的既有决定**前别自己拍板 —— 规格表 / 偏差表的正本已删（只在 git 历史里）；
-   拿不准就**问用户**，别默默改掉一个定过的事；确属新决定要在答复里写明"这是新口径"。
-5. 判据 / 规则写进**领域层纯函数**，不写进 ViewModel —— `make test` **不编译 App target**，
-   写在 ViewModel 的规则跑不进单测。
-6. 改观感必须**真机/模拟器目视**，用户说"我看了没问题"才算落笔。
-
----
-
-## §3 GitHub 侧硬事实（实测，别再重新踩）
+## §1 GitHub 侧硬事实（实测，别再重新踩）
 
 - `GET /contents/{path}` **一个提交字段都没有**（`git/trees` 也没有、无批量接口）
   ⇒ 文件树"每行最近提交"只能逐行问（30 项 = 30 请求）⇒ **决策 #49 已作废**并全链路删除。
@@ -78,7 +33,7 @@
 
 ---
 
-## §4 工具链 / 本机环境硬事实
+## §2 工具链 / 本机环境硬事实
 
 - **包级 `xcodebuild test` 在本机跑不动**：`.iOS("27.0")` 要有 iOS 27 设备（本机有 runtime、无设备），
   `#Preview` 还会报 `swift-plugin-server produced malformed response`
@@ -97,10 +52,15 @@
   后台任务的 `/tmp` 与当前 shell **互相隔离**，不能跨 shell `tail` 它的日志。
 - `ToastCenter` 时序断言在高负载全量轮**偶发假红、单包重跑即过**（走查 77/78/81/82/85 条多次）⇒ 见到先重跑。
 - App Store 官方宣传图取全分辨率：把 `screenshotUrls` 的 `/320x480bb.jpg` 换成 `/1290x2796bb.png`。
+- **测试计数口径**：项数 / 套件数 = 五包各一行 `Test run with N tests in M suites` **相加**
+  （2026-10-17 实测 = **1776 项 / 153 套件**）；**别用** `grep -c "passed after"` —— 那是输出行数，不是用例数。
+- ⚠️ **App 层测试必须整块标 `@MainActor`**：项目级 `SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor` 会把 App 层
+  每个类型连同 conformance 都变成 MainActor 隔离 ⇒ `#expect` 宏里用 `Route: Equatable` 直接**编译失败**。
+  （详细实测过程：`.ai/prompts/T1-app-layer-test-target-plan.md` §阶段 1。）
 
 ---
 
-## §5 SwiftUI / iOS 27 硬事实
+## §3 SwiftUI / iOS 27 硬事实
 
 - **顶栏三档实测**：`.inline` = 17pt **居中**；`.large` = 34pt 靠左**但在内容区**；
   「顶栏 + 放大 + 居左」系统**给不出** ⇒ 只能自绘放 `topBarLeading`。
@@ -108,7 +68,8 @@
   还要用 1×1 透明 `principal` 顶掉系统的 inline 标题（否则屏上出现两遍标题）。
 - iOS 26+ 工具栏默认给自定义视图套**玻璃胶囊** ⇒ 要做正圆得 `ToolbarItem.sharedBackgroundVisibility(.hidden)`。
 - 动态色 `Color ==` 比的是**实例身份不是值**；NSColor resolve 与 SwiftUI 直构在 Float32 最低位差 **1 ulp**
-  ⇒ 比较要**半格（0.5/255）容差**（`Tests/GitDuoDesignTests/ColorResolve.swift`）。
+  ⇒ 比较要**半格（0.5/255）容差**（`Tests/GitDuoDesignTests/ColorResolve.swift`；
+  实测源码 `.ai/tools/probe-resolve-drift.swift`）。
 - `.swipeActions` **只在 `List` 行里生效**（`ScrollView + CardBox` 里是死手势）。
 - `.alert` **没有 `onDismiss`** ⇒ 用 `.onChange(of: 呈现值)` 接"关完了"这一刻。
 - `.safeAreaInset(edge: .top)` 会**吞掉大标题**；「大标题 + 分组形状 + 吸顶」**三者不可兼得**。
@@ -141,10 +102,16 @@
 
 ---
 
-## §6 已定口径（最容易搞错的几条）
+## §4 已定口径（最容易搞错的几条）
 
 - **2026-10-16 新口径**：「按原型」= **功能**按原型，**不是视觉一模一样**；视觉正本 = Apple HIG。
-- **2026-10-17 新口径**：主色统一为橙（见 §1）。
+- **2026-10-17 新口径**：主色统一为**橙** —— 原「蓝 + 绿」两个色相 → 一个橙。
+  `accent` L`#C2410C`/D`#FFA657`（链接、强调文字）· `accentStrong` `#EA580C`（主按钮实底）；
+  原 `accentStrong` 的绿改由**新增 `success`** 承担（接走 7 处 ✓ / 指标）；
+  **新增 `hunkSurface` / `hunkText`** 收原 hunk 蓝；`MenuRow.IconTone` 五档统一中性灰。
+- **2026-10-17 新口径**：AI 工作区 = `.ai/`（原 `.opencode/`），且**全进库** —— 不给它加任何 ignore 规则，
+  **没有"进库 / 不进库"之分**（旧的 `.ai/*` + 白名单、以及 `sessions/ logs/ cache/ index/` 四个运行时目录，**均已作废**）。
+  存放规则由 `AGENTS.md` §6 **自己讲全**（放哪 / 何时放 / 怎么写）；`.ai/init.md` 只是开新项目时的脚手架，**执行任务不读它**。
 - **2026-10-13 用户整体否决 UI 视觉改版**（"不好看，放弃 UI 改版"）——
   但 **10-15 晚用户主动重启卡片改版，推翻前者**。现行视觉 = **方案 A**
   （浅灰页 `0xF6F8FA` + 白卡 + 卡间 10 + 卡内 hairline）；**方案 D 已作废**。
@@ -172,7 +139,7 @@
 
 ---
 
-## §7 方法论（这些是省往返的）
+## §5 方法论（这些是省往返的）
 
 - **退回验证**：把判据临时改坏 ⇒ 断言**必须变红并点名** ⇒ 再还原。
   **只绿不变红 = 测试没咬住东西**（本项目惯例）。视图身份 / `.task` 时机这类无可写单测的，
@@ -194,29 +161,3 @@
 - 本仓 Swift 里自然语言引号用 `「」`，**别用 ASCII `"`**（会截断报错）。
 - 改文案 / 改名要 **grep 全仓**（含注释、原型、harness）；删符号时连注释里的引用一起数。
 - 改共享令牌前**先查借用链**，并数清这族落在几种底上（面板 / 页面 / 弹层），批量替换后逐处复查。
-
----
-
-## §8 未完成 / 待目视
-
-- **T1 阶段 2 / 3**（见 §1）。`Packages/GitDuoKit` 里三处「App target 没有测试 target」的注释
-  （`Package.swift`、`PagedListState.swift`、`LoadState.swift`）**已过期**。
-- ⚠️ **深色档至今一次都没在真机上看过**：三级层次（页面 `0x0D1117` / 卡面 `0x161B22` / 卡内控件 `0x0D1117`）、
-  约 20 屏、跟随系统即时变色、强制档锁住、Toast 浮起、玻璃 tint 50% 是否过浓。
-- 历史未目视项：走查 **66/67/68/70/72/74/76** 条的形变与观感；**`Menu` 的 iOS 外观**
-  （自定义 label 会不会被套 tint / 自带按钮样式）；README 去面板通栏效果；长数字折行后是否顶齐；
-  年份切换器在途转圈（`HeatmapHeader` 的 Preview 里并排摆着在途与不在途）。
-- 待用户选定：`DiffCard → DisclosureGroup`（会丢有意保留的 `▾`）· `LanguageBar → Swift Charts`
-  （布局与无障碍会变）· `.searchSuggestions` 没接 · 全站列表行是否补回 chevron
-  （P3 如实登记的跨页不一致：首批六页无 chevron、第二批有）。
-- 两处清脏：`UserProfileSheet.swift:210` 圆角字面量 `9`（应用 `Theme.Radius.control`）·
-  `LoginFlowView.swift:91` 漏 `.continuous`。
-- 待裁定：`ExploreRepoCopy.failureTitle`（"加载失败 · 点击重试"）vs `PageFailure.title`（正本无"点击重试"）；
-  三个 Explore 页各自的 failure 状态未并入 `PageFailure`。
-- 编辑器新建模式提交成功后**不刷新上一页目录**（`EditorViewModel.submit` 不调 `tree.reload()`；
-  `RepoDetailView` 的 `.task` 因 `hasFinished` 不重跑）—— 与走查 **#98** 相关，未改。
-- 热力图 **A 案**（窗口起点改按 UTC 日历算、治本）留待坐实服务端切日口径；
-  B 案已知代价：`totalContributions` 不裁 ⇒ 可能"空网格 + 非零总数"。
-- md 图片两处已知代价：**下载完才知道高度 ⇒ 布局会跳**；仓库外的图拿不到原始尺寸 ⇒ 小图标被放大到整屏宽。
-- `ProfileViewModel.load(year:)` 的 `guard !isLoading` 仍在 ⇒ 首屏取数期间点年份会被**静默丢弃**。
-- **App 卡在 GitHub 登录**（本机无真令牌）⇒ 大量 UI 改动属"未目视"，只经用户过目后提交。

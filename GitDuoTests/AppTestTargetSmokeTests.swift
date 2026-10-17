@@ -14,7 +14,7 @@ import Testing
 ///    ⇒ 证明 `TEST_HOST` 已挂上、测试确实跑在 **App 进程**里
 ///    （不是被当成一个独立进程；这是 `@testable import` 一个 application 的前提）。
 ///
-/// 计划与背景：`.opencode/T1-app-layer-test-target-plan.md`
+/// 计划与背景：`.ai/prompts/T1-app-layer-test-target-plan.md`
 ///
 /// ## ⚠️ 为什么整块标 `@MainActor`（阶段 1 实测得出的硬结论）
 ///

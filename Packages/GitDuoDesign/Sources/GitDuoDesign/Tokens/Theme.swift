@@ -58,7 +58,7 @@ public enum Theme {
         /// 现在两者是**同一个色相（橙）的两个明度档** —— 这仍然是"一个主色"，
         /// 因为**色相只有一个**（"统一"要求的是一族色，不是同一个数值）。
         ///
-        /// 选值依据（`.opencode/color-preview.html` 有实测对照）：
+        /// 选值依据（`.ai/evidence/color-preview.html` 有实测对照）：
         /// - `accent` 要当**白底上的链接文字** ⇒ 必须 ≥ 4.5:1 ⇒ `#C2410C` 是橙里能满足这条的上限一带。
         /// - `accentStrong` 要当**压白字的按钮底** ⇒ 可以更亮 ⇒ `#EA580C`。
         ///   而且**越亮的橙离危险红越远**（RGB 距离 69，而暗橙 `#C2410C` 只有 48），
@@ -717,7 +717,7 @@ private func nsColor(hex: UInt32, alpha: Double) -> NSColor {
 
 private func dynamicNSColor(light: UInt32, lightAlpha: Double,
                             dark: UInt32, darkAlpha: Double) -> NSColor {
-    // ⚠️ 实测（2026-10-15 探针，`.opencode/probes/probe-dynamic-color.swift`）：这条 provider
+    // ⚠️ 实测（2026-10-15 探针，`.ai/tools/probe-dynamic-color.swift`）：这条 provider
     //    的 resolve 在**非主线程会死锁**（后台线程"resolving…"后不再返回；主线程毫秒级完成）。
     //    本 App 的 target 是 iOS（走 UIColor 那条，不受影响）；macOS 只是包级声明
     //    （swift test 跑 macOS 变体，测试已在 `ThemeTests` 标 `@MainActor` 绕开）。

@@ -93,7 +93,7 @@ targets:
               - gitduo
         ITSAppUsesNonExemptEncryption: false
 
-  # App 层单测（T1 —— 计划见 .opencode/T1-app-layer-test-target-plan.md）。
+  # App 层单测（T1 —— 计划见 .ai/prompts/T1-app-layer-test-target-plan.md）。
   #
   # ⚠️ 目录**必须在仓库根**：App target 的 sources 是 `path: GitDuo`，
   #    测试若放进 GitDuo/ 里会被**编进 App 本体**。
