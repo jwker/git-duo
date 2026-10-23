@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>方案 A · 圆形玻璃悬浮按钮（GitDuo）</title>
+<style>
+:root{
+  --bg:#F6F8FA; --surface:#FFFFFF; --sunken:#EFF2F5; --border:#D0D7DE; --border-soft:#E8ECEF;
+  --t1:#1F2328; --t2:#656D76; --t3:#8B949E; --accent:#C2410C; --accent-strong:#EA580C;
+  --success:#1F883D; --danger:#CF222E;
+  --glass:rgba(255,255,255,.60); --glass-edge:rgba(255,255,255,.75);
+  --shadow:0 10px 28px rgba(31,35,40,.18); --tabbar:rgba(249,250,251,.78);
+}
+[data-theme=dark]{
+  --bg:#0D1117; --surface:#161B22; --sunken:#0D1117; --border:#30363D; --border-soft:rgba(48,54,61,.70);
+  --t1:#E6EDF3; --t2:#8D96A0; --t3:#6E7681; --accent:#FFA657; --accent-strong:#EA580C;
+  --success:#238636; --danger:#F85149;
+  --glass:rgba(22,27,34,.62); --glass-edge:rgba(255,255,255,.10);
+  --shadow:0 10px 28px rgba(0,0,0,.55); --tabbar:rgba(22,27,34,.80);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t1);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px;display:grid;grid-template-columns:1fr 420px;gap:40px;align-items:start}
+@media(max-width:980px){.wrap{grid-template-columns:1fr}}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:17px;margin:36px 0 10px;letter-spacing:-.01em}
+p{margin:0 0 12px;color:var(--t2)}
+.lede{font-size:15px;color:var(--t2);margin-bottom:20px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:0 0 8px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+th{color:var(--t3);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td code,kbd{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--sunken);padding:1px 5px;border-radius:5px}
+ul{margin:0 0 12px;padding-left:20px;color:var(--t2)}li{margin:4px 0}
+.tag{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--sunken);color:var(--t2);border:1px solid var(--border-soft);margin-right:6px}
+.note{border-left:3px solid var(--accent);background:var(--sunken);padding:12px 14px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.5px;color:var(--t2)}
+
+/* ---------- 手机外壳 ---------- */
+.stage{position:sticky;top:32px;display:flex;flex-direction:column;align-items:center;gap:18px}
+.phone{position:relative;width:390px;height:844px;border-radius:52px;background:var(--bg);
+  box-shadow:0 0 0 10px #1b1f24,0 0 0 12px #33383d,var(--shadow);overflow:hidden}
+.statusbar{position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:center;justify-content:space-between;
+  padding:14px 30px 0;font-size:13.5px;font-weight:600;color:var(--t1);z-index:6;pointer-events:none}
+.statusbar .r{display:flex;gap:5px;align-items:center;opacity:.9}
+.navbar{position:absolute;top:54px;left:0;right:0;height:48px;display:flex;align-items:center;justify-content:center;
+  font-size:17px;font-weight:600;color:var(--t1);z-index:5}
+.navbar .back{position:absolute;left:14px;color:var(--accent);display:flex;align-items:center;gap:2px;font-size:16px;font-weight:400}
+.scroll{position:absolute;inset:102px 0 96px;overflow:hidden;padding:6px 16px 120px}
+.card{background:var(--surface);border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--border-soft)}
+.card+.card{margin-top:14px}
+.card h3{margin:0;padding:12px 16px 8px;font-size:13px;color:var(--t2);font-weight:600}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-soft);font-size:15px}
+.row:last-child{border-bottom:none}
+.row .lead{width:22px;height:22px;border-radius:6px;background:var(--sunken);display:grid;place-items:center;flex:0 0 auto;color:var(--t2)}
+.row .lbl{color:var(--t1);flex:1}
+.row .val{color:var(--t2);font-size:15px;display:flex;align-items:center;gap:4px}
+.row .val.mono{font:13px ui-monospace,Menlo,monospace}
+.chev{color:var(--t3)}
+.hero{background:var(--surface);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 0 0 1px var(--border-soft)}
+.hero .t{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.hero .s{color:var(--t2);font-size:13.5px;margin-top:4px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 10px;border-radius:99px;background:var(--sunken);color:var(--t2)}
+
+/* ---------- Tab 栏 ---------- */
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:83px;display:flex;padding:8px 8px 26px;
+  background:var(--tabbar);backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);
+  border-top:.5px solid var(--border-soft);z-index:4}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--t3);font-size:10.5px}
+.tab.on{color:var(--accent)}
+.tab svg{width:24px;height:24px}
+
+/* ---------- FAB ---------- */
+.fab{position:absolute;right:18px;bottom:99px;width:56px;height:56px;border-radius:28px;z-index:7;
+  display:grid;place-items:center;cursor:pointer;
+  background:var(--glass);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
+  box-shadow:inset 0 0 0 .5px var(--glass-edge),0 6px 18px rgba(31,35,40,.22);
+  transition:transform .18s cubic-bezier(.2,.8,.2,1),opacity .18s}
+.fab:hover{transform:scale(1.04)}
+.fab:active{transform:scale(.94)}
+.fab svg{width:26px;height:26px;color:var(--t1)}
+.fab .shadow-fab{position:absolute;inset:0;border-radius:28px;box-shadow:0 10px 30px rgba(31,35,40,.28);opacity:0;transition:opacity .2s}
+.fab.show{opacity:0;pointer-events:none}
+.hint{position:absolute;right:82px;bottom:113px;z-index:7;background:var(--glass);color:var(--t1);font-size:13px;
+  padding:8px 12px;border-radius:12px;box-shadow:inset 0 0 0 .5px var(--glass-edge),0 6px 16px rgba(31,35,40,.16);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);opacity:0;transition:opacity .25s;pointer-events:none}
+.hint.show{opacity:1}
+
+/* ---------- 弹层 ---------- */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:8;opacity:0;pointer-events:none;transition:opacity .28s}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:700px;background:var(--bg);z-index:9;
+  border-radius:14px 14px 0 0;transform:translateY(101%);transition:transform .34s cubic-bezier(.32,.72,0,1);
+  box-shadow:0 -1px 0 var(--border-soft)}
+.sheet.show{transform:translateY(0)}
+.grabber{width:36px;height:5px;border-radius:3px;background:var(--border);margin:6px auto 0}
+.sheetnav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 8px}
+.sheetnav .t{font-size:17px;font-weight:600}
+.sheetnav .act{color:var(--accent);font-size:16px}
+.sheetbody{position:absolute;inset:52px 0 0;overflow:auto;padding:0 16px 30px}
+.group{background:var(--surface);border-radius:12px;overflow:hidden;margin-bottom:16px;box-shadow:0 0 0 1px var(--border-soft)}
+.group>.hd{padding:12px 16px 6px;font-size:12.5px;color:var(--t2);font-weight:600;text-transform:none}
+.group .row{padding:13px 16px}
+.hintline{padding:10px 16px 14px;font-size:12.5px;color:var(--t3);line-height:1.5}
+.primary{margin:4px 0 10px;padding:14px;border-radius:12px;background:var(--accent-strong);color:#fff;font-size:16px;font-weight:600;text-align:center}
+.secondary{padding:13px;border-radius:12px;background:var(--surface);color:var(--accent);font-size:16px;text-align:center;box-shadow:0 0 0 1px var(--border-soft)}
+.picker{border:1.5px dashed var(--border);border-radius:12px;padding:22px 16px;text-align:center;color:var(--t2);background:var(--surface);margin-bottom:12px}
+.picker .ic{font-size:26px;margin-bottom:6px}
+.preview{display:flex;gap:12px;align-items:center;padding:12px 16px}
+.thumb{width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,#f0a05a,#c2410c);flex:0 0 auto}
+.meta .n{font-size:14.5px;font-weight:600}
+.meta .d{font-size:12.5px;color:var(--t2);margin-top:2px}
+.arrow{color:var(--t3);font-size:12.5px}
+.sizes{display:flex;gap:8px;align-items:center;margin-top:4px}
+.sizes .old{text-decoration:line-through;color:var(--t3);font-size:12.5px}
+.sizes .new{color:var(--success);font-size:12.5px;font-weight:600}
+.field{width:100%;border:1px solid var(--border);border-radius:10px;padding:11px 12px;font:15px/1.4 inherit;background:var(--surface);color:var(--t1)}
+.field:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.success{padding:26px 20px 8px;text-align:center}
+.success .ring{width:64px;height:64px;border-radius:32px;background:var(--success);color:#fff;display:grid;place-items:center;margin:0 auto 14px;box-shadow:0 8px 20px rgba(31,135,61,.32)}
+.pathbox{margin:14px 0 4px;background:var(--sunken);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;text-align:left}
+.pathbox code{flex:1;font:13px/1.5 ui-monospace,Menlo,monospace;color:var(--t1);word-break:break-all}
+.copy{flex:0 0 auto;display:flex;align-items:center;gap:5px;background:var(--surface);color:var(--accent);border-radius:8px;padding:7px 11px;font-size:13.5px;font-weight:600;box-shadow:0 0 0 1px var(--border-soft);cursor:pointer}
+.copy.done{color:var(--success)}
+
+/* ---------- 状态切换 ---------- */
+.controls{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:390px}
+.controls button{font:13.5px inherit;padding:8px 14px;border-radius:99px;border:1px solid var(--border);background:var(--surface);color:var(--t1);cursor:pointer}
+.controls button.on{background:var(--accent-strong);color:#fff;border-color:transparent}
+.toggles{display:flex;gap:8px}
+.toggles button{font:13px inherit;padding:6px 12px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--t2);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section>
+    <span class="tag">方案 A</span><span class="tag">圆形玻璃 FAB</span><span class="tag">iOS 26/27 Liquid Glass</span>
+    <h1>圆形玻璃悬浮按钮 + 单页分组弹层</h1>
+    <p class="lede">按钮是 56pt 的玻璃圆片，浮在右下角（Tab 栏之上）；点开是一张原生 <code>Form</code> 弹层，
+      从「选目标仓库与目录」一路走到「上传成功 + 复制相对路径」。这是三个方案里最贴 iOS 官方语言的：
+      按钮形状与材质用系统那一套，内容组织用原生 <code>Form</code>，没有一处自绘控件。</p>
+
+    <h2>按钮规格</h2>
+    <table>
+      <tr><th>项</th><th>取值</th><th>理由</th></tr>
+      <tr><td>形状 / 尺寸</td><td>圆形 56 × 56 pt，圆角 28</td><td>56 是 iOS 主按钮的最小舒适尺寸；圆形让「浮」的感觉成立</td></tr>
+      <tr><td>位置</td><td>右边缘内缩 18pt，底边在 Tab 栏顶上方 16pt（= 设备安全区 34 + 82 视觉高度）</td><td>拇指可达区；同时不压 Tab 栏</td></tr>
+      <tr><td>材质</td><td><code>.glassEffect</code>（regular），叠 <code>Theme.Palette.glassTint</code></td><td>铁律 #4：玻璃只属导航层，FAB 属悬浮层，不进内容层</td></tr>
+      <tr><td>图标</td><td>SF Symbol <code>photo.badge.plus</code>（落地前用 <code>NSImage(systemSymbolName:)</code> 探针核实）</td><td>「加一张图」的语义；备选 <code>square.and.arrow.up</code></td></tr>
+      <tr><td>命中区</td><td>视觉 56pt，外扩到 64pt 透明命中区</td><td>视觉尺寸不等于命中尺寸</td></tr>
+      <tr><td>出现时机</td><td><strong>全局</strong>：每个页面常驻（首页 / 探索 / 仓库列表 / 搜索 / 仓库页 / 详情页 / 设置页）</td><td>入口是全局能力，不绑某一页；键盘弹出时收起，文本输入中隐藏</td></tr>
+      <tr><td>目标记忆</td><td>第一次选过目标后，之后点开<strong>直接进入上传</strong>，不再问仓库</td><td>记忆项 = 仓库 + 目录 + 分支；失效时回落到选目标</td></tr>
+      <tr><td>滚动行为</td><td>随内容滚动吸底，滚到底不隐藏</td><td>隐藏式 FAB 会让用户以为功能没了</td></tr>
+    </table>
+
+    <h2>弹层结构：第一次与之后不一样</h2>
+    <p>目标（仓库）<strong>只问一次</strong>。第一次点开是「选目标」；之后每次点开都<strong>直接进上传</strong>，
+      目标以一行只读摘要带在顶部，旁边一个「换目标」把它带回选目标那一屏。</p>
+    <table>
+      <tr><th>分组</th><th>内容</th><th>备注</th></tr>
+      <tr><td>目标（首次）</td><td>仓库 › 目录 › 分支（三行，各带 chevron）</td><td>未选仓库时目录行显示「先选一个仓库」</td></tr>
+      <tr><td>目标（之后）</td><td>一行只读摘要 + 「换目标」</td><td>记忆失效（仓库改名 / 目录被删 / 分支不存在）时自动回落到选目标</td></tr>
+      <tr><td>图片</td><td>相册选择器 + 压缩预览（原价 → 压缩后）</td><td>压缩规则复用 <code>UploadIntake</code>（≤1MB 且格式可渲染则原样放行）</td></tr>
+      <tr><td>提交</td><td>提交说明输入框 + 「上传」主按钮</td><td>写入走 <code>PUT /contents</code>，必须有 commit message</td></tr>
+      <tr><td>成功</td><td>✓ 图标 + 相对路径 + 「复制路径」按钮</td><td>路径 = 仓库内相对路径（不含仓库名）</td></tr>
+    </table>
+
+    <div class="note">
+      <strong>为什么成功提示不只用 Toast：</strong>现有 <code>Toast</code> 是纯文字块，承载不了「复制」这个动作。
+      所以成功态<strong>留在弹层里</strong>（弹层不自动关），复制按钮就在路径旁边；
+      如果用户中途把弹层划走，再用一句 Toast 兜底告知「已上传」。
+    </div>
+
+    <h2>文案</h2>
+    <table>
+      <tr><th>位置</th><th>文案</th></tr>
+      <tr><td>弹层标题</td><td>上传图片</td></tr>
+      <tr><td>未选仓库时目录行</td><td>先选一个仓库</td></tr>
+      <tr><td>压缩预览</td><td>3.2 MB → 812 KB（已转成 .jpg）</td></tr>
+      <tr><td>成功标题</td><td>已上传</td></tr>
+      <tr><td>复制按钮</td><td>复制路径</td></tr>
+      <tr><td>复制后</td><td>已复制（按钮变绿，不弹 Toast）</td></tr>
+    </table>
+
+    <h2>落地归属（照架构铁律）</h2>
+    <ul>
+      <li>按钮组件 → <code>Packages/GitDuoDesign/Components/FloatingActionButton.swift</code>
+        （<code>.glassEffect</code> 只能出现在设计包，AGENTS.md §3 铁律 #4）</li>
+      <li>按钮的<strong>安放点</strong> → <code>GitDuo/App/MainTabView.swift</code> 的 <code>.overlay(alignment: .bottomTrailing)</code>，
+        与 <code>Toast</code> 同一个通道（那边已有一层 overlay，四个 Tab 与七条导航栈共用）。
+        <strong>不是每页各放一个</strong> —— 全局入口只能有一个实例。</li>
+      <li>弹层 → <code>GitDuo/Features/Repo/Views/Sheets/UploadImageSheet.swift</code>，
+        沿用 <code>AddFileSheet</code> 的「原生 Form + 组合根注入 <code>UploadIntake</code>」写法</li>
+      <li>选仓库 / 选目录的判据 → 领域层 <code>GitDuoKit</code>（<code>LoadRepositoriesPage</code> / <code>LoadRepoTree</code> 复用），
+        铁律 #14：规则写纯函数，不写 ViewModel</li>
+    </ul>
+
+    <h2>取舍</h2>
+    <ul>
+      <li><strong>优点</strong>：形状最像 iOS 自己的东西；圆形不占横向空间，代码页与列表页都不挤；
+        56pt 命中区在单手下够得着。</li>
+      <li><strong>代价</strong>：圆形按钮只有图标，<strong>可发现性弱</strong>——用户第一眼不知道它是"上传图片"。
+        缓解办法：首次进入时在按钮左侧弹一次玻璃提示气泡（见右侧「?」可试），
+        或把图标换成带「+」的 <code>photo.badge.plus</code> 让意图更直白。</li>
+      <li><strong>代价</strong>：一次要选仓库 + 目录 + 分支 + 图片 + 提交信息，弹层偏长；
+        选仓库那一段需要 push 一级（见 <code>sheet-flows.html</code> 的流程对比）。</li>
+      <li><strong>注意</strong>：按钮全局常驻，所以「目标记忆」是必需品而不是加分项 ——
+        没有它，全局入口每次都要重选仓库，用两次就烦了。</li>
+    </ul>
+  </section>
+
+  <aside class="stage">
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="r">
+        <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg>
+        <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.5 10 8.2a3 3 0 0 0-4 0zM8 5.2c1.7 0 3.3.6 4.5 1.8l1.4-1.6A8 8 0 0 0 8 3a8 8 0 0 0-5.9 2.4l1.4 1.6A6 6 0 0 1 8 5.2M8 1.4c2.4 0 4.7.9 6.4 2.4l1.4-1.6A11 11 0 0 0 8 0 11 11 0 0 0 .2 2.2L1.6 3.8A9.9 9.9 0 0 1 8 1.4" fill="currentColor"/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3.5" stroke="currentColor" fill="none"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2 2 0 0 0 0-4" fill="currentColor"/></svg>
+      </span></div>
+      <div class="navbar"><span class="back">‹ 仓库</span>my-app</div>
+
+      <div class="scroll">
+        <div class="hero">
+          <div class="t">my-app</div>
+          <div class="s">jwker / my-app · 更新于 2 小时前</div>
+          <div style="margin-top:10px"><span class="pill">★ 128</span> <span class="pill">⑂ 12</span> <span class="pill">TypeScript</span></div>
+        </div>
+        <div class="card">
+          <h3>代码</h3>
+          <div class="row"><span class="lead">📁</span><span class="lbl">src</span><span class="chev">›</span></div>
+          <div class="row"><span class="lead">📁</span><span class="lbl">assets</span><span class="chev">›</span></div>
+          <div class="row"><span class="lead">📄</span><span class="lbl">README.md</span><span class="chev">›</span></div>
+        </div>
+        <div class="card">
+          <h3>最近提交</h3>
+          <div class="row"><span class="lbl">修复登录超时</span><span class="val">2 小时前</span></div>
+          <div class="row"><span class="lbl">补单测</span><span class="val">昨天</span></div>
+        </div>
+      </div>
+
+      <!-- Tab 栏 -->
+      <div class="tabbar">
+        <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>首页</div>
+        <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>探索</div>
+        <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v14H4z"/><path d="M4 10h16M9 5v14"/></svg>仓库</div>
+        <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>搜索</div>
+      </div>
+
+      <!-- FAB -->
+      <button class="fab" id="fab" title="上传图片">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m4 17 4.5-4.2 3.3 3 3-2.6L20 17"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="position:absolute;right:6px;bottom:6px;width:15px;height:15px;color:var(--accent-strong)"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <div class="hint" id="hint">上传图片到仓库</div>
+
+      <div class="scrim" id="scrim"></div>
+      <div class="sheet" id="sheet">
+        <div class="grabber"></div>
+        <div class="sheetnav"><span class="act" id="navLeft">取消</span><span class="t" id="navTitle">上传图片</span><span class="act" id="navRight"></span></div>
+        <div class="sheetbody" id="body"></div>
+      </div>
+    </div>
+
+    <div class="controls" id="steps">
+      <button data-s="target" class="on">① 首次选目标</button>
+      <button data-s="again">② 再次直达</button>
+      <button data-s="commit">③ 提交</button>
+      <button data-s="done">✓ 成功</button>
+    </div>
+    <div class="toggles">
+      <button id="themeBtn">切换深浅色</button>
+      <button id="hintBtn">看气泡提示</button>
+    </div>
+  </aside>
+</div>
+
+<script>
+const states = {
+target:`<div class="group">
+  <div class="hd">目标（第一次）</div>
+  <div class="row"><span class="lead">📦</span><span class="lbl">仓库</span><span class="val">先选一个仓库</span><span class="chev">›</span></div>
+  <div class="row"><span class="lead">📁</span><span class="lbl">目录</span><span class="val">选一个目录</span><span class="chev">›</span></div>
+  <div class="row"><span class="lead">⑂</span><span class="lbl">分支</span><span class="val">main</span><span class="chev">›</span></div>
+</div>
+<div class="group">
+  <div class="row"><span class="lbl" style="font-size:13.5px;color:var(--t2)">选一次就好；之后点这个按钮直接上传。图片会写进目标目录，并生成一条提交。</span></div>
+</div>
+<div class="primary">下一步</div>`,
+
+again:`<div class="group">
+  <div class="hd">目标</div>
+  <div class="row"><span class="lead">📦</span><span class="lbl">jwker/my-app</span><span class="val" style="color:var(--accent)">换目标</span></div>
+  <div class="row" style="padding-top:0;border-bottom:none"><span class="val mono" style="font-size:12.5px">assets/photos · main</span></div>
+</div>
+<div class="group">
+  <div class="hd">图片</div>
+  <div class="picker"><div class="ic">🖼️</div>从相册选择<br><span style="font-size:12px;color:var(--t3)">支持 HEIC / TIFF，自动转码</span></div>
+  <div class="preview">
+    <div class="thumb"></div>
+    <div class="meta">
+      <div class="n">photo-20261017-143012.HEIC</div>
+      <div class="d">原图 3.2 MB · HEIC 网页端显示不出来</div>
+      <div class="sizes"><span class="old">3.2 MB</span><span class="arrow">→</span><span class="new">812 KB · 转成 .jpg</span></div>
+    </div>
+  </div>
+</div>
+<div class="group">
+  <div class="row"><span class="lbl" style="font-size:13.5px;color:var(--t2)">超过 1 MB 的图片会自动压缩；网页端显示不出来的格式会自动转换。</span></div>
+</div>
+<div class="primary">下一步</div>`,
+
+commit:`<div class="group">
+  <div class="hd">提交信息</div>
+  <div style="padding:12px 16px"><input class="field" placeholder="上传图片 photo-20261017-143012"></div>
+</div>
+<div class="group">
+  <div class="row"><span class="lbl">仓库</span><span class="val">jwker/my-app</span></div>
+  <div class="row"><span class="lbl">路径</span><span class="val mono">assets/photos/photo-20261017-143012.jpg</span></div>
+  <div class="row"><span class="lbl">分支</span><span class="val">main</span></div>
+  <div class="row"><span class="lbl">大小</span><span class="val">812 KB</span></div>
+</div>
+<div class="primary">上传</div>
+<div class="secondary">取消</div>`,
+
+done:`<div class="success">
+  <div class="ring"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4.5 4.5L19 7"/></svg></div>
+  <div style="font-size:19px;font-weight:700">已上传</div>
+  <div style="color:var(--t2);font-size:13.5px;margin-top:4px">assets/photos/photo-20261017-143012.jpg · main</div>
+</div>
+<div class="pathbox">
+  <code>assets/photos/photo-20261017-143012.jpg</code>
+  <button class="copy" id="copyBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>复制路径</button>
+</div>
+<div class="secondary" style="margin-top:10px">继续上传</div>
+<div class="secondary" style="margin-top:10px">完成</div>`
+};
+
+let state='target';
+const body=document.getElementById('body'), fab=document.getElementById('fab'), sheet=document.getElementById('sheet'), scrim=document.getElementById('scrim');
+function render(){
+  body.innerHTML=states[state];
+  const titles={target:'上传图片',again:'上传图片',commit:'上传图片',done:'已上传'};
+  document.getElementById('navTitle').textContent=titles[state];
+  document.getElementById('navLeft').textContent = state==='done'?'完成':'取消';
+  document.getElementById('navRight').textContent = state==='done'?'复制路径':'';
+  document.querySelectorAll('#steps button').forEach(b=>b.classList.toggle('on',b.dataset.s===state));
+  const cb=document.getElementById('copyBtn');
+  if(cb) cb.onclick=()=>{cb.classList.add('done');cb.innerHTML='已复制';setTimeout(()=>{cb.classList.remove('done');cb.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>复制路径';},1600);};
+}
+document.querySelectorAll('#steps button').forEach(b=>b.onclick=()=>{state=b.dataset.s;render();openSheet();});
+function openSheet(){sheet.classList.add('show');scrim.classList.add('show');fab.classList.add('show');}
+function closeSheet(){sheet.classList.remove('show');scrim.classList.remove('show');fab.classList.remove('show');}
+fab.onclick=openSheet; scrim.onclick=closeSheet;
+document.getElementById('themeBtn').onclick=()=>{const r=document.documentElement;r.dataset.theme = r.dataset.theme==='light'?'dark':'light';};
+document.getElementById('hintBtn').onclick=()=>{const h=document.getElementById('hint');h.classList.toggle('show');setTimeout(()=>h.classList.remove('show'),3000);};
+render();
+</script>
+</body>
+</html>

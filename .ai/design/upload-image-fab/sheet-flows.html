@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>弹窗内部流程对比（GitDuo · 上传图片）</title>
+<style>
+:root{
+  --bg:#F6F8FA; --surface:#FFFFFF; --sunken:#EFF2F5; --border:#D0D7DE; --border-soft:#E8ECEF;
+  --t1:#1F2328; --t2:#656D76; --t3:#8B949E; --accent:#C2410C; --accent-strong:#EA580C;
+  --success:#1F883D; --glass:rgba(255,255,255,.60); --glass-edge:rgba(255,255,255,.75);
+  --shadow:0 10px 28px rgba(31,35,40,.18);
+}
+[data-theme=dark]{
+  --bg:#0D1117; --surface:#161B22; --sunken:#0D1117; --border:#30363D; --border-soft:rgba(48,54,61,.70);
+  --t1:#E6EDF3; --t2:#8D96A0; --t3:#6E7681; --accent:#FFA657; --accent-strong:#EA580C;
+  --success:#238636; --glass:rgba(22,27,34,.62); --glass-edge:rgba(255,255,255,.10);
+  --shadow:0 10px 28px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t1);font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:17px;margin:36px 0 10px}
+p{margin:0 0 12px;color:var(--t2)}
+.lede{font-size:15px;color:var(--t2);max-width:760px;margin-bottom:24px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:0 0 8px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+th{color:var(--t3);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td code{font:12.5px/1.4 ui-monospace,Menlo,monospace;background:var(--sunken);padding:1px 5px;border-radius:5px}
+.tag{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--sunken);color:var(--t2);border:1px solid var(--border-soft);margin-right:6px}
+.note{border-left:3px solid var(--accent);background:var(--sunken);padding:12px 14px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.5px;color:var(--t2)}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;align-items:start}
+@media(max-width:980px){.trio{grid-template-columns:1fr}}
+.card{background:var(--surface);border-radius:16px;padding:18px;box-shadow:0 0 0 1px var(--border-soft)}
+.card h3{margin:0 0 4px;font-size:17px}
+.card .desc{color:var(--t2);font-size:13.5px;margin:0 0 14px;min-height:60px}
+.phone{position:relative;width:100%;max-width:330px;aspect-ratio:390/844;margin:0 auto;border-radius:38px;background:var(--bg);
+  box-shadow:0 0 0 8px #1b1f24,0 0 0 9.5px #33383d,var(--shadow);overflow:hidden}
+.nav{position:absolute;top:0;left:0;right:0;height:52px;display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:8px;font-size:15px;font-weight:600;border-bottom:.5px solid var(--border-soft);background:var(--bg);z-index:3}
+.nav .back{position:absolute;left:12px;bottom:8px;color:var(--accent);font-size:14px;font-weight:400}
+.nav .cnt{position:absolute;right:12px;bottom:8px;color:var(--t2);font-size:12px;font-weight:400}
+.body{position:absolute;inset:52px 0 0;padding:12px 12px 40px;overflow:hidden}
+.group{background:var(--surface);border-radius:11px;overflow:hidden;margin-bottom:12px;box-shadow:0 0 0 1px var(--border-soft)}
+.group>.hd{padding:10px 13px 5px;font-size:11.5px;color:var(--t2);font-weight:600}
+.row{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--border-soft);font-size:13.5px}
+.row:last-child{border-bottom:none}
+.row .lbl{flex:1;color:var(--t1)}
+.row .val{color:var(--t2);font-size:13px}
+.row .val.mono{font:11.5px ui-monospace,Menlo,monospace}
+.chev{color:var(--t3)}
+.primary{margin:6px 0 8px;padding:12px;border-radius:11px;background:var(--accent-strong);color:#fff;font-size:14px;font-weight:600;text-align:center}
+.search{display:flex;align-items:center;gap:6px;background:var(--sunken);border-radius:10px;padding:8px 10px;color:var(--t3);font-size:13px;margin-bottom:12px}
+.picker{border:1.5px dashed var(--border);border-radius:11px;padding:16px;text-align:center;color:var(--t2);font-size:13px;background:var(--surface);margin-bottom:10px}
+.preview{display:flex;gap:10px;align-items:center;padding:10px 13px}
+.thumb{width:44px;height:44px;border-radius:7px;background:linear-gradient(135deg,#f0a05a,#c2410c)}
+.meta .n{font-size:13px;font-weight:600}
+.meta .d{font-size:11.5px;color:var(--t2)}
+.field{width:100%;border:1px solid var(--border);border-radius:9px;padding:9px 10px;font:13px inherit;background:var(--surface);color:var(--t1)}
+.success{padding:18px 14px 6px;text-align:center}
+.success .ring{width:48px;height:48px;border-radius:24px;background:var(--success);color:#fff;display:grid;place-items:center;margin:0 auto 10px}
+.pathbox{margin:10px 0;background:var(--sunken);border-radius:9px;padding:9px 11px;display:flex;align-items:center;gap:8px}
+.pathbox code{flex:1;font:11.5px ui-monospace,Menlo,monospace;color:var(--t1);word-break:break-all}
+.copy{background:var(--surface);color:var(--accent);border-radius:7px;padding:5px 9px;font-size:12px;font-weight:600;box-shadow:0 0 0 1px var(--border-soft)}
+.steps{position:absolute;left:0;right:0;bottom:0;height:34px;display:flex;align-items:center;justify-content:center;gap:6px;
+  background:var(--bg);border-top:.5px solid var(--border-soft);font-size:11px;color:var(--t3)}
+.steps b{color:var(--accent);font-weight:600}
+.toggles{display:flex;gap:8px;margin-top:18px}
+.toggles button{font:13px inherit;padding:6px 12px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--t2);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">配套文档</span><span class="tag">弹层内部流程</span>
+  <h1>弹层里怎么走：三种流程</h1>
+  <p class="lede">三个悬浮按钮方案共用同一条功能链（选仓库 → 选目录 → 选图片 → 压缩 → 提交 → 复制路径）。
+    差别在于这条链在<strong>弹层内部</strong>怎么组织。下面三张是同一个任务的两种走法与一种折中。</p>
+
+  <div class="trio">
+    <div class="card">
+      <h3>S1 · 单页 Form</h3>
+      <p class="desc">一张 <code>Form</code> 装下全部内容：目标分组、图片分组、提交分组。用户在一屏里看到全部字段，
+        选仓库/目录靠 push 一级原生列表。</p>
+      <div class="phone">
+        <div class="nav"><span class="back">取消</span>上传图片</div>
+        <div class="body">
+          <div class="group">
+            <div class="hd">目标</div>
+            <div class="row"><span class="lbl">仓库</span><span class="val">jwker/my-app</span><span class="chev">›</span></div>
+            <div class="row"><span class="lbl">目录</span><span class="val">assets/photos</span><span class="chev">›</span></div>
+            <div class="row"><span class="lbl">分支</span><span class="val">main</span><span class="chev">›</span></div>
+          </div>
+          <div class="group">
+            <div class="hd">图片</div>
+            <div class="picker">🖼️ 从相册选择</div>
+            <div class="preview"><div class="thumb"></div><div class="meta">
+              <div class="n">photo-20261017-143012.HEIC</div><div class="d">3.2 MB → 812 KB · .jpg</div></div></div>
+          </div>
+          <div class="group">
+            <div class="hd">提交信息</div>
+            <div style="padding:10px 13px"><input class="field" placeholder="上传图片 photo-20261017-143012"></div>
+          </div>
+          <div class="primary">上传</div>
+        </div>
+        <div class="steps"><span>目标</span> · <span>图片</span> · <span>提交</span> · <b>成功</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>S2 · 逐级推进（NavigationStack）</h3>
+      <p class="desc">弹层里放一条 <code>NavigationStack</code>：选仓库 → 选目录 → 选图片 → 提交。
+        每一步一屏，右上角「下一步」推进。最贴 iOS 习惯，也最容易加搜索与取消。</p>
+      <div class="phone">
+        <div class="nav"><span class="back">‹ 上传图片</span>选仓库<span class="cnt">1 / 4</span></div>
+        <div class="body">
+          <div class="search">🔍 搜索仓库</div>
+          <div class="group">
+            <div class="row"><span class="lbl">📦 jwker/my-app</span><span class="chev">›</span></div>
+            <div class="row"><span class="lbl">📦 jwker/blog</span><span class="chev">›</span></div>
+            <div class="row"><span class="lbl">📦 jwker/design-kit</span><span class="chev">›</span></div>
+          </div>
+          <div class="group">
+            <div class="row"><span class="lbl">📦 other/mirror</span><span class="chev">›</span></div>
+          </div>
+          <div class="primary">下一步</div>
+        </div>
+        <div class="steps"><b>选仓库</b> · <span>选目录</span> · <span>选图片</span> · <span>提交</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>S3 · 两段折中</h3>
+      <p class="desc">第一段是「选目标」：搜索框 + 仓库结果，选中仓库后<strong>就地展开</strong>目录面包屑（不再 push）；
+        第二段是「选图 + 提交」合并在一屏。省一级，但目录选择在小屏上略挤。</p>
+      <div class="phone">
+        <div class="nav"><span class="back">取消</span>上传图片</div>
+        <div class="body">
+          <div class="search">🔍 搜索仓库</div>
+          <div class="group">
+            <div class="row"><span class="lbl">📦 jwker/my-app</span><span class="chev">⌄</span></div>
+            <div style="padding:2px 13px 10px 13px">
+              <div style="font-size:12px;color:var(--t2);margin-bottom:6px">目录</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <span class="val mono" style="background:var(--sunken);border-radius:7px;padding:5px 9px">assets</span>
+                <span class="val mono" style="background:var(--sunken);border-radius:7px;padding:5px 9px">photos</span>
+                <span class="chev" style="align-self:center">›</span>
+              </div>
+            </div>
+          </div>
+          <div class="group">
+            <div class="hd">图片</div>
+            <div class="picker">🖼️ 从相册选择</div>
+          </div>
+          <div class="group">
+            <div class="hd">提交信息</div>
+            <div style="padding:10px 13px"><input class="field" placeholder="上传图片 photo-20261017-143012"></div>
+          </div>
+          <div class="primary">上传</div>
+        </div>
+        <div class="steps"><b>目标</b> · <span>图片</span> · <span>提交</span> · <span>成功</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>对比</h2>
+  <table>
+    <tr><th>维度</th><th>S1 单页 Form</th><th>S2 逐级推进</th><th>S3 两段折中</th></tr>
+    <tr><td>一屏能看到的</td><td>全部</td><td>只有当前一步</td><td>目标 + 图片 + 提交</td></tr>
+    <tr><td>选仓库的成本</td><td>push 一级</td><td>推进一步</td><td>搜索框内直接选</td></tr>
+    <tr><td>选目录的成本</td><td>push 一级（可能再 push 层级）</td><td>推进一步（可复用现成的目录浏览层）</td><td>面包屑就地展开</td></tr>
+    <tr><td>加搜索 / 排序</td><td>难（挤在一张 Form 里）</td><td>容易（每步一张原生列表）</td><td>容易（搜索框常驻）</td></tr>
+    <tr><td>改动面</td><td>最小：一个 sheet + 两个 push 列表</td><td>中：sheet 内多一层栈 + 每层一个列表</td><td>中：目录展开态要自绘一点</td></tr>
+    <tr><td>风险</td><td>屏太长、字段多时挤</td><td>层级深，用户容易「推过头」</td><td>小屏上目录面包屑换行</td></tr>
+    <tr><td>推荐度</td><td>中</td><td><strong>高</strong></td><td>高（若要做「最近仓库」快捷项）</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>我的推荐：S2。</strong>选仓库与选目录这两步，仓库里<strong>已经有现成的列表层</strong>
+    （仓库列表与目录浏览），S2 直接把它们接进 <code>NavigationStack</code>，不多造控件；
+    S1/S3 都要为「在 Form 里选目录」另做一套自绘展开（与本仓「少自绘」的方向不合）。
+    若你还想保留「一键传到上次的目标」，就取 S3 的第一段做成 S2 里的第一屏（一个芯片 + 一个列表）。
+  </div>
+
+  <h2>首次与之后：流程不一样</h2>
+  <p>目标（仓库）只问一次 ⇒ 三种流程都有两个入口：</p>
+  <table>
+    <tr><th>流程</th><th>第一次（无记忆）</th><th>之后（有记忆）</th></tr>
+    <tr><td>S1 单页 Form</td><td>选目标 → 选图 → 提交</td><td>顶部一行只读目标 + 选图 → 提交</td></tr>
+    <tr><td>S2 逐级推进</td><td>选仓库 → 选目录 → 选图 → 提交</td><td>直接从「选图」开始，目标以摘要行置顶</td></tr>
+    <tr><td>S3 两段折中</td><td>目标段（搜索 + 目录面包屑）→ 图片 + 提交</td><td>目标段只剩一行摘要，其余同左</td></tr>
+  </table>
+  <div class="note">
+    <strong>记忆失效怎么办：</strong>仓库改名 / 目录被删 / 分支不存在时，
+    不能把用户带到一个写不上去的目标上 —— 直接回落到「选目标」那一屏，并提示一句「上次的目标已失效」。
+    这条是<strong>全局入口</strong>的必备配套：按钮在每个页面都有，记忆错了会影响每一次上传。
+  </div>
+
+  <h2>三种流程都要遵守的两条硬约束</h2>
+  <ul>
+    <li><strong>目录必须能新建。</strong>GitHub 的 <code>PUT /contents</code> 不能创建空目录 ——
+      新目录只能<strong>随文件一起产生</strong>。所以「新建目录」不是「先建目录再传文件」，
+      而是「填一个还不存在的路径 + 传文件」。界面文案要写成「目录（新）」，别让人以为要先建。</li>
+    <li><strong>单文件 ≤1 MB 是硬限</strong>（<code>contents</code> 走 base64）。
+      这正是压缩目标取 1 MB 的原因；压不下来时必须明确拦下并给出替代动作，而不是静默截断。</li>
+  </ul>
+
+  <div class="toggles"><button onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'">切换深浅色</button></div>
+</div>
+</body>
+</html>

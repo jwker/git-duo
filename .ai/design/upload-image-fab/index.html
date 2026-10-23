@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>上传图片功能 · 悬浮按钮与弹层设计方案（GitDuo）</title>
+<style>
+:root{
+  --bg:#F6F8FA; --surface:#FFFFFF; --sunken:#EFF2F5; --border:#D0D7DE; --border-soft:#E8ECEF;
+  --t1:#1F2328; --t2:#656D76; --t3:#8B949E; --accent:#C2410C; --accent-strong:#EA580C; --success:#1F883D;
+  --shadow:0 10px 28px rgba(31,35,40,.12);
+}
+[data-theme=dark]{
+  --bg:#0D1117; --surface:#161B22; --sunken:#0D1117; --border:#30363D; --border-soft:rgba(48,54,61,.70);
+  --t1:#E6EDF3; --t2:#8D96A0; --t3:#6E7681; --accent:#FFA657; --accent-strong:#EA580C; --success:#238636;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t1);font:15px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:40px 24px 90px}
+h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}
+h2{font-size:19px;margin:40px 0 12px;letter-spacing:-.01em}
+h3{font-size:15.5px;margin:22px 0 8px}
+p{margin:0 0 12px;color:var(--t2)}
+.lede{font-size:16px;color:var(--t2);max-width:760px;margin-bottom:24px}
+.tag{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:99px;background:var(--sunken);color:var(--t2);border:1px solid var(--border-soft);margin-right:6px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:22px 0}
+@media(max-width:900px){.cards{grid-template-columns:1fr}}
+.opt{display:block;text-decoration:none;color:inherit;background:var(--surface);border-radius:16px;padding:18px;
+  box-shadow:0 0 0 1px var(--border-soft);transition:transform .15s,box-shadow .15s}
+.opt:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(31,35,40,.12)}
+.opt .glyph{height:120px;border-radius:12px;background:var(--sunken);margin-bottom:14px;position:relative;overflow:hidden}
+.opt .t{font-size:16px;font-weight:700;margin-bottom:4px}
+.opt .d{font-size:13.5px;color:var(--t2);line-height:1.5}
+.opt .go{margin-top:12px;font-size:13.5px;color:var(--accent);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:0 0 10px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+th{color:var(--t3);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td code{font:12.5px/1.4 ui-monospace,Menlo,monospace;background:var(--sunken);padding:1px 5px;border-radius:5px}
+ul,ol{margin:0 0 12px;padding-left:22px;color:var(--t2)}li{margin:5px 0}
+.note{border-left:3px solid var(--accent);background:var(--sunken);padding:13px 15px;border-radius:0 10px 10px 0;margin:16px 0;font-size:13.5px;color:var(--t2)}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 18px}
+.step{background:var(--surface);border-radius:10px;padding:9px 14px;font-size:13.5px;box-shadow:0 0 0 1px var(--border-soft)}
+.arrow{color:var(--t3)}
+.toggles{display:flex;gap:8px;margin-top:26px}
+.toggles button{font:13px inherit;padding:6px 12px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--t2);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag on">已选定：方案 A + S3</span><span class="tag">GitDuo 2.0</span><span class="tag">设计提案</span>
+  <h1>「上传图片到仓库」—— 悬浮按钮与弹层</h1>
+  <p class="lede">
+    功能链：<strong>全局悬浮按钮</strong> → 弹层 → <strong>先定目标仓库的一个目录</strong> → 选图 → 自动压缩 → 上传 →
+    提示成功 → 附带相对路径与复制按钮。
+    目标（仓库）<strong>只问一次</strong>：第一次选过仓库与目录之后，之后每次点开都直接进上传。
+    下面是三个按钮形态方案、一份弹层内部流程对比，以及一份<strong>需要你拍板的问题清单</strong>。
+    所有配色都取自本仓 <code>Theme</code> 令牌（浅色 #F6F8FA 页底 / #FFFFFF 卡面 / #C2410C 强调 / #EA580C 主按钮），
+    每个页面右上角都能切深色档。
+  </p>
+
+  <div class="note">
+    <strong>2026-10-23 选型：方案 A（圆形玻璃按钮）+ S3（两段折中）。</strong>
+    实施以 <a href="final-a-s3.html" style="color:var(--accent)"><b>final-a-s3.html</b></a> 为准 ——
+    里面含完整的规格表、文案、失效兜底与落地清单。
+    本页与 B / C 两页保留作提案存档。
+  </div>
+
+  <div class="note">
+    <strong>已定的两条口径（2026-10-23）：</strong>
+    ① 悬浮按钮是<strong>全局</strong>的 —— 每个页面常驻，不是只在仓库页；
+    ② 目标<strong>只需选一次</strong> —— 没选过才选，选过就直接上传。
+    两条合起来意味着「上次目标记忆」是<strong>必需件</strong>，不是加分项。
+  </div>
+
+  <h2>三个方案</h2>
+  <div class="cards">
+    <a class="opt" href="option-a-circle-fab.html">
+      <div class="glyph">
+        <div style="position:absolute;right:14px;bottom:12px;width:44px;height:44px;border-radius:22px;
+          background:rgba(255,255,255,.75);box-shadow:0 4px 12px rgba(31,35,40,.22);display:grid;place-items:center;color:#1F2328">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m4 17 4.5-4.2 3.3 3 3-2.6L20 17"/></svg>
+        </div>
+        <div style="position:absolute;right:62px;bottom:18px;font-size:12px;color:var(--t2)">56pt 圆形玻璃</div>
+      </div>
+      <div class="t">A · 圆形玻璃按钮</div>
+      <div class="d">56pt 圆形玻璃钮浮在右下角，点开一张原生 Form 弹层。最贴 iOS 官方语言；代价是只有图标，可发现性弱。</div>
+      <div class="go">看方案 A →</div>
+    </a>
+
+    <a class="opt" href="option-b-extended-fab.html">
+      <div class="glyph">
+        <div style="position:absolute;right:14px;bottom:12px;height:44px;border-radius:22px;padding:0 18px;
+          background:rgba(255,255,255,.75);box-shadow:0 4px 12px rgba(31,35,40,.22);display:flex;align-items:center;gap:8px;
+          color:#1F2328;font-size:14px;font-weight:600">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m4 17 4.5-4.2 3.3 3 3-2.6L20 17"/></svg>上传图片
+        </div>
+      </div>
+      <div class="t">B · 扩展胶囊按钮</div>
+      <div class="d">带文字的玻璃胶囊，可发现性最好，还能用「最近仓库」芯片省掉一级；代价是多了一处自绘动效。</div>
+      <div class="go">看方案 B →</div>
+    </a>
+
+    <a class="opt" href="option-c-edge-dock.html">
+      <div class="glyph">
+        <div style="position:absolute;right:-6px;top:34px;width:40px;height:40px;border-radius:20px 0 0 20px;
+          background:rgba(255,255,255,.75);box-shadow:0 4px 12px rgba(31,35,40,.22);display:grid;place-items:center;color:#1F2328">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/></svg>
+        </div>
+        <div style="position:absolute;right:56px;top:28px;width:150px;background:rgba(255,255,255,.85);border-radius:14px;
+          padding:8px 10px;font-size:11.5px;color:var(--t2);box-shadow:0 6px 18px rgba(31,35,40,.18)">
+          <b style="color:var(--t1)">上传到 my-app</b><br>assets/photos · main
+        </div>
+      </div>
+      <div class="t">C · 贴边悬浮坞 + 玻璃菜单</div>
+      <div class="d">按钮贴在右缘，点开一张玻璃菜单，第一项直达上次的目标。最短路径；代价是最不显眼，且要多一个记忆存储。</div>
+      <div class="go">看方案 C →</div>
+    </a>
+  </div>
+
+  <h2>弹层内部流程</h2>
+  <p>三个方案共用同一条功能链，差别只在弹层里怎么组织 —— 见
+    <a href="sheet-flows.html" style="color:var(--accent)">《弹窗内部流程对比》</a>：
+    S1 单页 Form · S2 逐级推进 · S3 两段折中。</p>
+
+  <h2>功能链（三方案一致）</h2>
+  <div class="flow">
+    <span class="step">① 悬浮按钮（全局）</span><span class="arrow">→</span>
+    <span class="step">② 目标：没选过才选</span><span class="arrow">→</span>
+    <span class="step">③ 选图</span><span class="arrow">→</span>
+    <span class="step">④ 自动压缩</span><span class="arrow">→</span>
+    <span class="step">⑤ 提交（commit）</span><span class="arrow">→</span>
+    <span class="step">⑥ 成功 + 复制相对路径</span>
+  </div>
+  <p>第二次起，第 ② 步消失（目标已记住），直接从选图开始。</p>
+
+  <h3>可以直接复用的既有件（不重造）</h3>
+  <table>
+    <tr><th>环节</th><th>复用谁</th><th>说明</th></tr>
+    <tr><td>压缩 / 转码</td><td><code>GitDuoKit.UploadIntake</code> + <code>GitDuoCore.ImageProcessor</code></td>
+      <td>≤1 MB 且格式网页端能显示就原样放行；否则自适应压缩（2048@0.9 → 640@0.5）；HEIC/TIFF 一律转码并改扩展名</td></tr>
+    <tr><td>写文件</td><td><code>GitHubRepoContentEndpoint.putFile</code></td>
+      <td>base64 ⇒ <strong>单文件 ≤1 MB 是硬限</strong>，这就是压缩目标取 1 MB 的原因</td></tr>
+    <tr><td>选目录</td><td><code>LoadRepoTree</code>（contents API）</td><td>逐层取；目录不存在时写入会一起创建</td></tr>
+    <tr><td>提交信息</td><td><code>CommitSheet</code> / <code>CommitDraft</code></td><td>现有「添加文件 → 提交」那一套已经跑通，新入口应汇入它</td></tr>
+    <tr><td>成功提示</td><td><code>GitDuoDesign.Toast</code></td><td>纯文字块，承载不了「复制」动作 ⇒ 成功态留在弹层里，Toast 只做兜底</td></tr>
+    <tr><td>复制路径</td><td><code>RepoCopy.clipboardPath</code> 的口径 + <code>UIPasteboard</code></td><td>相对仓库根的路径</td></tr>
+  </table>
+
+  <h3>必须守住的硬约束</h3>
+  <ul>
+    <li><strong>必须先有目标才能上传</strong>：没有仓库与目录就没有上传动作 —— 按钮在未选目标时是「下一步」而非「上传」。</li>
+    <li><strong>≤1 MB</strong>：压不下来就明确拦下并给替代动作（去网页端），不静默截断。</li>
+    <li><strong>目录不能单独新建</strong>：GitHub 的 <code>PUT /contents</code> 不建空目录，
+      新目录随文件一起产生。文案要写「目录（新）」。</li>
+    <li><strong>只有有 push 权限的仓库能写</strong>：选仓库时只列自己的仓库（<code>permissions.push</code>），
+      他人仓库不给上传入口（铁律 #7：可写性只有一个来源）。</li>
+    <li><strong>玻璃只在设计包</strong>：按钮组件放 <code>GitDuoDesign/Components/</code>，
+      <code>.glassEffect</code> 不许出现在 App 层（铁律 #4）。</li>
+  </ul>
+
+  <h2>三个方案的取舍</h2>
+  <table>
+    <tr><th>维度</th><th>A 圆形</th><th>B 胶囊</th><th>C 贴边菜单</th></tr>
+    <tr><td>像不像 iOS 官方</td><td><strong>最像</strong>（系统材质 + 系统形状）</td><td>偏 Material（扩展 FAB 是安卓语汇）</td><td>浮层像，但贴边按钮不是系统件</td></tr>
+    <tr><td>可发现性</td><td>弱（只有图标）</td><td><strong>最强</strong>（有文字）</td><td>最弱</td></tr>
+    <tr><td>常用路径长度</td><td>中</td><td>短（有「最近仓库」芯片）</td><td><strong>最短</strong>（一步直达上次目标）</td></tr>
+    <tr><td>遮挡内容</td><td>挡右下角一块</td><td>挡右下角一块（更宽）</td><td>几乎不挡</td></tr>
+    <tr><td>自绘成分</td><td>一个圆钮（可包成设计包组件）</td><td>胶囊 + 收缩动画</td><td>玻璃菜单浮层（自绘最重）</td></tr>
+    <tr><td>额外存储</td><td>必需（目标记忆）</td><td>必需（目标记忆）</td><td>必需（目标记忆）</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>倾向性意见（供你参考，不替你拍板）：</strong>
+    若优先「与仓库既定的自绘件退休方向一致」⇒ 选 <b>A</b>，并把「只有图标」的问题用
+    首次出现的提示气泡补上；若优先「用户一看就知道能干什么」⇒ 选 <b>B</b>；
+    若这是高频重复动作（你每天往同一个仓库传图）⇒ 选 <b>C</b>，代价是多一个记忆存储与失效兜底。
+  </div>
+
+  <h2>需要你裁定的点</h2>
+  <ol>
+    <li><strong>~~选 A / B / C 哪个按钮形态。~~ 已定：A（圆形玻璃按钮）。</strong></li>
+    <li><strong>~~弹层内部走 S1 / S2 / S3。~~ 已定：S3（两段折中）。</strong></li>
+    <li><strong>上下文优先要不要做（防误传）。</strong>站在某仓库页面时，默认目标 = 当前仓库 + 当前目录，
+      而不是记忆里的那个 —— 这是新口径，等你点头。</li>
+    <li><strong>记忆的粒度。</strong>我按「仓库 + 目录 + 分支」三件记（沿用 <code>BranchMemoryStore</code> 的套路）。
+      若只记仓库、目录每次都重选，首次之后仍要两次点击。</li>
+    <li><strong>记忆失效的兜底。</strong>仓库改名 / 目录被删 / 分支不存在时，自动回落到选目标，并提示一句
+      「上次的目标已失效」—— 还是静默回落？</li>
+    <li><strong>全局按钮与键盘 / 输入框的冲突。</strong>我按「键盘弹出时收起、文本输入中隐藏」处理。</li>
+    <li><strong>分支要不要让用户选。</strong>默认取该仓库的默认分支（与现有 <code>LoadRepoTree</code> 的回落一致），
+      但弹层里给一行可改。</li>
+    <li><strong>相对路径的口径。</strong>我按「相对仓库根」写（<code>assets/photos/photo-20261017-143012.jpg</code>），
+      与 README 里贴图的写法一致。要「相对当前目录」也行，说一声。</li>
+    <li><strong>文件名规则。</strong>相册没有文件名 ⇒ 沿用 <code>UploadFileName.photo</code> 的自拟名
+      （形如 <code>photo-20261017-143012.jpg</code>）。要不要改成「保留原文件名，只换扩展名」？</li>
+    <li><strong>是否允许「新建目录」。</strong>默认允许（路径填一个不存在的目录，随文件创建）。</li>
+    <li><strong>成功态的位置。</strong>默认：弹层不关，整屏换成成功态（含复制按钮）；
+      划走弹层时再用 Toast 兜底一句「已上传」。</li>
+  </ol>
+
+  <h2>落点（选型后确定）</h2>
+  <ul>
+    <li>按钮组件 → <code>Packages/GitDuoDesign/Components/FloatingActionButton.swift</code>（玻璃只许在设计包）</li>
+    <li>按钮<strong>安放点</strong> → <code>GitDuo/App/MainTabView.swift</code> 的 <code>.overlay(alignment: .bottomTrailing)</code>，
+      与 <code>Toast</code> 同一层（全局入口只应有一个实例，不是每页各放一个）</li>
+    <li>弹层 → <code>GitDuo/Features/Repo/Views/Sheets/UploadImageSheet.swift</code>（沿用 <code>AddFileSheet</code> 的写法）</li>
+    <li>目标记忆 → 沿用 <code>BranchMemoryStore</code> 的套路，记「仓库 + 目录 + 分支」</li>
+    <li>选仓库 / 选目录的判据 → 领域层 <code>GitDuoKit</code>（铁律 #14：规则写纯函数，不写 ViewModel）</li>
+  </ul>
+
+  <h2>文件</h2>
+  <table>
+    <tr><th>文件</th><th>内容</th></tr>
+    <tr><td><a href="final-a-s3.html" style="color:var(--accent)"><b>final-a-s3.html</b></a></td><td><b>最终稿</b>：方案 A + S3，含规格表 / 文案 / 失效兜底 / 落地清单</td></tr>
+    <tr><td><a href="option-a-circle-fab.html" style="color:var(--accent)">option-a-circle-fab.html</a></td><td>方案 A 提案（已选）</td></tr>
+    <tr><td><a href="option-b-extended-fab.html" style="color:var(--accent)">option-b-extended-fab.html</a></td><td>方案 B 提案（未采用，存档）</td></tr>
+    <tr><td><a href="option-c-edge-dock.html" style="color:var(--accent)">option-c-edge-dock.html</a></td><td>方案 C 提案（未采用，存档）</td></tr>
+    <tr><td><a href="sheet-flows.html" style="color:var(--accent)">sheet-flows.html</a></td><td>弹层内部流程对比（S1 / S2 / S3）</td></tr>
+  </table>
+
+  <div class="toggles"><button onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'">切换深浅色</button></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>最终稿 · 方案 A + S3（GitDuo · 上传图片）</title>
+<style>
+:root{
+  --bg:#F6F8FA; --surface:#FFFFFF; --sunken:#EFF2F5; --border:#D0D7DE; --border-soft:#E8ECEF;
+  --t1:#1F2328; --t2:#656D76; --t3:#8B949E; --accent:#C2410C; --accent-strong:#EA580C;
+  --success:#1F883D; --danger:#CF222E;
+  --glass:rgba(255,255,255,.60); --glass-edge:rgba(255,255,255,.75);
+  --shadow:0 10px 28px rgba(31,35,40,.18); --tabbar:rgba(249,250,251,.78);
+}
+[data-theme=dark]{
+  --bg:#0D1117; --surface:#161B22; --sunken:#0D1117; --border:#30363D; --border-soft:rgba(48,54,61,.70);
+  --t1:#E6EDF3; --t2:#8D96A0; --t3:#6E7681; --accent:#FFA657; --accent-strong:#EA580C;
+  --success:#238636; --danger:#F85149;
+  --glass:rgba(22,27,34,.62); --glass-edge:rgba(255,255,255,.10);
+  --shadow:0 10px 28px rgba(0,0,0,.55); --tabbar:rgba(22,27,34,.80);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t1);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;margin:0 auto;padding:32px 24px 80px;display:grid;grid-template-columns:1fr 430px;gap:40px;align-items:start}
+@media(max-width:1000px){.wrap{grid-template-columns:1fr}}
+h1{font-size:27px;margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:17px;margin:36px 0 10px;letter-spacing:-.01em}
+h3{font-size:15px;margin:22px 0 8px}
+p{margin:0 0 12px;color:var(--t2)}
+.lede{font-size:15px;color:var(--t2);max-width:720px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:0 0 10px}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+th{color:var(--t3);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--sunken);padding:1px 5px;border-radius:5px}
+ul,ol{margin:0 0 12px;padding-left:22px;color:var(--t2)}li{margin:5px 0}
+.tag{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:99px;background:var(--sunken);color:var(--t2);border:1px solid var(--border-soft);margin-right:6px}
+.tag.on{background:var(--success);color:#fff;border-color:transparent}
+.note{border-left:3px solid var(--accent);background:var(--sunken);padding:13px 15px;border-radius:0 10px 10px 0;margin:16px 0;font-size:13.5px;color:var(--t2)}
+.warn{border-left:3px solid var(--danger);background:var(--sunken);padding:13px 15px;border-radius:0 10px 10px 0;margin:16px 0;font-size:13.5px;color:var(--t2)}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 16px}
+.step{background:var(--surface);border-radius:10px;padding:9px 14px;font-size:13.5px;box-shadow:0 0 0 1px var(--border-soft)}
+.step.on{background:var(--accent-strong);color:#fff;box-shadow:none}
+.arrow{color:var(--t3)}
+
+.stage{position:sticky;top:32px;display:flex;flex-direction:column;align-items:center;gap:18px}
+.phone{position:relative;width:390px;height:844px;border-radius:52px;background:var(--bg);
+  box-shadow:0 0 0 10px #1b1f24,0 0 0 12px #33383d,var(--shadow);overflow:hidden}
+.statusbar{position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:center;justify-content:space-between;
+  padding:14px 30px 0;font-size:13.5px;font-weight:600;color:var(--t1);z-index:6;pointer-events:none}
+.statusbar .r{display:flex;gap:5px;align-items:center;opacity:.9}
+.navbar{position:absolute;top:54px;left:0;right:0;height:48px;display:flex;align-items:center;justify-content:center;
+  font-size:17px;font-weight:600;color:var(--t1);z-index:5}
+.navbar .back{position:absolute;left:14px;color:var(--accent);font-size:16px;font-weight:400}
+.scroll{position:absolute;inset:102px 0 96px;overflow:hidden;padding:6px 16px 130px}
+.card{background:var(--surface);border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--border-soft)}
+.card+.card{margin-top:14px}
+.card h3{margin:0;padding:12px 16px 8px;font-size:13px;color:var(--t2);font-weight:600}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-soft);font-size:15px}
+.row:last-child{border-bottom:none}
+.row .lead{width:22px;height:22px;border-radius:6px;background:var(--sunken);display:grid;place-items:center;flex:0 0 auto;color:var(--t2)}
+.row .lbl{color:var(--t1);flex:1}
+.row .val{color:var(--t2);font-size:15px}
+.row .val.mono{font:13px ui-monospace,Menlo,monospace}
+.chev{color:var(--t3)}
+.hero{background:var(--surface);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 0 0 1px var(--border-soft)}
+.hero .t{font-size:19px;font-weight:700}
+.hero .s{color:var(--t2);font-size:13.5px;margin-top:4px}
+.pill{display:inline-block;font-size:12.5px;padding:3px 10px;border-radius:99px;background:var(--sunken);color:var(--t2);margin-right:6px}
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:83px;display:flex;padding:8px 8px 26px;
+  background:var(--tabbar);backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);
+  border-top:.5px solid var(--border-soft);z-index:4}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--t3);font-size:10.5px}
+.tab.on{color:var(--accent)}
+.tab svg{width:24px;height:24px}
+.fab{position:absolute;right:18px;bottom:99px;width:56px;height:56px;border-radius:28px;z-index:7;display:grid;place-items:center;
+  cursor:pointer;border:0;background:var(--glass);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
+  box-shadow:inset 0 0 0 .5px var(--glass-edge),0 6px 18px rgba(31,35,40,.22);transition:transform .18s,opacity .2s}
+.fab:active{transform:scale(.94)}
+.fab svg{width:26px;height:26px;color:var(--t1)}
+.fab .plus{position:absolute;right:6px;bottom:6px;width:15px;height:15px;color:var(--accent-strong)}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:8;opacity:0;pointer-events:none;transition:opacity .28s}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:720px;background:var(--bg);z-index:9;border-radius:14px 14px 0 0;
+  transform:translateY(101%);transition:transform .34s cubic-bezier(.32,.72,0,1);box-shadow:0 -1px 0 var(--border-soft)}
+.sheet.show{transform:translateY(0)}
+.grabber{width:36px;height:5px;border-radius:3px;background:var(--border);margin:6px auto 0}
+.sheetnav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 8px}
+.sheetnav .t{font-size:17px;font-weight:600}
+.sheetnav .act{color:var(--accent);font-size:16px}
+.sheetbody{position:absolute;inset:52px 0 0;overflow:auto;padding:0 16px 30px}
+.group{background:var(--surface);border-radius:12px;overflow:hidden;margin-bottom:16px;box-shadow:0 0 0 1px var(--border-soft)}
+.group>.hd{padding:12px 16px 6px;font-size:12.5px;color:var(--t2);font-weight:600}
+.group .row{padding:13px 16px}
+.summary{padding:13px 16px;display:flex;align-items:center;gap:11px}
+.summary .ic{width:30px;height:30px;border-radius:9px;background:var(--sunken);display:grid;place-items:center;color:var(--accent-strong);flex:0 0 auto}
+.summary .txt{flex:1;min-width:0}
+.summary .repo{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.summary .path{font:12.5px ui-monospace,Menlo,monospace;color:var(--t2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.change{flex:0 0 auto;color:var(--accent);font-size:14.5px}
+.search{display:flex;align-items:center;gap:7px;background:var(--sunken);border-radius:10px;padding:9px 11px;color:var(--t3);font-size:14px;margin:2px 0 12px}
+.crumb{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:2px 16px 13px}
+.crumb span{font:12.5px ui-monospace,Menlo,monospace;background:var(--sunken);border-radius:7px;padding:5px 9px;color:var(--t1)}
+.crumb .new{color:var(--accent);background:transparent;box-shadow:inset 0 0 0 1px var(--accent)}
+.picker{border:1.5px dashed var(--border);border-radius:12px;padding:20px 16px;text-align:center;color:var(--t2);background:var(--surface);margin-bottom:12px}
+.picker .ic{font-size:24px;margin-bottom:6px}
+.preview{display:flex;gap:12px;align-items:center;padding:12px 16px}
+.thumb{width:54px;height:54px;border-radius:8px;background:linear-gradient(135deg,#f0a05a,#c2410c);flex:0 0 auto}
+.meta .n{font-size:14.5px;font-weight:600}
+.meta .d{font-size:12.5px;color:var(--t2);margin-top:2px}
+.sizes{display:flex;gap:8px;align-items:center;margin-top:4px}
+.sizes .old{text-decoration:line-through;color:var(--t3);font-size:12.5px}
+.sizes .new{color:var(--success);font-size:12.5px;font-weight:600}
+.arrow{color:var(--t3);font-size:12.5px}
+.field{width:100%;border:1px solid var(--border);border-radius:10px;padding:11px 12px;font:15px/1.4 inherit;background:var(--surface);color:var(--t1)}
+.primary{margin:4px 0 10px;padding:14px;border-radius:12px;background:var(--accent-strong);color:#fff;font-size:16px;font-weight:600;text-align:center}
+.primary.off{background:var(--sunken);color:var(--t3)}
+.secondary{padding:13px;border-radius:12px;background:var(--surface);color:var(--accent);font-size:16px;text-align:center;box-shadow:0 0 0 1px var(--border-soft)}
+.hintline{padding:2px 16px 14px;font-size:12.5px;color:var(--t3);line-height:1.5}
+.success{padding:24px 20px 6px;text-align:center}
+.success .ring{width:62px;height:62px;border-radius:31px;background:var(--success);color:#fff;display:grid;place-items:center;margin:0 auto 13px;box-shadow:0 8px 20px rgba(31,135,61,.32)}
+.pathbox{margin:13px 0 4px;background:var(--sunken);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;text-align:left}
+.pathbox code{flex:1;font:13px/1.5 ui-monospace,Menlo,monospace;color:var(--t1);word-break:break-all}
+.copy{flex:0 0 auto;display:flex;align-items:center;gap:5px;background:var(--surface);color:var(--accent);border-radius:8px;padding:7px 11px;font-size:13.5px;font-weight:600;box-shadow:0 0 0 1px var(--border-soft);cursor:pointer}
+.copy.done{color:var(--success)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:390px}
+.controls button{font:13.5px inherit;padding:8px 14px;border-radius:99px;border:1px solid var(--border);background:var(--surface);color:var(--t1);cursor:pointer}
+.controls button.on{background:var(--accent-strong);color:#fff;border-color:transparent}
+.toggles{display:flex;gap:8px}
+.toggles button{font:13px inherit;padding:6px 12px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--t2);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section>
+    <span class="tag on">已选定</span><span class="tag">方案 A</span><span class="tag">S3 两段折中</span>
+    <h1>最终稿：圆形玻璃悬浮按钮 + S3 弹层</h1>
+    <p class="lede">
+      按钮 = 56pt 圆形玻璃钮，<strong>全局常驻</strong>；弹层 = 一张原生 <code>Form</code>，
+      顶部一行<strong>目标摘要</strong>（仓库 · 目录 · 分支，记忆作默认），下面依次是图片与提交。
+      换目标不 push、不嵌套弹层，<strong>在原位就地展开</strong>。
+    </p>
+
+    <h2>流程</h2>
+    <div class="flow">
+      <span class="step on">点悬浮钮</span><span class="arrow">→</span>
+      <span class="step on">目标（默认已选，点那行可换）</span><span class="arrow">→</span>
+      <span class="step on">选图 · 自动压缩</span><span class="arrow">→</span>
+      <span class="step on">提交</span><span class="arrow">→</span>
+      <span class="step on">成功 + 复制路径</span>
+    </div>
+    <p>第一次用时目标一行显示「尚未选择目标」，主按钮置灰；选过一次之后，这一行就是默认目标，
+      直接选图即可上传。</p>
+
+    <h2>目标摘要行（S3 的关键那一行）</h2>
+    <table>
+      <tr><th>元素</th><th>内容</th><th>说明</th></tr>
+      <tr><td>仓库</td><td><code>jwker/my-app</code></td><td>加粗、正文色</td></tr>
+      <tr><td>路径</td><td><code>assets/photos · main</code></td><td>等宽字体、次级色；<strong>目录相对仓库根</strong>，分支跟在后面</td></tr>
+      <tr><td>点击整行</td><td>去<strong>选仓库</strong>（push 一层）</td><td><strong>首屏不出现任何列表</strong>；仓库列表用现成的那一层</td></tr>
+      <tr><td>摘要行里写的</td><td><code>jwker/my-app</code> + <code>assets/photos · main</code></td><td>仓库全名 + <strong>相对仓库根</strong>的目录 + 分支；三样写全，不缩写</td></tr>
+    </table>
+
+    <div class="note">
+      <strong>为什么不在 S3 首屏就地展开选择器。</strong>就地展开会把一层列表铺在上传表单上方，
+      弹层一下变成三层（目标摘要 / 列表 / 图片与提交），层级与滚动都乱了。
+      <strong>改成「点已选的那一行 → push 选仓库 → 选完 pop 回来」</strong>：
+      首屏永远是「目标一行 + 图片 + 提交」，用户想改时点那一行，进去选，改完回到原地。
+      仓库列表与目录浏览都<strong>复用现成的那一层</strong>，不多造控件。
+    </div>
+
+    <h2>记忆的写入与失效</h2>
+    <table>
+      <tr><th>场景</th><th>行为</th></tr>
+      <tr><td>用户在弹层里改了目标</td><td><strong>立刻写回记忆</strong>（仓库 + 目录 + 分支三件）⇒ 下次打开就是新目标</td></tr>
+      <tr><td>用户正站在某个仓库 / 目录里</td><td><strong>上下文优先</strong>：默认目标 = 当前仓库 + 当前目录（不拿记忆）</td></tr>
+      <tr><td>记忆里的仓库改名 / 仓库没了</td><td><strong>静默回落</strong>到选目标（不弹提示、不报错）</td></tr>
+      <tr><td>记忆里的目录被删</td><td><strong>静默回落</strong>到仓库根</td></tr>
+      <tr><td>记忆里的分支不存在</td><td><strong>静默回落</strong>到该仓库的默认分支（分支默认取默认分支、可改）</td></tr>
+      <tr><td>没选过</td><td>摘要行显示「尚未选择目标」；主按钮置灰</td></tr>
+    </table>
+
+    <div class="note">
+      <strong>失效一律静默回落。</strong>记忆项失效时直接换成能用的值（仓库 / 默认分支 / 仓库根），
+      <strong>不提示、不报错</strong> —— 用户看到的是一个仍然可用的目标，而不是一条看不懂的警告。
+    </div>
+
+    <div class="warn">
+      <strong>全局按钮 + 记忆默认 = 误传风险（已处理）。</strong>
+      按钮在每个页面都有，用户站在 A 仓库的代码页点开，记忆里的目标是 B 仓库 ⇒ 很容易把图传到 B 去。
+      两道防线：<br>
+      ① <strong>上下文优先</strong>：当用户正站在某个仓库 / 目录里，默认目标 = 当前仓库 + 当前目录；没有上下文才用记忆；
+      ② <strong>摘要行显式</strong>：仓库名 + 目录 + 分支三样全写出来，且上传成功后 Toast 补一句「已上传到 jwker/my-app / assets/photos」。
+      <br>两条一起做。
+    </div>
+
+    <h2>按钮规格</h2>
+    <table>
+      <tr><th>项</th><th>取值</th></tr>
+      <tr><td>形状 / 尺寸</td><td>圆形 56 × 56 pt，圆角 28</td></tr>
+      <tr><td>位置</td><td>右 18 pt，底在 Tab 栏顶上方 16 pt</td></tr>
+      <tr><td>材质</td><td><code>.glassEffect</code> + <code>Theme.Palette.glassTint</code>（玻璃只在 <code>GitDuoDesign</code>）</td></tr>
+      <tr><td>图标</td><td>SF Symbol <code>photo.badge.plus</code>（落地前用 <code>NSImage(systemSymbolName:)</code> 探针核实；备选 <code>square.and.arrow.up</code>）</td></tr>
+      <tr><td>出现时机</td><td>全局常驻；键盘弹出时收起、文本输入中隐藏</td></tr>
+      <tr><td>安放点</td><td><code>MainTabView</code> 的 <code>.overlay(alignment: .bottomTrailing)</code>，与 <code>Toast</code> 同层</td></tr>
+    </table>
+
+    <h2>压缩与写入</h2>
+    <ul>
+      <li>压缩复用 <code>UploadIntake</code> + <code>ImageProcessor</code>：≤1 MB 且格式网页端能显示 ⇒ 原样放行；
+        否则自适应压缩（2048@0.9 → 640@0.5），HEIC/TIFF 一律转码并<strong>改扩展名</strong>。</li>
+      <li>写入走 <code>PUT /repos/{owner}/{repo}/contents/{path}</code>（base64 ⇒ <strong>单文件 ≤1 MB 硬限</strong>）。</li>
+      <li>提交说明复用 <code>CommitSheet</code> / <code>CommitDraft</code> 那一套。</li>
+      <li>目录不存在 ⇒ 随文件一起产生（GitHub 不能建空目录），文案写「目录（新）」。</li>
+      <li>只列有 push 权限的仓库（铁律 #7）。</li>
+    </ul>
+
+    <h2>文案</h2>
+    <table>
+      <tr><th>位置</th><th>文案</th></tr>
+      <tr><td>弹层标题</td><td>上传图片</td></tr>
+      <tr><td>未选目标</td><td>尚未选择目标</td></tr>
+      <tr><td>改目标</td><td>点目标那一行（摘要行右侧带 chevron）</td></tr>
+      <tr><td>目录</td><td>相对仓库根；新目录写「（新）」，随文件一起建</td></tr>
+      <tr><td>分支</td><td>默认该仓库的默认分支，可改</td></tr>
+      <tr><td>压缩预览</td><td>3.2 MB → 812 KB · 转成 .jpg</td></tr>
+      <tr><td>成功标题</td><td>已上传</td></tr>
+      <tr><td>复制按钮</td><td>复制路径（复制后变「已复制」）</td></tr>
+      <tr><td>复制出去的内容</td><td><code>jwker/my-app/assets/photos/photo-20261017-143012.jpg</code></td></tr>
+      <tr><td>上传后兜底 Toast</td><td>已上传到 jwker/my-app / assets/photos</td></tr>
+    </table>
+
+    <h2>成功态</h2>
+    <p>上传成功后<strong>弹层不关</strong>，整屏换成成功态：✓ + 仓库与分支 + <strong>带仓库名的相对路径</strong> +
+      「复制路径」按钮 + 「继续上传」/「完成」两个次要动作。
+      用户把弹层划走时，再用一句 Toast 兜底「已上传到 jwker/my-app / assets/photos」。</p>
+    <table>
+      <tr><th>项</th><th>取值</th></tr>
+      <tr><td>相对路径口径</td><td><strong>相对仓库根、带仓库名</strong> ⇒ <code>jwker/my-app/assets/photos/photo-20261017-143012.jpg</code></td></tr>
+      <tr><td>文件名</td><td>沿用 <code>UploadFileName.photo</code>（<code>photo-yyyyMMdd-HHmmss.ext</code>），转码时扩展名跟着换</td></tr>
+      <tr><td>新建目录</td><td>允许；不存在的目录随文件一起建出来（GitHub 不能建空目录）</td></tr>
+    </table>
+    <div class="note">
+      <strong>注意：这一条与现有的 <code>RepoCopy.clipboardPath</code> 不是一回事。</strong>
+      那边复制的是<strong>仓库内路径</strong>（只有根目录才给仓库全名），本功能要的是<strong>带仓库名的</strong>
+      ⇒ 需要一个<strong>新函数</strong>，不要顺手改旧的（改了会让代码浏览页复制出来的路径多出一截）。
+    </div>
+
+    <h2>落地清单</h2>
+    <ul>
+      <li><code>Packages/GitDuoDesign/Components/FloatingActionButton.swift</code> —— 按钮组件（玻璃只许在设计包）</li>
+      <li><code>GitDuo/App/MainTabView.swift</code> —— 全局 overlay（与 Toast 同一层）</li>
+      <li><code>GitDuo/Features/Repo/Views/Sheets/UploadImageSheet.swift</code> —— 弹层（沿用 <code>AddFileSheet</code> 写法）</li>
+      <li>选仓库 / 选目录 —— <strong>复用现成的两层</strong>（仓库列表、目录浏览），在弹层内 push，不重做</li>
+      <li>目标记忆 —— 沿用 <code>BranchMemoryStore</code> 的套路，记「仓库 + 目录 + 分支」，带失效兜底</li>
+      <li>领域层 <code>GitDuoKit</code> —— 记忆的读写与失效判据（铁律 #14：规则写纯函数，不写 ViewModel）</li>
+    </ul>
+  </section>
+
+  <aside class="stage">
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="r">
+        <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="currentColor"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="currentColor"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="currentColor"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="currentColor"/></svg>
+        <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.5 10 8.2a3 3 0 0 0-4 0zM8 5.2c1.7 0 3.3.6 4.5 1.8l1.4-1.6A8 8 0 0 0 8 3a8 8 0 0 0-5.9 2.4l1.4 1.6A6 6 0 0 1 8 5.2M8 1.4c2.4 0 4.7.9 6.4 2.4l1.4-1.6A11 11 0 0 0 8 0 11 11 0 0 0 .2 2.2L1.6 3.8A9.9 9.9 0 0 1 8 1.4" fill="currentColor"/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y=".5" width="21" height="11" rx="3.5" stroke="currentColor" fill="none"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><path d="M23 4v4a2 2 0 0 0 0-4" fill="currentColor"/></svg>
+      </span></div>
+      <div class="navbar"><span class="back">‹ 仓库</span>my-app</div>
+
+      <div class="scroll">
+        <div class="hero">
+          <div class="t">my-app</div>
+          <div class="s">jwker / my-app · 更新于 2 小时前</div>
+          <div style="margin-top:10px"><span class="pill">★ 128</span> <span class="pill">⑂ 12</span> <span class="pill">TypeScript</span></div>
+        </div>
+        <div class="card">
+          <h3>代码</h3>
+          <div class="row"><span class="lead">📁</span><span class="lbl">src</span><span class="chev">›</span></div>
+          <div class="row"><span class="lead">📁</span><span class="lbl">assets</span><span class="chev">›</span></div>
+          <div class="row"><span class="lead">📄</span><span class="lbl">README.md</span><span class="chev">›</span></div>
+        </div>
+      </div>
+
+      <div class="tabbar">
+        <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>首页</div>
+        <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>探索</div>
+        <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v14H4z"/><path d="M4 10h16M9 5v14"/></svg>仓库</div>
+        <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>搜索</div>
+      </div>
+
+      <button class="fab" id="fab" title="上传图片">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m4 17 4.5-4.2 3.3 3 3-2.6L20 17"/></svg>
+        <svg class="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+
+      <div class="scrim" id="scrim"></div>
+      <div class="sheet" id="sheet">
+        <div class="grabber"></div>
+        <div class="sheetnav"><span class="act" id="navLeft">取消</span><span class="t" id="navTitle">上传图片</span><span class="act" id="navRight"></span></div>
+        <div class="sheetbody" id="body"></div>
+      </div>
+    </div>
+
+    <div class="controls" id="steps">
+      <button data-s="direct" class="on">① 直接上传</button>
+      <button data-s="pick">② 点那行 → 选仓库</button>
+      <button data-s="pickdir">③ 选目录</button>
+      <button data-s="done">✓ 成功</button>
+    </div>
+    <div class="toggles">
+      <button id="themeBtn">切换深浅色</button>
+      <button id="resetBtn">回到 ① 直接上传</button>
+    </div>
+  </aside>
+</div>
+
+<script>
+const states={
+direct:`<div class="group">
+  <div class="hd">目标</div>
+  <div class="row" id="repoRow" style="cursor:pointer">
+    <span class="lead">📦</span>
+    <span class="lbl">jwker/my-app<div class="path" style="font:12.5px ui-monospace,Menlo,monospace;color:var(--t2);margin-top:2px">assets/photos · main</div></span>
+    <span class="chev">›</span>
+  </div>
+  <div class="hintline">点上面这一行可以换一个仓库与目录。</div>
+</div>
+<div class="group">
+  <div class="hd">图片</div>
+  <div class="picker"><div class="ic">🖼️</div>从相册选择<br><span style="font-size:12px;color:var(--t3)">支持 HEIC / TIFF，自动转码</span></div>
+  <div class="preview"><div class="thumb"></div><div class="meta">
+    <div class="n">photo-20261017-143012.HEIC</div>
+    <div class="d">原图 3.2 MB · 网页端显示不出来</div>
+    <div class="sizes"><span class="old">3.2 MB</span><span class="arrow">→</span><span class="new">812 KB · 转成 .jpg</span></div>
+  </div></div>
+  <div class="hintline">超过 1 MB 的图片会自动压缩；网页端显示不出来的格式会自动转换。</div>
+</div>
+<div class="group">
+  <div class="hd">提交信息</div>
+  <div style="padding:12px 16px"><input class="field" placeholder="上传图片 photo-20261017-143012"></div>
+</div>
+<div class="primary">上传</div>`,
+
+pick:`<div class="group">
+  <div class="hd">选仓库（push 进来的一层）</div>
+  <div class="search">🔍 搜索仓库</div>
+  <div class="row"><span class="lead">📦</span><span class="lbl">jwker/my-app</span><span class="val" style="color:var(--accent)">选它</span></div>
+  <div class="row"><span class="lead">📦</span><span class="lbl">jwker/blog</span><span class="val" style="color:var(--t3)">只读</span></div>
+  <div class="row"><span class="lead">📦</span><span class="lbl">jwker/design-kit</span><span class="val" style="color:var(--accent)">选它</span></div>
+  <div class="hintline">只列有 push 权限的仓库（铁律 #7）。</div>
+</div>
+<div class="primary">用这个仓库</div>`,
+
+pickdir:`<div class="group">
+  <div class="hd">选目录（push 进来的一层）</div>
+  <div class="crumb" style="padding-top:6px"><span>assets</span><span>photos</span><span class="chev">›</span></div>
+  <div class="row"><span class="lead">📁</span><span class="lbl">2026</span><span class="chev">›</span></div>
+  <div class="row"><span class="lead">📁</span><span class="lbl">screenshots</span><span class="chev">›</span></div>
+  <div class="row"><span class="lead">📁</span><span class="lbl">+ 新目录</span><span class="val" style="color:var(--t3)">随文件一起建</span></div>
+  <div class="hintline">目录相对仓库根；写进还不存在的目录会随文件一起建出来。</div>
+</div>
+<div class="primary">用这个目录</div>`,
+
+first:`<div class="group">
+  <div class="hd">目标</div>
+  <div class="summary">
+    <span class="ic" style="color:var(--t3)">📦</span>
+    <span class="txt"><span class="repo" style="color:var(--t3)">尚未选择目标</span><span class="path">选一个仓库与目录</span></span>
+    <span class="change" id="changeBtn">选一个</span>
+  </div>
+</div>
+<div class="group">
+  <div class="hd">图片</div>
+  <div class="picker"><div class="ic">🖼️</div>从相册选择</div>
+</div>
+<div class="primary off">上传（先选目标）</div>`,
+done:`<div class="success">
+  <div class="ring"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4.5 4.5L19 7"/></svg></div>
+  <div style="font-size:19px;font-weight:700">已上传</div>
+  <div style="color:var(--t2);font-size:13.5px;margin-top:4px">已复制的是带仓库名的相对路径，贴到别的仓库的 README 里也能显示</div>
+</div>
+<div class="pathbox"><code>jwker/my-app/assets/photos/photo-20261017-143012.jpg</code>
+  <button class="copy" id="copyBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>复制路径</button>
+</div>
+<div class="secondary" style="margin-top:10px">继续上传</div>
+<div class="secondary" style="margin-top:10px">完成</div>`
+};
+let state='direct';
+const body=document.getElementById('body'),fab=document.getElementById('fab'),sheet=document.getElementById('sheet'),scrim=document.getElementById('scrim');
+function render(){
+  body.innerHTML=states[state];
+  const navTitles={direct:'上传图片',pick:'选仓库',pickdir:'选目录',first:'上传图片',done:'已上传'};
+  document.getElementById('navTitle').textContent = navTitles[state]||'上传图片';
+  document.getElementById('navLeft').textContent = state==='done'?'完成':'取消';
+  document.getElementById('navRight').textContent = state==='done'?'复制路径':'';
+  document.querySelectorAll('#steps button').forEach(b=>b.classList.toggle('on',b.dataset.s===state));
+  const cb=document.getElementById('copyBtn');
+  if(cb)cb.onclick=()=>{cb.classList.add('done');cb.innerHTML='已复制';setTimeout(()=>{cb.classList.remove('done');cb.innerHTML='复制路径';},1600);};
+  const ch=document.getElementById('changeBtn');
+  if(ch)ch.onclick=()=>{state='pick';render();};
+  const rr=document.getElementById('repoRow');
+  if(rr)rr.onclick=()=>{state='pick';render();};
+}
+document.querySelectorAll('#steps button').forEach(b=>b.onclick=()=>{state=b.dataset.s;render();open();});
+function open(){sheet.classList.add('show');scrim.classList.add('show');fab.style.opacity=0;}
+function close(){sheet.classList.remove('show');scrim.classList.remove('show');fab.style.opacity=1;}
+fab.onclick=open;scrim.onclick=close;
+document.getElementById('themeBtn').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='light'?'dark':'light';};
+document.getElementById('resetBtn').onclick=()=>{state='direct';render();open();};
+render();
+</script>
+</body>
+</html>
