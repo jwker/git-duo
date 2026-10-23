@@ -29,9 +29,45 @@ final class UploadImageViewModel {
         case chooseRepository
         /// 选目录（挑完仓库进去）。
         case chooseDirectory
+        /// 选分支（从选目录那一屏进去）。
+        case chooseBranch
+        /// 新建目录（在选目录那一屏进去）。
+        case newDirectory
     }
 
     private(set) var page: Page = .main
+
+    /// 弹层内部的**页栈**（“返回”回到上一页）。
+    ///
+    /// ⚠️ 它是**自己的数组**，不是一条 `NavigationStack`（理由见 `UploadImageSheet` 的类型说明）。
+    private var pageStack: [Page] = []
+
+    /// 去某一屏（把当前那一屏记下来，“返回”回得来）。
+    func show(_ page: Page) {
+        pageStack.append(self.page)
+        self.page = page
+    }
+
+    /// 去某一屏，并把页栈**重置**成 [base]。
+    ///
+    /// ⚠️ 用在“一串连动”上：选完仓库 → 去选目录，
+    /// 那时“返回”应该回**首屏**，而不是回“选仓库”那一屏
+    /// （仓库已经定下来了，再回去重选一遍是倒退）。
+    func show(_ page: Page, after base: Page) {
+        pageStack = [base]
+        self.page = page
+    }
+
+    /// 回上一屏；没有上一屏就回首屏。
+    func back() {
+        page = pageStack.popLast() ?? .main
+    }
+
+    /// 回**首屏**并清空页栈（选完了：目标定下来了，不该再“返回”到选目录那一屏）。
+    func showRoot(_ page: Page) {
+        pageStack.removeAll()
+        self.page = page
+    }
 
     // MARK: - 目标
 
@@ -55,6 +91,18 @@ final class UploadImageViewModel {
     private(set) var browsingPath: RepoPath = .root
     private(set) var isLoadingDirectories = false
     private(set) var directoryFailure: String?
+
+    // MARK: - 分支
+
+    /// 该仓库的分支列表（选分支那一屏用）。
+    private(set) var branches: [BranchSummary] = []
+    private(set) var isLoadingBranches = false
+
+    // MARK: - 新建目录
+
+    /// 新目录的名字（用户输入，**只填一段**）。
+    var newDirectoryName: String = ""
+    private(set) var newDirectoryFailure: String?
 
     // MARK: - 图片
 
@@ -214,7 +262,7 @@ final class UploadImageViewModel {
 
     /// 去选仓库（从摘要行那一行进去）。
     func startChoosingRepository() async {
-        page = .chooseRepository
+        show(.chooseRepository)
         repositoryFailure = nil
         guard repositories.isEmpty else { return }
         isLoadingRepositories = true
@@ -240,7 +288,7 @@ final class UploadImageViewModel {
             branch: branch
         )
         browsingPath = .root
-        page = .chooseDirectory
+        show(.chooseDirectory, after: .main)
         await loadDirectories(at: .root)
     }
 
@@ -263,10 +311,79 @@ final class UploadImageViewModel {
             directory: browsingPath,
             branch: target.branch
         )
-        page = .main
+        showRoot(.main)
         // ⚠️ 改了目标**立刻写回记忆**（2026-10-23 定的口径）——
         //    不写回的话"下次直接上传"用的还是上一次那个目标。
-        Task { await memory.remember(self.target!) }
+        Task { await rememberCurrentTarget() }
+    }
+
+    // MARK: - 分支
+
+    /// 去选分支（从选目录那一屏进去）。
+    func startChoosingBranch() async {
+        show(.chooseBranch)
+        guard let target else { return }
+        isLoadingBranches = true
+        defer { isLoadingBranches = false }
+        do {
+            branches = try await branchesLoader.load(fullName: target.fullName).branches
+        } catch {
+            branches = []
+        }
+    }
+
+    /// 换一条分支 ⇒ 重取那一层的目录（不同分支的目录内容不同）。
+    func pickBranch(_ name: String) async {
+        guard let target else { return }
+        self.target = UploadTarget(
+            fullName: target.fullName,
+            directory: target.directory,
+            branch: name
+        )
+        show(.chooseDirectory, after: .chooseDirectory)
+        await loadDirectories(at: target.directory)
+        await rememberCurrentTarget()
+    }
+
+    // MARK: - 新建目录
+
+    /// 去新建目录。
+    func startNewDirectory() {
+        newDirectoryName = ""
+        newDirectoryFailure = nil
+        show(.newDirectory)
+    }
+
+    /// 用刚输入的名字作为新目录。
+    ///
+    /// ## ⚠️ 它**不会**先建目录 —— GitHub 的 `PUT /contents` **不能建空目录**
+    /// （§5.8）。新目录是**随文件一起产生**的：这一格只是把落点改成那个路径。
+    func chooseNewDirectory() {
+        guard let target else { return }
+        let name = newDirectoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // ⚠️ **只填一段**：多级路径（`2026/10`）要一层层进，不能一口气填 ——
+        //    那一格的语义是"在当前这一层下面建一个目录"。
+        guard RepoPath.isValidComponent(name) else {
+            newDirectoryFailure = UploadImageCopy.invalidDirectoryName
+            return
+        }
+        guard let path = browsingPath.appending(name) else {
+            newDirectoryFailure = UploadImageCopy.invalidDirectoryName
+            return
+        }
+        self.target = UploadTarget(
+            fullName: target.fullName,
+            directory: path,
+            branch: target.branch
+        )
+        showRoot(.main)
+        Task { await rememberCurrentTarget() }
+    }
+
+    /// 把当前目标写回记忆。
+    private func rememberCurrentTarget() async {
+        guard let target else { return }
+        await memory.remember(target)
     }
 
     /// 选目录那一屏：取那一层的目录清单。
@@ -293,8 +410,11 @@ final class UploadImageViewModel {
     }
 
     /// 回到首屏（不选目标，只是"算了"）。
+    ///
+    /// ⚠️ 回到首屏时**清空页栈** —— 从「选仓库」退出来之后，
+    /// 再点那一行进「选目录」，返回键不应该先退到「选仓库」。
     func backToMain() {
-        page = .main
+        showRoot(.main)
     }
 
     // MARK: - 选图

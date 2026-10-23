@@ -124,6 +124,10 @@ struct UploadImageSheet: View {
                     repositorySection
                 case .chooseDirectory:
                     directorySection
+                case .chooseBranch:
+                    branchSection
+                case .newDirectory:
+                    newDirectorySection
                 }
             }
         }
@@ -137,7 +141,9 @@ struct UploadImageSheet: View {
                     // 首屏的左边是「取消」⇒ 关掉整张弹层。
                     dismiss()
                 } else {
-                    model.backToMain()
+                    // ⚠️ 回**上一页**（页栈）—— 不是直接回首屏：
+                    //    从「选分支」退出来应该回到「选目录」那一屏。
+                    model.back()
                 }
             } label: {
                 Text(model.page == .main ? "取消" : "‹ 返回")
@@ -163,6 +169,8 @@ struct UploadImageSheet: View {
         case .main: UploadImageCopy.sheetTitle
         case .chooseRepository: UploadImageCopy.chooseRepositoryTitle
         case .chooseDirectory: UploadImageCopy.chooseDirectoryTitle
+        case .chooseBranch: UploadImageCopy.chooseBranchTitle
+        case .newDirectory: UploadImageCopy.newDirectoryTitle
         }
     }
 
@@ -392,6 +400,42 @@ struct UploadImageSheet: View {
                         Spacer(minLength: 0)
                     }
                 }
+                // ⚠️ **新建目录**（口径：允许，随文件一起建）。
+                Button {
+                    model.startNewDirectory()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                        Text("新目录")
+                            .font(Theme.Font.rowTitle)
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                        Spacer(minLength: 0)
+                    }
+                }
+                // ⚠️ **换分支**（口径：默认默认分支，可改）。
+                Button {
+                    Task { await model.startChoosingBranch() }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("分支")
+                                .font(Theme.Font.rowTitle)
+                                .foregroundStyle(Theme.Palette.textPrimary)
+                            Text(model.target?.branch ?? "")
+                                .font(Theme.Font.caption)
+                                .foregroundStyle(Theme.Palette.textSecondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                    }
+                }
             }
             if let failure = model.directoryFailure {
                 Text(failure)
@@ -403,6 +447,61 @@ struct UploadImageSheet: View {
                  : model.browsingPath.raw)
         } footer: {
             Text(UploadImageCopy.directoryHint)
+        }
+    }
+
+    // MARK: - 选分支
+
+    @ViewBuilder
+    private var branchSection: some View {
+        Section {
+            if model.isLoadingBranches {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                ForEach(model.branches) { branch in
+                    Button {
+                        Task { await model.pickBranch(branch.name) }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: branch.name == model.target?.branch
+                                  ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 16))
+                                .foregroundStyle(branch.name == model.target?.branch
+                                                 ? Theme.Palette.accent
+                                                 : Theme.Palette.textTertiary)
+                            Text(branch.name)
+                                .font(Theme.Font.rowTitle)
+                                .foregroundStyle(Theme.Palette.textPrimary)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text(UploadImageCopy.chooseBranchTitle)
+        }
+    }
+
+    // MARK: - 新建目录
+
+    @ViewBuilder
+    private var newDirectorySection: some View {
+        Section {
+            TextField("目录名", text: $model.newDirectoryName)
+                .textFieldStyle(.plain)
+            if let failure = model.newDirectoryFailure {
+                Text(failure)
+                    .foregroundStyle(Theme.Palette.destructive)
+            }
+            ActionButton(title: "用这个目录", style: .primary) {
+                model.chooseNewDirectory()
+            }
+        } header: {
+            Text(UploadImageCopy.newDirectoryTitle)
+        } footer: {
+            Text(UploadImageCopy.newDirectoryHint)
         }
     }
 

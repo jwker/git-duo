@@ -41,8 +41,20 @@ public enum UploadImageCopy {
     /// 选目录那一屏的标题。
     public static let chooseDirectoryTitle = "选目录"
 
+    /// 选分支那一屏的标题。
+    public static let chooseBranchTitle = "选分支"
+
     /// 选目录那一屏的说明（目录相对仓库根；新目录随文件一起建）。
     public static let directoryHint = "目录相对仓库根；写进还不存在的目录会随文件一起建出来。"
+
+    /// 新建目录那一格的标题。
+    public static let newDirectoryTitle = "新目录"
+
+    /// 新建目录那一格的说明（**只填一段**）。
+    public static let newDirectoryHint = "填一个名字（只填一段），它会建在当前这一层下面。"
+
+    /// 新目录名不合法时的话。
+    public static let invalidDirectoryName = "目录名不合法（不能为空、不能含 / 或 ..）"
 
     /// 选仓库那一屏的说明（只列可写的仓库）。
     public static let writableOnlyHint = "只列有 push 权限的仓库。"
