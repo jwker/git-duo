@@ -46,6 +46,13 @@ struct UploadImageSheet: View {
 
     @State private var model: UploadImageViewModel
 
+    /// 系统相册选择器是否呈现。
+    ///
+    /// ## ⚠️ 用 `isPresented` 而不是在 label 里放 `PhotosPicker`
+    ///
+    /// 那样才能让**已选好的那张图本身**也能点开选择器（重选）——
+    /// `PhotosPicker` 只能包住自己的 label，包不住别处的视图。
+    /// （同 `AddFileSheet` 的做法。）
     @State private var isPickingPhoto = false
     @State private var pickedPhoto: PhotosPickerItem?
 
@@ -101,6 +108,15 @@ struct UploadImageSheet: View {
         //    （视图本来就在安全区里时它是空操作 ⇒ 不会多出一段空白）。
         .safeAreaPadding(.top)
         .task { await model.start() }
+        // ⚠️ 系统选择器挂在**整张弹层**上（不是某一行的 label）——
+        //    那样「已选好的那张图」也能点开它（重选）。
+        .photosPicker(
+            isPresented: $isPickingPhoto,
+            selection: $pickedPhoto,
+            matching: .images,
+            // ⚠️ `.current`（不改编码）—— 重编码会改内容与体积（决策 #71 / #72）。
+            preferredItemEncoding: .current
+        )
         // ⚠️ **成功提示走这里，而不是提交成功的那一刻**（2026-10-23 定的口径）：
         //    成功态留在弹层里（它带着「复制路径」那个动作），
         //    Toast 只在**弹层被划走**时兜底一句 —— 免得一句话说两遍。
@@ -192,26 +208,21 @@ struct UploadImageSheet: View {
 
         Section {
             if let draft = model.draft {
-                preview(draft)
-            } else {
-                PhotosPicker(
-                    selection: $pickedPhoto,
-                    matching: .images,
-                    // ⚠️ `.current`（不改编码）—— 重编码会改内容与体积（决策 #71 / #72）。
-                    preferredItemEncoding: .current
-                ) {
-                    // ⚠️ label **就地写**：那个闭包是 `@Sendable` 的，
-                    //    引用视图上的一个 MainActor 计算属性会撞隔离规则。
-                    VStack(spacing: 6) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 24))
-                        Text("从相册选择")
-                            .font(Theme.Font.rowTitle)
-                    }
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.l)
+                // ⚠️ **点已选好的那张图 ⇒ 重新选**（用户要的）。
+                //    右侧写着「换一张」，免得以为点它会放大预览。
+                Button {
+                    isPickingPhoto = true
+                } label: {
+                    preview(draft)
                 }
+                .disabled(model.isPreparing)
+            } else {
+                Button {
+                    isPickingPhoto = true
+                } label: {
+                    pickerLabel
+                }
+                .disabled(model.isPreparing)
             }
             if model.isPreparing {
                 ProgressView()
@@ -284,6 +295,19 @@ struct UploadImageSheet: View {
         return "\(directory) · \(target.branch)"
     }
 
+    /// 选图那一行（还没选时的样子）。
+    private var pickerLabel: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "photo")
+                .font(.system(size: 24))
+            Text("从相册选择")
+                .font(Theme.Font.rowTitle)
+        }
+        .foregroundStyle(Theme.Palette.textSecondary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.l)
+    }
+
     /// 已选好的那一张（含"动过什么"的说明 —— 决策 #71 / #72）。
     private func preview(_ draft: UploadDraft) -> some View {
         HStack(spacing: 12) {
@@ -307,6 +331,10 @@ struct UploadImageSheet: View {
                 }
             }
             Spacer(minLength: 0)
+            // ⚠️ 这一行**可点**（重选）⇒ 得说得出它可点。
+            Text("换一张")
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.accent)
         }
     }
 

@@ -230,6 +230,14 @@ ul,ol{margin:0 0 12px;padding-left:22px;color:var(--t2)}li{margin:5px 0}
       <tr><td>上传后兜底 Toast</td><td>已上传到 jwker/my-app / assets/photos</td></tr>
     </table>
 
+    <h2>图片那一组</h2>
+    <table>
+      <tr><th>项</th><th>取值</th></tr>
+      <tr><td>还没选</td><td>一整块「从相册选择」（点它 → 系统相册）</td></tr>
+      <tr><td>已选</td><td><strong>那一张缩略图 + 文件名 + 压缩说明</strong>，整行<strong>可点</strong> ⇒ 重新选；右侧写着「换一张」</td></tr>
+      <tr><td>重选失败</td><td>提示那句话，<strong>并把上一张清掉</strong>（不许“选了新图、其实用的还是旧的”）</td></tr>
+    </table>
+
     <h2>成功态</h2>
     <p>上传成功后<strong>弹层不关</strong>，整屏换成成功态：✓ + 仓库与分支 + <strong>带仓库名的相对路径</strong> +
       「复制路径」按钮 + 「继续上传」/「完成」两个次要动作。
@@ -332,7 +340,7 @@ direct:`<div class="group">
     <div class="n">photo-20261017-143012.HEIC</div>
     <div class="d">原图 3.2 MB · 网页端显示不出来</div>
     <div class="sizes"><span class="old">3.2 MB</span><span class="arrow">→</span><span class="new">812 KB · 转成 .jpg</span></div>
-  </div></div>
+  </div><span class="change">换一张</span></div>
   <div class="hintline">超过 1 MB 的图片会自动压缩；网页端显示不出来的格式会自动转换。</div>
 </div>
 <div class="group">

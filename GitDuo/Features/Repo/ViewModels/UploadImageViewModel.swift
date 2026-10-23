@@ -484,7 +484,10 @@ final class UploadImageViewModel {
                 adjustment: adjustment
             )
         case .tooLarge:
-            // 压不下来 / 动图 / 不是图片 ⇒ 同一句提示（用户能做的动作是同一个）。
+            // ⚠️ **把上一张清掉**：用户是来“换一张”的，换失败却还留着旧的，
+            //    界面上就变成“选了新图、其实用的还是旧的”。
+            //    （压不下来 / 动图 / 不是图片 ⇒ 同一句提示：用户能做的动作是同一个。）
+            draft = nil
             preparationFailure = CommitSheetCopy.tooLargeHint
         }
     }
