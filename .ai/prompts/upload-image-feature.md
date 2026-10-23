@@ -1,6 +1,7 @@
 # 任务 · 「上传图片到仓库」（悬浮按钮 + 弹层）
 
-> 起档 2026-10-23。**状态：选型已定（方案 A + S3），等最后一条口径（上下文优先）确认后开工**；尚未写任何 Swift 代码。
+> 起档 2026-10-23。**状态：代码已落地（`make verify` 全绿）—— 待真机目视。**
+> 提交：`5685b38`（首版）+ `dc347c0`（补分支可改 / 新建目录 / 页栈）。
 
 ## 要做的事
 
@@ -34,6 +35,41 @@
 3. `MainTabView` 全局 overlay 接上按钮 → 弹层（`UploadImageSheet`）。
 4. 弹层：目标摘要行（点那行 push 选仓库 / 选目录）→ 选图（`UploadIntake` 压缩）→ 提交信息 → 上传 → 成功态 + 复制。
 5. `make verify` + 真机目视（深色档也要看）。
+
+## 已落地（2026-10-23）
+
+| 件 | 位置 |
+|---|---|
+| 悬浮按钮 | `Packages/GitDuoDesign/.../FloatingActionButton.swift`（玻璃只许在设计包；macOS 变体有降级路径） |
+| 全局入口 | `GitDuo/App/MainTabView.swift` 的 `.overlay(alignment: .bottomTrailing)`（与 Toast 同一层 ⇒ 只有一个实例；键盘弹出时收起） |
+| 弹层 | `GitDuo/Features/Repo/Views/Sheets/UploadImageSheet.swift`（三屏 + 两个附加页：选分支 / 新建目录） |
+| 状态 | `GitDuo/Features/Repo/ViewModels/UploadImageViewModel.swift` |
+| 目标模型与回落 | `Packages/GitDuoKit/.../Files/UploadTarget.swift`（`UploadTargetResolver` 是纯函数） |
+| 文案 | `Packages/GitDuoKit/.../Files/UploadImageCopy.swift` |
+| 落盘与上下文 | `GitDuo/App/Stores/UploadStores.swift`（`UserDefaultsUploadTargetStore` + `UploadContextStore`） |
+| 单测 | `GitDuoKitTests/UploadTargetTests.swift`（9 条）+ `GitDuoTests/UploadTargetStoreTests.swift`（6 条） |
+
+### 顺带做的一件事
+
+`make verify` **接进了 App 层单测**（新增 `make test-app`，T1 计划阶段 3）——
+此前 App 层的测试在 `make verify` 里**不会被跑到**（“漏跑”比“跑失败”更危险）。
+`AGENTS.md` §1 的命令表与警告同步改了。
+
+## 待目视（只能人眼看，判据 = 用户说"我看了没问题"）
+
+- 悬浮按钮的**位置与遮挡**：右下角会不会压住内容、会不会压住 Tab 栏；
+- 玻璃材质在浅色 / 深色两档的观感（深色档 tint 50%）；
+- 弹层各屏的观感（首屏 / 选仓库 / 选目录 / 选分支 / 新目录）与自绘标题栏；
+- 成功态的路径框与「复制路径」按钮；
+- **真机上传一次**（本机无真令牌 ⇒ 之前跑不通）。
+
+## 已知限制（如实记着）
+
+- **选仓库只取第一页**（`GET /user/repos` 的 30 条）—— 可写仓库若在第二页，就选不到它。
+- **App 层 ViewModel 没有单测**：`UploadImageViewModel` 的依赖（五个用例 + 两个存储）要在 App 层造齐替身，
+  本轮没做；落盘存储那一层已补测。
+- **压缩失败提示**沿用 `CommitSheetCopy.tooLargeHint`（与「添加文件」那条出口同一句），
+  但那一档的措辞原本是为「文件 App 上传」写的。
 
 ## 设计稿（HTML，在 `.ai/design/upload-image-fab/`）
 
