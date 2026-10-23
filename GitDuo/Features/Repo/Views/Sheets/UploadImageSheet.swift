@@ -95,6 +95,11 @@ struct UploadImageSheet: View {
             }
         }
         .background(Theme.Palette.background)
+        // ⚠️ **顶部留白**（自绘标题栏的代价）：`.large` 高度的弹层**顶到屏幕顶端**，
+        //    根视图不会自动避开状态栏 ⇒ 自绘的标题栏会紧贴上边缘（文字看着“黏在边框上”）。
+        //    `.safeAreaPadding(.top)` 把状态栏那一段让出来
+        //    （视图本来就在安全区里时它是空操作 ⇒ 不会多出一段空白）。
+        .safeAreaPadding(.top)
         .task { await model.start() }
         // ⚠️ **成功提示走这里，而不是提交成功的那一刻**（2026-10-23 定的口径）：
         //    成功态留在弹层里（它带着「复制路径」那个动作），
@@ -160,7 +165,8 @@ struct UploadImageSheet: View {
             Color.clear.frame(width: 44, height: 1)
         }
         .padding(.horizontal, Theme.Spacing.l)
-        .padding(.vertical, Theme.Spacing.s)
+        .padding(.top, Theme.Spacing.m)
+        .padding(.bottom, Theme.Spacing.s)
         .background(Theme.Palette.surface)
     }
 

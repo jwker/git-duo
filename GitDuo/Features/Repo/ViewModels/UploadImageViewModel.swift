@@ -214,40 +214,80 @@ final class UploadImageViewModel {
     }
 
     /// 查三个事实：仓库还在不在、目录还在不在、分支还在不在，以及当前默认分支。
+    ///
+    /// ## ⚠️ **“查不到” ≠ “不存在”**（这一条是这一整个方法的关键）
+    ///
+    /// 只有 **404** 才算“它没了”；
+    /// 401（令牌失效）/ 5xx / 断网 只是**这一次没查成** ——
+    /// 拿“查不到”当“没了”，表现就是**用户明明选过目标，重开却说没选过**。
+    /// （同 `BranchResolver` 的口径：无法验证 ≠ 什么都不存在。）
     private func facts(for target: UploadTarget) async -> UploadTargetFacts {
         // ① 仓库 + 默认分支（`GET /repos/{o}/{r}` ⇒ 404 = 仓库没了）
-        guard let detail = try? await detailLoader.repository(fullName: target.fullName) else {
+        let detail: RepositoryDetail
+        do {
+            detail = try await detailLoader.repository(fullName: target.fullName)
+        } catch let error as GitHubError {
+            guard case .notFound = error else {
+                // ⚠️ 查不成 ⇒ **当作还在**（保持目标能用），让上传那一步去报真实的错。
+                return UploadTargetFacts(
+                    repositoryExists: true,
+                    directoryExists: true,
+                    branchExists: true,
+                    defaultBranch: target.branch
+                )
+            }
             return UploadTargetFacts(
                 repositoryExists: false,
                 directoryExists: false,
                 branchExists: false,
                 defaultBranch: ""
             )
+        } catch {
+            return UploadTargetFacts(
+                repositoryExists: true,
+                directoryExists: true,
+                branchExists: true,
+                defaultBranch: target.branch
+            )
         }
 
-        // ② 分支还在不在（列表取不到 ⇒ **按"无法验证"处理**，不当作不存在 ——
+        // ② 分支还在不在（列表取不到 ⇒ **按“无法验证”处理**，不当作不存在 ——
         //    网络抖一下就清掉用户的记忆值，那清掉是写盘、不会自愈）。
-        let availableBranches: [String]
-        if let list = try? await branchesLoader.load(fullName: target.fullName) {
-            availableBranches = list.branches.map(\.name)
-        } else {
-            availableBranches = []
+        let branchExists: Bool
+        do {
+            let list = try await branchesLoader.load(fullName: target.fullName)
+            // ⚠️ **列表不完整时不能判“没了”**：服务端还有下一页（`hasMore`），
+            //    我们的分支可能就在下一页里 ⇒ 那样会把一个还在的分支清掉。
+            branchExists = list.hasMore || list.branches.isEmpty
+                ? true
+                : list.branches.contains { $0.name == target.branch }
+        } catch {
+            branchExists = true
         }
-        let branchExists = availableBranches.isEmpty
-            ? true
-            : availableBranches.contains(target.branch)
 
         // ③ 目录还在不在（取那一层的清单 ⇒ 404 = 目录没了）
         let directoryExists: Bool
         if target.directory.isRoot {
             directoryExists = true
         } else {
-            directoryExists = (try? await treeLoader.load(
-                fullName: target.fullName,
-                path: target.directory,
-                remembered: target.branch,
-                defaultBranch: detail.defaultBranch
-            )) != nil
+            do {
+                _ = try await treeLoader.load(
+                    fullName: target.fullName,
+                    path: target.directory,
+                    remembered: target.branch,
+                    defaultBranch: detail.defaultBranch
+                )
+                directoryExists = true
+            } catch let error as GitHubError {
+                // ⚠️ 只有 404 算“目录没了”；其余（401 / 5xx / 断网）只是没查成。
+                if case .notFound = error {
+                    directoryExists = false
+                } else {
+                    directoryExists = true
+                }
+            } catch {
+                directoryExists = true
+            }
         }
 
         return UploadTargetFacts(
@@ -289,6 +329,9 @@ final class UploadImageViewModel {
         )
         browsingPath = .root
         show(.chooseDirectory, after: .main)
+        // ⚠️ **选了仓库就写回记忆**（口径：改了就写回）——
+        //    不等"目录也确认了"：用户挑完仓库就退出去，也是他选过的目标。
+        await rememberCurrentTarget()
         await loadDirectories(at: .root)
     }
 
