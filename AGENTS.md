@@ -28,6 +28,7 @@
 |---|---|
 | `make gen` | xcodegen 生成 `GitDuo.xcodeproj`（改 `project.yml` / **增删文件后必跑**） |
 | `make test` | 五个包的单测（Swift Testing，秒级） |
+| `make test-app` | App 层单测（`GitDuoTests`，**在模拟器里跑**，慢得多） |
 | `make build` | 为 iOS 模拟器构建 App（不签名） |
 | `make verify` | **以上全跑 —— 改完必跑** |
 | `make device` | 真机：构建(带签名) → 安装 → 启动（手测用） |
@@ -36,6 +37,10 @@
 
 > ⚠️ **`make test` 一个字都不编译 App target（`GitDuo/**`）** —— 它只跑五个 SwiftPM 包。
 > 改了 `GitDuo/**` 却只跑 `make test` 会拿到"全绿"，而 App 层可能**根本编不过**。⇒ **必须 `make verify`**。
+>
+> ⚠️ `make verify` = `make test` + **`make test-app`** + `make build`（2026-10-23 起）——
+> App 层单测在模拟器里跑（`TEST_HOST` ⇒ 要启动一次 GitDuo 本体），所以比包测试慢得多。
+> ⚠️ 它**要求本机有一台 iOS 27.0 的模拟器**（`SIM_APP_DESTINATION`，默认 `iPhone 18 Pro`）。
 
 > ⚠️ **宣布"零编译警告"之前先强制全量重编** —— **增量构建会吞掉警告**。
 > 先 `find Packages GitDuo -name '*.swift' -print0 | xargs -0 touch`，再 `make verify`。

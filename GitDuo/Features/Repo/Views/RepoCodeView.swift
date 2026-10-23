@@ -317,7 +317,40 @@ struct RepoCodeView: View {
         .sheet(item: $sheet) { route in
             presented(route)
         }
+        // ⚠️ **把「当前所在」写进上传上下文**（2026-10-23 定的口径：上下文优先）。
+        //    悬浮按钮是**全局**的，而上传目标是**记忆**的 ——
+        //    站在这里却把图传到记忆里那个仓库，是真实会发生的误传。
+        //    ⇒ 换层时同步更新（那一层就是用户此刻要的目录）。
+        .onChange(of: current.path.raw) { _, _ in
+            Task { await publishUploadContext() }
+        }
+        .task { await publishUploadContext() }
+        // ⚠️ 离开这一页 ⇒ **清掉上下文**：否则用户已经走到别的 Tab 了，
+        //    上传时还会拿这里的目录当默认。
+        //    ⚠️ 只清"还是我写的那份"—— 页面离开与下一个页面写入**没有顺序保证**
+        //    （见 `UploadContextStore.clear(ifCurrentIs:)` 的说明）。
+        .onDisappear {
+            Task { await env.uploadContext.clear(ifCurrentIs: publishedContext) }
+        }
     }
+
+    /// 把当前这一层发布成上传上下文（仓库 + 目录 + 已解析出的分支）。
+    private func publishUploadContext() async {
+        let session = current.session
+        let target = UploadTarget(
+            fullName: fullName,
+            directory: current.path,
+            // ⚠️ 分支可能还没解析出来（那一层刚进来）—— 那时给空串，
+            //    弹层那侧会拿默认分支补上（它那边本来就要去查一次）。
+            branch: session.branch ?? ""
+        )
+        publishedContext = target
+        await env.uploadContext.set(target)
+    }
+
+    /// 本页**最后发布**的那份上下文（离开时用它清空 ——
+    /// 只当当前值还是它的时候才清，见 `UploadContextStore.clear(ifCurrentIs:)`）。
+    @State private var publishedContext: UploadTarget?
 
     /// 当前层（栈顶）。
     ///

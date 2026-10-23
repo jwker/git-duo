@@ -246,6 +246,22 @@ final class AppEnvironment {
     /// ⇒ `signOut()` 必须清掉（§3.6 第 ③ 步）。
     let commentDrafts: any CommentDraftStore
 
+    /// 「上传图片」的**目标记忆**（仓库 + 目录 + 分支，2026-10-23 定）。
+    ///
+    /// ⚠️ 目标**只问一次**：选过一次之后，之后每次都拿它当默认
+    /// ⇒ 没有它，全局悬浮按钮每用一次就要重选一遍仓库。
+    ///
+    /// ⚠️ 它是**账号数据**：仓库全名与目录路径会暴露私有仓库的结构
+    /// ⇒ `signOut()` 必须清掉。
+    let uploadTargetStore: any UploadTargetStore
+
+    /// 「当前所在」的上下文（用户正站在哪个仓库的哪一层）。
+    ///
+    /// ⚠️ 它**不落盘**（与 `uploadTargetStore` 相反）：它是"这一秒站在哪"，
+    /// 记忆才是"上次用的目标"。两者混在一起会出现"关掉 App 再打开，
+    /// 还站在昨天的目录里"的错觉。
+    let uploadContext = UploadContextStore()
+
     // MARK: - 全局 UI 通道
 
     /// 轻提示的唯一通道（TECH_SPEC §8.4）—— 挂在 `MainTabView` 上，四个 Tab 共用。
@@ -301,11 +317,13 @@ final class AppEnvironment {
         let searchHistory = UserDefaultsSearchHistoryStore()
         let branchMemory = UserDefaultsBranchMemoryStore()
         let commentDrafts = UserDefaultsCommentDraftStore()
+        let uploadTargets = UserDefaultsUploadTargetStore()
         self.recentVisits = visits
         self.starSnapshots = snapshots
         self.searchHistory = searchHistory
         self.branchMemory = branchMemory
         self.commentDrafts = commentDrafts
+        self.uploadTargetStore = uploadTargets
 
         self.repositories = LoadRepositoriesPage(
             source: GitHubRepositoryEndpoint(client: client)
@@ -630,12 +648,14 @@ final class AppEnvironment {
         //    · 评论草稿（切片 7 —— 草稿里可能有还没发布的正文）
         //    · **Star 可写范围**（切片 11 —— 它是"这个账号把 GitDuo 装在哪几个账号上"，
         //      换个人登录，能写的仓库也换了）
+        //    · **上传目标记忆**（2026-10-23 —— 仓库全名与目录路径会暴露私有仓库的结构）
         //    · 接口缓存（它存的是**带令牌换来的**响应，换账号后头像是别人的数据）
         await recentVisits.clear()
         await starSnapshots.clear()
         await searchHistory.clear()
         await branchMemory.clear()
         await commentDrafts.clear()
+        await uploadTargetStore.clear()
         await starWriteScope.clear()
         // ⚠️ `LoadSearch` 与 `LoadMyConversations` 都是 actor，它们缓存的是
         //    **上一个账号搜出来的结果**（含私有仓库名、他提过的 PR）⇒

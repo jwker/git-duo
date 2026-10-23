@@ -1,5 +1,7 @@
 import GitDuoDesign
+import GitDuoKit
 import SwiftUI
+import UIKit
 
 /// 主界面容器：4 个 Tab（首页 / 仓库 / 探索 / **搜索**），每个 Tab 一条独立导航栈。
 ///
@@ -77,9 +79,55 @@ struct MainTabView: View {
             }
         }
         // ⚠️ `value:` 用**文案本身**（不是 `isShowing`）：连着两条不同文案之间也要重播动画，
-        //    用布尔量的话第二条会"原地换字"，看起来像没反应。
+        //    用布尔量的话第二条会“原地换字”，看起来像没反应。
         .animation(Toast.animation(reduceMotion: reduceMotion), value: env.toast.message)
+        // ⚠️ **悬浮按钮挂在这层**（与 `Toast` 同一个通道）：它是**全局入口**
+        //    （2026-10-23 定的口径：每个页面都常驻）⇒ 只能有**一个实例** ——
+        //    每页各放一个的话，推入页上会多出一颗，而 tab 之间切换时那颗会跳位。
+        .overlay(alignment: .bottomTrailing) {
+            FloatingActionButton(
+                systemImage: "photo.badge.plus",
+                accessibilityLabel: UploadImageCopy.floatingButtonAccessibilityLabel
+            ) {
+                isUploadSheetPresented = true
+            }
+            // ⚠️ **键盘弹出时收起**：它浮在右下角，键盘一升起来就压住输入区 ——
+            //    而那正是"在写东西"的时候。
+            .opacity(isKeyboardVisible ? 0 : 1)
+            .allowsHitTesting(!isKeyboardVisible)
+            .padding(.trailing, Theme.Spacing.l)
+            .padding(.bottom, Theme.Spacing.l + 83)
+        }
+        .sheet(isPresented: $isUploadSheetPresented) {
+            UploadImageSheet(
+                repositories: env.repositories,
+                detail: env.repoDetail,
+                branches: env.branches,
+                treeLoader: env.repoTree,
+                saver: env.saveFile,
+                intake: env.uploadIntake,
+                memory: env.uploadTargetStore,
+                context: env.uploadContext,
+                toast: env.toast
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        // ⚠️ 键盘的可见性用**系统通知**判：没有一条官方的"键盘是否在屏幕上"的环境值，
+        //    而这个按钮的诉求就是“别挡着输入区”。
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardVisible = false
+        }
     }
+
+    /// 上传弹层是否呈现。
+    @State private var isUploadSheetPresented = false
+
+    /// 键盘是否压着屏幕（悬浮按钮据此收起）。
+    @State private var isKeyboardVisible = false
 }
 
 #Preview {

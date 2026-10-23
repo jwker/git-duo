@@ -123,7 +123,26 @@ struct RepoDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.refresh() }
         .task { await model.start() }
+        // ⚠️ **把「当前所在」写进上传上下文**（2026-10-23 定的口径：上下文优先）：
+        //    站在这个仓库的首页 ⇒ 上传的默认目录就是仓库根。
+        //    ⚠️ 分支给空串：这一页没有解析出分支（那要一次请求），
+        //    弹层那侧会自己拿默认分支补上。
+        .onAppear {
+            Task {
+                let target = UploadTarget(fullName: fullName, directory: .root, branch: "")
+                publishedContext = target
+                await env.uploadContext.set(target)
+            }
+        }
+        // ⚠️ 离开这一页 ⇒ 清掉上下文（同 `RepoCodeView` 的理由）：
+        //    只清"还是我写的那份"—— 页面离开与下一个页面写入没有顺序保证。
+        .onDisappear {
+            Task { await env.uploadContext.clear(ifCurrentIs: publishedContext) }
+        }
     }
+
+    /// 本页最后发布的那份上下文（离开时用它清空）。
+    @State private var publishedContext: UploadTarget?
 
     private var name: String {
         (try? RepositoryMapper.splitFullName(fullName))?.name ?? fullName

@@ -44,12 +44,19 @@ endif
 DEVICE_ID ?= 00008150-001044A00EFB801C
 DEVICE_APP := build/DerivedData-dev/Build/Products/Debug-iphoneos/GitDuo.app
 
-.PHONY: help gen test test-% build verify device install-device launch-device clean sandbox-fix
+# ⚠️ App 层测试的模拟器（2026-10-23 接进 `make verify`，T1 计划阶段 3）。
+#    换机时覆盖这个变量即可，不必改文件（照 `DEVICE_ID` 的做法）。
+#    ⚠️ 必须存在一台 **iOS 27.0** 的模拟器（部署目标是 27.0）—— 换机器时先看一眼
+#    `xcrun simctl list devices available`。
+SIM_APP_DESTINATION ?= platform=iOS Simulator,name=iPhone 18 Pro
+
+.PHONY: help gen test test-% test-app build verify device install-device launch-device clean sandbox-fix
 
 help:
 	@echo "make gen      xcodegen 生成 GitDuo.xcodeproj（改 project.yml / 增删文件后必跑）"
 	@echo "make test     跑五个 Swift Package 的全部单测（Swift Testing）"
 	@echo "make test-<包名>  只跑某一个包（如 make test-GitDuoKit，名字照 PACKAGES 的拼写）"
+	@echo "make test-app 跑 App 层单测（GitDuoTests，模拟器里跑）"
 	@echo "make build    为 iOS 模拟器构建 App（无签名）"
 	@echo "make verify   以上全跑（提交前必跑）"
 	@echo "make device   真机全流程：构建(带签名) → 安装 → 启动（1.8 手测用）"
@@ -89,9 +96,27 @@ build: gen sandbox-fix
 		OTHER_SWIFT_FLAGS='$$(inherited) $(XCODE_SWIFT_FLAGS)' \
 		build
 
+# ── App 层单测（GitDuoTests，2026-10-23 接进闭环 · T1 计划阶段 3）────────────
+#
+# ⚠️ 它与 `make test` **不是一回事**：那一条只跑五个 SwiftPM 包（秒级、零 UI 依赖），
+#    这一条要**在模拟器里启动一次 GitDuo 本体**（`TEST_HOST` 的必然结果）⇒ 慢得多。
+#    两条都进 `make verify` —— “漏跑”比“跑失败”更危险。
+#
+# ⚠️ `sandbox-fix` **必须带**（测试也走 xcodebuild，同踩清单沙箱两坑）。
+test-app: gen sandbox-fix
+	@echo "── xcodebuild test · App 层（GitDuoTests）"
+	xcodebuild -project GitDuo.xcodeproj \
+		-scheme $(SCHEME) \
+		-destination '$(SIM_APP_DESTINATION)' \
+		-configuration Debug \
+		-derivedDataPath build/DerivedData \
+		CODE_SIGNING_ALLOWED=NO \
+		OTHER_SWIFT_FLAGS='$$(inherited) $(XCODE_SWIFT_FLAGS)' \
+		test
+
 # ── 验证闭环 ────────────────────────────────────────────────────────────────
-verify: test build
-	@echo "✅ verify 通过：五个包单测 + 模拟器构建"
+verify: test test-app build
+	@echo "✅ verify 通过：五个包单测 + App 层单测 + 模拟器构建"
 
 # ── 真机（1.8 手测）──────────────────────────────────────────────────────────
 # `-allowProvisioningUpdates` 是必须的：自动签名需要联网向开发者门户申请证书/描述文件，
